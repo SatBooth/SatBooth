@@ -1,0 +1,10 @@
+# Builds the SatBooth image from this repository instead of pulling the pinned release image. Add it after compose.yml:
+#   docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file <env file> up -d --build
+# The image is then named satbooth:local.
+services:
+  satbooth:
+    build:
+      context: ../..
+      dockerfile: deploy/image/Dockerfile
+      target: satbooth
+    image: satbooth:local

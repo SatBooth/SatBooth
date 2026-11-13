@@ -1,0 +1,11 @@
+# Builds the SatBooth relay image from this repository instead of pulling the pinned release image. Add it after
+# compose.yml:
+#   docker compose -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml --env-file <env file> up -d --build
+# The image is then named satbooth-relay:local.
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/image/Dockerfile
+      target: satbooth-relay
+    image: satbooth-relay:local

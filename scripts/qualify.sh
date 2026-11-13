@@ -33,6 +33,10 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+# Qualification builds everything from this tree: deploy/setup.sh builds its tools image, and the bundles are started
+# with their compose.build.yml (no registry is used).
+export SATBOOTH_BUILD=1
+
 project=satbooth-regtest
 compose=dev/regtest/compose.yml
 logdir=dev/regtest/logs
@@ -44,7 +48,7 @@ hub_ips=(172.30.78.10 172.30.78.20)
 dc() { docker compose --profile manual --profile image -p "$project" -f "$compose" "$@"; }
 log() { printf '== qualify: %s\n' "$*"; }
 
-# The public host's bundle (TestDeployPublic): deploy/public/compose.yml unmodified, with the regtest override and
+# The public host's bundle (TestDeployPublic): deploy/public/compose.yml with its compose.build.yml, with the regtest override and
 # values, as a project of its own. Its two host directories exist only while its phases run; the placeholders let
 # Compose interpolate the file for build and down outside them.
 deploy_project=satbooth-regtest-deploy
@@ -54,7 +58,7 @@ deploy_backups=""
 ddc() {
   SATBOOTH_ETC="${deploy_etc:-/nonexistent}" SATBOOTH_BACKUPS="${deploy_backups:-/nonexistent}" \
     docker compose --profile oneoff -p "$deploy_project" -f deploy/public/compose.yml \
-    -f dev/regtest/deploy-public.override.yml --env-file dev/regtest/deploy-public.env "$@"
+    -f deploy/public/compose.build.yml -f dev/regtest/deploy-public.override.yml --env-file dev/regtest/deploy-public.env "$@"
 }
 # rm_tree <dir>: removes a host directory of this run, and what other users own inside it (a container empties it: it
 # belongs to root, 65532 or a service's user), then the directory itself, which stays this user's.
@@ -74,7 +78,7 @@ deploy_down() {
   deploy_backups=""
 }
 
-# The hub host's bundle (the second half of TestDeployPublic's group): deploy/hub/compose.yml unmodified, as a project of
+# The hub host's bundle (the second half of TestDeployPublic's group): deploy/hub/compose.yml with its compose.build.yml, as a project of
 # its own, from the env file `satbooth-setup hub init` wrote. hub_pub_root is the scratch directory of the stage 1 run
 # whose handoff the hub's stage 2 reads; deploy_tmp holds the answers files and the handoff, and is removed last.
 hub_project=satbooth-regtest-deploy-hub
@@ -86,7 +90,7 @@ deploy_tmp=""
 # macOS, Docker Desktop binds 127.0.0.1 alone, so there HUB_ADMIN_ADDR=127.0.0.1 is given to Compose over the env file;
 # elsewhere the generated value is used as written.
 hdc() {
-  local files=(-f deploy/hub/compose.yml)
+  local files=(-f deploy/hub/compose.yml -f deploy/hub/compose.build.yml)
   [ -z "$hub_override" ] || files+=(-f "$hub_override")
   if [ "$(uname -s)" = Darwin ]; then
     HUB_ADMIN_ADDR=127.0.0.1 docker compose -p "$hub_project" "${files[@]}" --env-file "${hub_root:-/nonexistent}/compose.env" "$@"
@@ -177,7 +181,7 @@ oneoff_clean() {
 }
 
 # The public host's bundle (plan 10), from the setup command's output (plan 12): deploy/public/compose.yml,
-# run unmodified with the regtest override and values (dev/regtest/deploy-public.override.yml, deploy-public.env) as a
+# run with its compose.build.yml, the regtest override and values (dev/regtest/deploy-public.override.yml, deploy-public.env) as a
 # project of its own. A second SatBooth with its own data volume. Every file the bundle mounts is written by
 # `deploy/setup.sh <dir> public init` and `public finish`, which run before the bundle's first start; the test patches
 # only the regtest topology into satbooth.json (three keys, listed in qualify/REPORT.md). Lightning only, no payout
@@ -245,7 +249,7 @@ deploy_group() {
   log "setup: public finish"
   deploy/setup.sh "$deploy_root" public finish -handoff "$deploy_tmp/hub-to-public.json" -digest "$digest3" > /dev/null
   [ "$(mode_of "$deploy_root/compose.env")" = 600 ] || { echo "deploy/public: compose.env is not mode 0600" >&2; return 1; }
-  docker compose -f deploy/public/compose.yml --env-file "$deploy_root/compose.env" config -q
+  docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file "$deploy_root/compose.env" config -q
   log "deploy/public: the generated compose.env exists, is mode 0600 and is accepted by the bundle's compose.yml"
   # Every file the bundle mounts is the setup command's: the directory holds exactly the files stage 1 and stage 4 wrote.
   [ "$(LC_ALL=C ls -1A "$deploy_etc" | tr '\n' ' ')" = 'api-keys.json nwc-client.key payout.key satbooth.json webhook.secret ' ] \
@@ -460,7 +464,8 @@ for _ in range(3):
   hdc config -q
   # The ports file is read on every run, so that it cannot rot; it is used for `up` only when a port is taken.
   TEST_HUB_ADMIN_PORT=1 TEST_HUB_RELAY_PORT=2 TEST_HUB_RPC_PORT=3 HUB_ADMIN_ADDR=127.0.0.1 docker compose -p "$hub_project" \
-    -f deploy/hub/compose.yml -f dev/regtest/deploy-hub-ports.override.yml --env-file "$hub_root/compose.env" config -q
+    -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml -f dev/regtest/deploy-hub-ports.override.yml \
+    --env-file "$hub_root/compose.env" config -q
   log "up: deploy/hub (volume-init, netns, bitcoind, hub)"
   hdc up -d --build hub
   local vi

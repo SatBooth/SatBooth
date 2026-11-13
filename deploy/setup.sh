@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]
 #
-# Builds the tools image from this repository and runs `satbooth-setup` in it: no network, a read-only root, no
-# capabilities, the calling user, and only <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass,
+# Pulls the pinned release tools image (with SATBOOTH_BUILD=1 in the environment: builds it from this repository
+# instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass,
 # read-only) visible. <dir> is created with mode 0700 if it is missing; an existing directory is left as it is. A
 # symbolic link as <dir> is refused.
 # -dir and -host-dir are set here, never taken from the caller. Options are passed through unchanged, in order.
-# The command's report goes to standard output, its prompts and the image build to standard error; the exit code is
+# The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit code is
 # the command's (0 done, 1 refused or failed, 2 usage).
 set -euo pipefail
 
@@ -27,6 +27,9 @@ case "$dir" in
 esac
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# The release image of the setup command, pinned by tag and digest (scripts/release-pins.sh). SATBOOTH_BUILD=1 builds it
+# from this repository instead.
+tools_image=ghcr.io/satbooth/satbooth-tools:v0.1.0-rc.1@sha256:9b2ff55fe8ef1b831f415c11334bbb34b9a4d3d1e364bfa76874f591f160fe2f
 
 # Refuse a colon before anything is created (a relative <dir> is under the current directory).
 case "$dir" in
@@ -135,10 +138,16 @@ case "$host $stage" in
   "public init" | "hub init") hostopts=(-host-dir "$absdir") ;;
 esac
 
-docker build -q --target satbooth-tools -t satbooth-tools:local -f "$root/deploy/image/Dockerfile" "$root" >&2
+if [ "${SATBOOTH_BUILD:-}" = 1 ]; then
+  # From source: the tools image is built from this repository.
+  tools_image=satbooth-tools:local
+  docker build -q --target satbooth-tools -t "$tools_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
+else
+  docker pull "$tools_image" >&2
+fi
 
 exec docker run --rm -i \
   --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
   --user "$(id -u):$(id -g)" \
   -v "$absdir:/work" "${mounts[@]+"${mounts[@]}"}" \
-  satbooth-tools:local /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"
+  "$tools_image" /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"

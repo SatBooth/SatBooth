@@ -1,6 +1,8 @@
 # The public host (deploy/README.md, "The public host"): the SatBooth service, from the release image
-# (deploy/image/Dockerfile, target satbooth), run as it ships. Never the host of the hub, its relay or the nodes.
-#   docker compose -f deploy/public/compose.yml --env-file <your copy of example.env> up -d --build
+# (pinned by tag and digest below; deploy/image/Dockerfile, target satbooth), run as it ships. Never the host of the hub,
+# its relay or the nodes.
+#   docker compose -f deploy/public/compose.yml --env-file <your copy of example.env> up -d
+#   From source instead: add -f deploy/public/compose.build.yml after -f deploy/public/compose.yml and --build to up.
 # Every value the operator gives comes from the env file (deploy/public/example.env: addresses and paths, no secrets).
 # The configuration and the secret files are in SATBOOTH_ETC, bind-mounted read-only; none is in an environment: value
 # or in argv. Published ports: exactly one, the checkout page (the public listener) on PUBLIC_ADDR. The merchant API
@@ -9,11 +11,7 @@
 name: satbooth-public
 
 x-satbooth: &satbooth
-  build:
-    context: ../..
-    dockerfile: deploy/image/Dockerfile
-    target: satbooth
-  image: satbooth:local
+  image: ghcr.io/satbooth/satbooth:v0.1.0-rc.1@sha256:71570c4f5efa27eb27601478e666a12d971d1a1ea1b5e724ac972e80c2e5f8a2
   user: "65532:65532"
   read_only: true
   cap_drop: [ALL]

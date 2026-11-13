@@ -12,8 +12,9 @@ overwrites a file, and it never prints a secret, a descriptor or a Monero addres
 by hand, as the tables below describe. `qualify/REPORT.md` ("Deployment bundles") records the bundles started from the
 setup command's output.
 
-`deploy/setup.sh` builds the tools image from this repository (on every run; the Go build is offline, since the modules
-are vendored, but the first build needs Docker to pull the pinned base image) and runs one stage of the command in it.
+`deploy/setup.sh` pulls the pinned release tools image and runs one stage of the command in it. With `SATBOOTH_BUILD=1`
+in the environment it builds that image from this repository on every run instead (the Go build is offline, since the
+modules are vendored, but the first build needs Docker to pull the pinned base image).
 The container the stage runs in has no network, a read-only root, no capabilities and only the setup directory (and the
 files you name) visible. Stages run in a fixed order, two on each host, and each refuses to run out of turn.
 

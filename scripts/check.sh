@@ -75,6 +75,10 @@ go build -trimpath ./... || fail "go build"
 echo "== go test"
 go test ./... || fail "go test"
 
+echo "== release pins"
+scripts/release-pins.sh check-format || fail "release pins: the three pin sites do not hold well-formed refs of one version"
+scripts/release-pins_test.sh || fail "release pins: scripts/release-pins_test.sh"
+
 echo "== compose bundles"
 # Each per-host bundle must parse with its example.env, and must refuse an empty published address (Compose would read
 # an empty host as every interface). The variables of example.env are unset first: the shell's environment would
@@ -118,6 +122,10 @@ if docker compose version > /dev/null 2>&1; then
       grep -q "required variable $addr is missing a value" "$tmp/$host-empty.err" \
         || fail "compose: $dir/compose.yml refused an empty $addr for another reason"
     done
+    # The source-build override parses with the bundle, and gives the service a build and the local image name.
+    env "${vars[@]}" docker compose --profile "*" -f "$dir/compose.yml" -f "$dir/compose.build.yml" \
+      --env-file "$dir/example.env" config -q \
+      || fail "compose: $dir/compose.yml with $dir/compose.build.yml does not parse with its example.env"
   done
 elif [ -n "${CI-}" ]; then
   fail "compose: docker compose is not available, and CI must check the bundles"
