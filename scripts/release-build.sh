@@ -52,19 +52,28 @@ platform_manifest() {
 }
 
 # Loads <name>:release-test from a single-platform archive and requires it to be the image whose manifest digest is
-# <manifest>. The archive is loaded as it is (Docker 25 and later load OCI archives) and the loaded image's ID must be
-# that manifest or its config: the containerd image store gives the manifest digest, the classic store the config
-# digest. Any other result fails; no other image is built or compared in its place.
+# <manifest>. The archive is loaded as it is and the loaded image's ID must be that manifest or its config (the ID of
+# the containerd image store is the manifest digest, that of the classic store the config digest). A Docker that
+# refuses the archive or reports another ID gets the same platform built straight into its image store (cached, same
+# builder), and the ID of that image must be the manifest or config digest too. Anything else fails: no partial
+# comparison of the configuration stands in for the identity.
 # Arguments: <name> <platform> <archive> <manifest>.
 load_release_test() {
   local name=$1 plat=$2 archive=$3 manifest=$4 loaded config
   config=$(blob "$archive" "$manifest" | jq -er '.config.digest')
-  loaded=$(docker load -i "$archive" | sed -n 's/^Loaded image ID: //p')
+  if loaded=$(docker load -i "$archive" 2> /dev/null | sed -n 's/^Loaded image ID: //p') &&
+    { [ "$loaded" = "$manifest" ] || [ "$loaded" = "$config" ]; }; then
+    docker tag "$loaded" "$name:release-test"
+    echo "release-build: $name:release-test is the loaded archive, ID $loaded"
+    return 0
+  fi
+  echo "release-build: $name: loading the archive did not give the pinned image; building into the image store"
+  docker buildx build "${RELEASE_BUILD_FLAGS[@]}" --progress=quiet --target "$name" --platform "$plat" \
+    --output "type=docker,name=$name:release-test,$RELEASE_EXPORT_ATTRS" . > /dev/null
+  loaded=$(docker image inspect --format '{{.Id}}' "$name:release-test")
   { [ "$loaded" = "$manifest" ] || [ "$loaded" = "$config" ]; } ||
-    fail "$name $plat: loading the archive gave ID \"$loaded\", not the manifest $manifest or its config $config" \
-      "(a Docker older than 25 cannot load OCI archives)"
-  docker tag "$loaded" "$name:release-test"
-  echo "release-build: $name:release-test is the loaded archive, ID $loaded"
+    fail "$name:release-test has ID $loaded, not the index's $plat manifest $manifest or its config $config"
+  echo "release-build: $name:release-test, built into the image store, has ID $loaded"
 }
 
 : > "$outdir/digests.txt"
