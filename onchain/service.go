@@ -198,6 +198,7 @@ type Service struct {
 	// is cleared with diedInPass. leftWithoutFinal reports none of them in that pass and carries them in
 	// leftHeld to the next pass's check, which reports those still without a final event. Both belong to the pass.
 	heldInPass map[string]struct{}
+	workFailed bool // step 3 could not read an order's events or ledger when choosing its work: the pass is not good
 	// behindInPass holds the outputs step 3 left unjudged in the current pass because bitcoind's wallet is behind its
 	// node's mempool (errBehind); cleared with diedInPass. The pass's settle counts the unrecorded ones as zero
 	// (Service.views). It belongs to the pass: only the pass's goroutine (trackAll, then settle) may read or write it;

@@ -15,7 +15,7 @@
   (replaced, double spent, or evicted); a reorg that puts it back in the mempool keeps it. Inside the watch window, an
   evicted record that comes back is recorded again: `order.reverted` when it left (if the order stopped reading paid),
   then `order.paid_again` when it is back (once the order has its final event, a payment that is gone and has no record
-  is read with a backoff, so a return to the mempool with no block is seen up to 10 minutes later and the record waits
+  is read with a backoff, so a return to the mempool with no block is seen about 10 minutes later and the record waits
   that long; see "The watcher's cost"). It is settled only once mined `SettledDepth` deep. A late payment is never
   recorded from the mempool, whatever the tier: it needs at least 1 confirmation, so a late payment replaced before a
   block sends no `order.late`. A payment that counted, was evicted before the expiry and was broadcast again after it
@@ -130,7 +130,7 @@
     time, to the second, so an unrelated payment of the order first seen in the same second can also silence it). If
     a later scan lists it mined, it is tracked again and recorded by the usual rules. A rebroadcast seen only in the
     mempool does not bring it back, so an order at a 0 tier then waits for a block. Between the order's final event and
-    the window's end, a payment that comes back to the mempool with no block is seen up to 10 minutes later. The same `ALERT` comes at the
+    the window's end, a payment that comes back to the mempool with no block is seen about 10 minutes later. The same `ALERT` comes at the
     window's end for every on-time payment that died earlier and was never carried on (a cancelled or double-spent
     on-time payment, for example), unless the order reads paid by its events (`order.paid`, with no `order.reverted`
     that `order.paid_again` has not answered): a person has nothing to do then. SatBooth stops polling it either way.
@@ -222,12 +222,13 @@
   unconfirmed one costs the same two, and the pass that marks it gone six) until its order has its final event
   (`order.paid`, `order.expired` or `order.underpaid`). From then on a payment that is gone, has no record in the
   ledger and is not foreign rests: it is read 2 × `poll_seconds` after its last read, then twice as long after each
-  read, up to every 10 minutes (20, 40, 80, 160, 320 and then 600 seconds at the default); at the end of its order's
+  read, to about every 10 minutes (20, 40, 80, 160, 320 and then 600 seconds at the default); at the end of its order's
   watch window (which settles an on-time one; a late one just leaves the watched set); and at once when a scan lists it
   mined. It does not count toward the number of payments of an order that one pass reads, and a pass reads at most that
   number of an order's resting transactions: the rest wait for the next passes, so the reads at a window's end, or
   after a start, of an order with many of them are spread over several passes. A payment that comes back to the
-  mempool with no block is seen at its next read, at most 10 minutes later. The backoff is kept in memory: after a
+  mempool with no block is seen at its next read, about 10 minutes later at most (more when an order has more resting
+  transactions due than one pass reads: their reads spread over a few passes). The backoff is kept in memory: after a
   start, each resting payment is read once, then follows it again. Accepted residual: at the 10-minute ceiling, K
   resting transactions cost about K / 60 reads in a pass of 10 seconds, so thousands of replaced transactions of orders
   that have their final event can fill a pass's reads; discovery still runs, other orders are still served in turn, and

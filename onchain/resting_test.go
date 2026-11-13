@@ -3,9 +3,12 @@ package onchain
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/satbooth/satbooth/ledger"
 	"github.com/satbooth/satbooth/onchain/onchaintest"
 	"github.com/satbooth/satbooth/store"
 )
@@ -449,5 +452,152 @@ func TestForeignDeadOutputNeverRests(t *testing.T) {
 	}
 	if _, ok := e.svc.deadPolls[e.key(tx)]; ok {
 		t.Fatal("a foreign output has a backoff entry")
+	}
+}
+
+// brokenLedger is a ledger whose calls fail.
+func (e *env) brokenLedger() *ledger.Ledger {
+	e.t.Helper()
+	lg, err := ledger.Open(bg, filepath.Join(e.t.TempDir(), "broken.db"))
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if err := lg.Close(); err != nil {
+		e.t.Fatal(err)
+	}
+	return lg
+}
+
+// A failed events read, when step 3 chooses its work, holds the order (no final event in that pass) and leaves the pass
+// unstamped, whether or not the order is too wide.
+func TestFailedEventsReadHoldsTheOrder(t *testing.T) {
+	e := newWatchEnv(t)
+	e.node.Mine(1)
+	o := e.order(120_000)
+	txs := e.deadTxs(o, 12)
+	e.cap(8)
+	e.pastExpiry(o)
+	e.tick(1)
+	if e.count(logTooWide) != 1 || len(e.events(o)) != 0 {
+		t.Fatalf("setup: too wide %d, events %+v", e.count(logTooWide), e.events(o))
+	}
+	failed := false
+	e.svc.eventsFor = func(ctx context.Context, id string) ([]store.Event, error) {
+		if id == o.ID && !failed {
+			failed = true
+			return nil, errors.New("events read failed")
+		}
+		return e.st.EventsForOrder(ctx, id)
+	}
+	good := e.svc.lastGoodPass.Load()
+	c := e.callsOf(txs)
+	e.tick(1)
+	if !failed {
+		t.Fatal("the events read was not made")
+	}
+	if len(e.events(o)) != 0 {
+		t.Fatalf("a final event from a pass that read part of the order: %+v (%d of 12 read)", e.events(o), e.readSince(txs, c))
+	}
+	if e.svc.lastGoodPass.Load() != good {
+		t.Fatal("a pass whose events read failed was stamped good")
+	}
+	if _, held := e.svc.heldSeen[o.ID]; !held {
+		t.Fatal("the order was not held")
+	}
+}
+
+func TestFailedLedgerReadHoldsTheOrder(t *testing.T) {
+	e := newWatchEnv(t)
+	o, txs := e.finalWithDead(12)
+	e.cap(8)
+	good := e.svc.lastGoodPass.Load()
+	real := e.svc.lg
+	e.svc.hook = func(p string) error {
+		switch p {
+		case "scan:after-record":
+			e.svc.lg = e.brokenLedger()
+		case "track:before-mempool":
+			e.svc.lg = real
+		}
+		return nil
+	}
+	c := e.callsOf(txs)
+	e.mustPass()
+	e.svc.hook, e.svc.lg = nil, real
+	if !e.logHas(`msg="`+logTrackFailed+`" at=ledger`) || e.count(logTooWide) != 0 {
+		t.Fatalf("too wide %d\n%s", e.count(logTooWide), e.log)
+	}
+	if e.svc.lastGoodPass.Load() != good {
+		t.Fatal("a pass whose ledger read failed was stamped good")
+	}
+	if _, held := e.svc.heldSeen[o.ID]; !held || !e.stale(o) {
+		t.Fatalf("held %v, stale %v", held, e.stale(o))
+	}
+	if n := e.readSince(txs, c); n == 0 || n > 8 {
+		t.Fatalf("%d transactions read", n)
+	}
+	e.tick(2)
+	if e.stale(o) || e.readSince(txs, c) != 12 {
+		t.Fatalf("not served after: stale %v, %d read", e.stale(o), e.readSince(txs, c))
+	}
+}
+
+// An order with live transactions and due resting ones, more together than a pass reads, is served: only the live
+// ones count toward the cap.
+func TestLiveAndRestingTogetherOverTheCapAreServed(t *testing.T) {
+	e := newWatchEnv(t)
+	e.node.Mine(1)
+	o := e.order(200_000)
+	var live, dead []string
+	for range 8 {
+		dead = append(dead, e.payOrder(o, 10_000))
+	}
+	for range 5 {
+		live = append(live, e.payOrder(o, 1_000))
+	}
+	e.mustPass()
+	for _, tx := range dead {
+		e.node.Replace(tx, false)
+	}
+	e.mustPass()
+	e.toFinal(o)
+	e.tick(1)
+	e.clk.Advance(30 * time.Second)
+	e.cap(8)
+	all := append(slices.Clone(live), dead...)
+	c := e.callsOf(all)
+	e.mustPass()
+	if e.count(logTooWide) != 0 || e.stale(o) {
+		t.Fatalf("too wide %d, stale %v", e.count(logTooWide), e.stale(o))
+	}
+	if n := e.readSince(all, c); n != 13 {
+		t.Fatalf("%d of 13 transactions read, want all (5 live, 8 resting)", n)
+	}
+}
+
+// The backoff reaches deadPollMax exactly, at every allowed poll interval.
+func TestBackoffGapsReachDeadPollMax(t *testing.T) {
+	for _, pi := range []time.Duration{MinPollInterval, 5 * time.Second, DefaultPollInterval, 45 * time.Second, MaxPollInterval} {
+		s := &Service{cfg: Config{PollInterval: pi}, deadPolls: map[store.TXOKey]deadPoll{}}
+		k := store.TXOKey{TxID: "a", Vout: 0}
+		now := time.Unix(1_700_000_000, 0)
+		var last time.Duration
+		for n := 1; n <= 14; n++ {
+			s.polledDead(k, true, now)
+			p := s.deadPolls[k]
+			gap := p.next.Sub(now)
+			if want := min(pi<<n, deadPollMax); gap != want {
+				t.Fatalf("poll %v read %d: gap %v, want %v", pi, n, gap, want)
+			}
+			last = gap
+			now = p.next
+		}
+		if last != deadPollMax {
+			t.Fatalf("poll %v: the gaps end at %v, want %v", pi, last, deadPollMax)
+		}
+		s.polledDead(k, false, now)
+		if _, ok := s.deadPolls[k]; ok {
+			t.Fatal("an alive read kept the entry")
+		}
 	}
 }

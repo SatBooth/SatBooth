@@ -359,7 +359,7 @@ is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one 
 `getmempoolentry` and `gettransaction`, and a `gettxspendingprevout`, in the pass that marks it gone (six calls then; a
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for
 one already marked gone until its order has its final event, then a read with a backoff (2 × `poll_seconds`, doubling up
-to 10 minutes, at the window's end, and at once when a scan lists it mined; those payments do not count toward the order's
+to about 10 minutes, at the window's end, and at once when a scan lists it mined; those payments do not count toward the order's
 payment cap, and a pass reads at most that number of an order's resting transactions). At the 10-minute ceiling K resting
 transactions cost about K / 60 reads in a pass of 10 seconds: thousands of replaced transactions of orders with their
 final event can fill a pass's reads, while discovery still runs and other orders are still served in turn; each replacement

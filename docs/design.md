@@ -968,7 +968,7 @@ the merchant are in `docs/bitcoind.md`, the `limits` and `onchain` tables of `do
   its record, or dead and settled (6.1-O); the pass that marks it dead costs one more `getmempoolinfo`, `getmempoolentry` and
   `gettransaction`, and a `gettxspendingprevout` (six calls in that pass; the same each pass while the wallet is
   behind); an output already dead costs what a live one costs (two calls) until its order has its final event, and then
-  it is read with a backoff (starting at 2 × `poll_seconds`, doubling, up to every 10 minutes; at its window's end; and at
+  it is read with a backoff (starting at 2 × `poll_seconds`, doubling, to about every 10 minutes; at its window's end; and at
   once when a scan lists it mined), not counted toward the order's payment cap (a pass reads at most that number of an
   order's resting transactions), and its dead mark is never the ground of an event. A late
   output of a touched past-window order, in the mempool or mined and not recorded, costs the same while that order is

@@ -320,6 +320,7 @@ func (s *Service) pass(ctx context.Context) error {
 	s.staleMu.Lock()
 	s.staleOrders = stale
 	s.staleMu.Unlock()
+	failed = failed || s.workFailed
 	if failed {
 		return nil // ran to its end, not good
 	}
@@ -825,6 +826,14 @@ func (s *Service) exclusive(ctx context.Context, o store.Order, txid string, con
 	return true, nil
 }
 
+// workHeld handles an order whose events or ledger could not be read when step 3 chose its work: it reads stale, no
+// final event is written for it in this pass (heldInPass), and the pass is not good (workFailed).
+func (s *Service) workHeld(id string, stale map[string]struct{}) {
+	stale[id] = struct{}{}
+	s.heldInPass[id] = struct{}{}
+	s.workFailed = true
+}
+
 // orderWork is the due outputs of one order, grouped by transaction, oldest first seen first: its watched outputs and,
 // when the order is past its watch window and settle will look at it, its late outputs (extras).
 type orderWork struct {
@@ -912,15 +921,21 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 						return nil, ctx.Err()
 					}
 					s.log.Error(logTrackFailed, "at", "events")
-					stale[o.ID] = struct{}{}
+					s.workHeld(o.ID, stale)
 					failed[o.ID] = true
 				}
 				final = err == nil && ev.Final
 				finals[o.ID] = final
 			}
 			if failed[o.ID] {
-				// Its events are unknown: the output is read, as an unjudged one, from the budget of resting reads.
-				late = append(late, t)
+				// Its events are unknown: the order is held (no final event in this pass) and the pass is not good. The
+				// output is read from the budget of resting reads, unless the scan listed it mined: then it is read as
+				// any other.
+				if !listedMined[k] {
+					late = append(late, t)
+					continue
+				}
+				add(t)
 				continue
 			}
 			if final {
@@ -930,8 +945,12 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 						return nil, ctx.Err()
 					}
 					s.log.Error(logTrackFailed, "at", "ledger")
-					stale[o.ID] = struct{}{}
-					late = append(late, t)
+					s.workHeld(o.ID, stale)
+					if !listedMined[k] {
+						late = append(late, t)
+						continue
+					}
+					add(t)
 					continue
 				}
 				t.dead = !v.Recorded && !v.Foreign
@@ -1038,6 +1057,7 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 	// a replacement that the next pass's scan lists: settle holds the order's final event until then (diedInPass).
 	s.diedInPass, s.heldInPass = map[store.TXOKey]struct{}{}, map[string]struct{}{}
 	s.behindInPass = map[store.TXOKey]struct{}{}
+	s.workFailed = false
 	// An order that discovery touched and an earlier pass did not reach is touched again: the new rows that touched it
 	// are stored now, so nothing else would bring it back to settle.
 	for id := range s.carried {
