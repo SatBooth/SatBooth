@@ -10,9 +10,10 @@ import (
 
 // lookupPace spaces the wallet lookups of the reconciler and of a press's preflight: PollRate a second in total, and
 // no slot is saved up while it is idle. One preflight at a time holds the preflight place, and a preflight never takes
-// two slots in a row: when the previous slot was a preflight's, the slot after it is left for the reconciler. So the
-// reconciler keeps at least every other slot, however long its steps take; a slot it is too late to claim is lost, not
-// given to a preflight.
+// two slots in a row: when the previous slot was a preflight's, the slot after it is left for the reconciler, and it is
+// lost if the reconciler is not ready for it, not given to a preflight. So the reconciler can have every other slot;
+// how many it uses depends on how long its steps are. A holder whose ctx ends before its slot can move the hole one
+// slot later; that happens only at flightBound.
 //
 // Its mutex is a leaf: nothing is called and no other lock is taken while it is held, and it is never held while the
 // settle mutex or the service mutex is taken.

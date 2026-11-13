@@ -535,8 +535,9 @@ constants in the code; the constant is named where it helps.
     rate with the open invoices, at most max(open invoices, 50) per round. The deadline is max(ExpiresAt, the
     service's start) + 24 hours, so a restart inside it extends the watch to 24 hours after the start, up to about
     48 hours after the expiry. The cost is about 144 lookups per watched invoice per day; past about 600 × PollRate
-    watched invoices (3,000 at the default 5 a second, or about 1,500 while presses take their share) every round
-    carries the cap, and each gets fewer. A
+    watched invoices (3,000 at the default 5 a second, or about 1,500 while presses take their share and a reconciler
+    step is shorter than about two slots, 400 ms at the default rate) every round carries the cap, and each gets
+    fewer. A
     settlement for the full amount is recorded through the normal paid
     path (the transfer, `order.paid`, the `account_paid` fact) with an `ALERT` line, and the order reads `paid`,
     because `Status` reads the ledger before the closures. A short settlement or a bad row alerts as for an open
@@ -550,10 +551,11 @@ constants in the code; the constant is named where it helps.
     long, is recorded on the first pass after the restart.
 - **Pressing "pay"** writes the attempt row, then launches the MakeInvoice call on a flight detached from the
   customer's request, so closing the page does not abandon a call that was counted. Before a second invoice is made
-  for an order, "pay" looks up that order's expired but unclosed invoices (bound 15 s each). Each lookup takes a slot
-  of the same pace as the reconciler's, one press at a time at the single preflight place, so the reconciler keeps at
-  least every other slot. If one settled, it is recorded and the order reads `paid`; if a lookup fails, or no slot
-  comes within 15 s, "pay" is refused as outcome unknown (no second invoice). What remains is a
+  for an order, "pay" looks up that order's expired but unclosed invoices (bound 15 s each). Each lookup takes a slot of the same pace
+  as the reconciler's, one press at a time at the single preflight place. A
+  press never takes two slots in a row: the slot between is left for the reconciler, and lost if it is not ready for
+  it. If one settled, it is recorded and the order reads `paid`; if a lookup fails, or no slot comes within 15 s,
+  "pay" is refused as outcome unknown (no second invoice). What remains is a
   payment that settles after the lookup said "not settled" (for example one in flight at the invoice's expiry) and
   after a second invoice was made: both settle, both are in the ledger, and the `ALERT` above says so.
 - **Limits are checked under one short mutex** with the counts, so two requests cannot both pass the open-invoice cap.

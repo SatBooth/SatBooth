@@ -27,13 +27,15 @@
   hours after the expiry. A settlement after the deadline is not recorded, nor is one made while SatBooth is down if
   it stays down past the invoice's expiry plus 24 hours (the money is at the hub; check it there). The watch costs
   about 144 lookups per watched invoice per day, from the same lookup rate (fewer each past about 3,000 watched
-  invoices at the default rate, or about 1,500 while presses take their share, when the rounds are full); a watched
-  invoice between its 10 minute lookups costs nothing.
+  invoices at the default rate, or about 1,500 while presses take their share and a reconciler step is shorter than
+  about two slots, 400 ms at the default rate, when the rounds are full); a watched invoice between its 10 minute
+  lookups costs nothing.
 - **Pressing "pay"** records the attempt, then asks the wallet for the invoice on a flight that survives the customer
   closing the page. If the wallet's answer is lost, the outcome is unknown: the customer can press again, and an
   extra invoice at the hub is harmless. Before making a second invoice for an order, the service looks up that
-  order's expired invoices that are not yet closed (15 seconds per lookup). These lookups take turns within the same
-  rate as the reconciler's, one press at a time, and the reconciler keeps at least every other slot. If one settled, it
+  order's expired invoices that are not yet closed (15 seconds per lookup). These lookups take turns within the same rate as
+  the reconciler's, one press at a time. A press never takes two
+  slots in a row: the slot between is left for the reconciler, and lost if it is not ready for it. If one settled, it
   is recorded and the order reads `paid`; if a lookup fails, or a press gets no lookup within 15 seconds, "pay" is
   refused. A press the limits refuse reads "Busy, try again.": one
   more reason is the per-account cap, an `account_id` that already holds `max_open_per_account` open invoices (its

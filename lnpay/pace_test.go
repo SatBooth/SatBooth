@@ -473,6 +473,20 @@ func TestReconcilerKeepsItsRateDuringPresses(t *testing.T) {
 	}
 	t.Logf("%d preflight slots, %d reconciler slots, %d reads of open invoices, %d of the expired one", pre, rec, read,
 		e.w.lookupCount(target.PaymentHash))
+	if rec == 0 || rec < pre-1 {
+		t.Fatalf("the reconciler took %d of the first 40 slots, the presses %d", rec, pre)
+	}
+	l.mu.Lock()
+	slots := 0
+	for _, g := range l.g {
+		if !g.preflight {
+			slots++
+		}
+	}
+	l.mu.Unlock()
+	if read > slots { // every lookup of the reconciler has a slot
+		t.Fatalf("%d reads of the open invoices with %d reconciler slots", read, slots)
+	}
 	if read < 5 {
 		t.Fatalf("%d reads of the open invoices", read)
 	}
