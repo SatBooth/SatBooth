@@ -86,7 +86,7 @@ const (
 	watchFloor  = 50               // watched invoices a round may carry when fewer invoices are open
 	lookupBound = 15 * time.Second // bound of one lookup in the reconciler and in Pay
 	// flightBound bounds a whole Pay flight, from the first press: the lookups of the order's expired
-	// invoices (lookupBound each), the attempt, MakeInvoice (also bounded by the nwc client's own
+	// invoices (a lookup slot and the lookup, lookupBound each), the attempt, MakeInvoice (also bounded by the nwc client's own
 	// timeout) and the store writes.
 	flightBound = 3 * time.Minute
 )
@@ -183,6 +183,7 @@ type Service struct {
 	hook     func(point string) error // tests only
 	onPaid   OnLightningPaid          // SetOnLightningPaid; set before Run and Pay, read without the lock
 	settleMu sync.Locker              // SetSettleLock; set before Run and Pay, read without the lock
+	pace     *lookupPace              // the lookup slots of the reconciler and of a press's preflight
 	running  atomic.Bool
 	// startedAt is when New ran: the 24 h deadline of an invoice is measured from the later of its
 	// expiry and this, so a long downtime never counts against an invoice.
@@ -254,7 +255,7 @@ func New(cfg Config, st *store.Store, lg *ledger.Ledger, w Wallet, lim *limits.L
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	s := &Service{cfg: cfg, st: st, lg: lg, w: w, lim: lim, now: now, log: log, startedAt: now(), idle: idleRound,
-		addInvoice: st.AddInvoice, readBack: st.InvoicesForOrder, watch: map[string]watchInv{}, flights: map[string]*flight{}, alerted: map[string]bool{}}
+		addInvoice: st.AddInvoice, readBack: st.InvoicesForOrder, watch: map[string]watchInv{}, flights: map[string]*flight{}, alerted: map[string]bool{}, pace: newLookupPace(cfg.PollRate)}
 	ctx := context.Background()
 	if err := ensureAccounts(ctx, lg); err != nil {
 		return nil, err
@@ -716,6 +717,15 @@ func (s *Service) checkExpired(ctx context.Context, orderID string, now time.Tim
 	for _, inv := range invs {
 		if closed[inv.PaymentHash] || inv.ExpiresAt.After(now) {
 			continue
+		}
+		// The lookup takes a slot of the shared pace; a press that gets none in time is refused like a failed
+		// lookup, so no second invoice is made.
+		if err := s.pace.preflight(ctx, lookupBound); err != nil {
+			if errors.Is(err, errPaceBusy) {
+				s.log.Info(logPreflightBusy)
+				return ErrUnknown
+			}
+			return fmt.Errorf("%w: %w", ErrUnknown, err)
 		}
 		lctx, cancel := context.WithTimeout(ctx, lookupBound)
 		tx, err := s.w.LookupInvoice(lctx, inv.PaymentHash)

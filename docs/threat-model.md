@@ -112,9 +112,9 @@ Each invoice is a write to the hub.
 ## 2. Status-polling floods
 
 Browsers poll SatBooth, which answers from its own state. Node-side reconciliation runs at a fixed rate,
-so node load doesn't grow with the number of attackers. As built, the reconciler makes 5 lookups a second in
-total, however many invoices are open or pages are loaded; a notification only moves an invoice to the front of
-that queue.
+so node load doesn't grow with the number of attackers. As built, the reconciler and the presses' lookups together make 5 a second
+in total, however many invoices are open or pages are loaded; a notification only moves an invoice to the front of
+the reconciler's queue.
 
 ## 3. Fake or replayed "paid"
 

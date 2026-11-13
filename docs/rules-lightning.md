@@ -2,7 +2,7 @@
 
 - **Paid** means the ledger holds one transfer for the order, whose id is derived from the invoice's payment hash. A
   payment seen twice (by a notification and a poll, or again after a restart) is the same transfer.
-- **Finding payments.** The service looks up every open invoice at the wallet in turn, 5 lookups a second in total.
+- **Finding payments.** The service looks up every open invoice at the wallet in turn, 5 lookups a second in total, the lookups made when "pay" is pressed included.
   Notifications only move an invoice to the front of the queue; the lookup is what is believed.
 - **Expiry.** An order reads `new` after its own expiry until every invoice it had is closed, because a payment may
   still arrive. An invoice is closed only on evidence that it is unpaid:
@@ -26,13 +26,15 @@
   hours after the expiry. A settlement after the deadline is not recorded, nor is one made while SatBooth is down if
   it stays down past the invoice's expiry plus 24 hours (the money is at the hub; check it there). The watch costs
   about 144 lookups per watched invoice per day, from the same lookup rate (fewer each past about 3,000 watched
-  invoices at the default rate, when the rounds are full); a watched invoice between its 10 minute lookups costs
+  invoices at the default rate, or about 1,500 while presses take their share, when the rounds are full); a watched invoice between its 10 minute lookups costs
   nothing.
 - **Pressing "pay"** records the attempt, then asks the wallet for the invoice on a flight that survives the customer
   closing the page. If the wallet's answer is lost, the outcome is unknown: the customer can press again, and an
   extra invoice at the hub is harmless. Before making a second invoice for an order, the service looks up that
-  order's expired invoices that are not yet closed (15 seconds per lookup). If one settled, it is recorded and the
-  order reads `paid`; if a lookup fails, "pay" is refused. A press the limits refuse reads "Busy, try again.": one
+  order's expired invoices that are not yet closed (15 seconds per lookup). These lookups take turns within the same
+  rate as the reconciler's, one press at a time, and the reconciler keeps at least every other slot. If one settled, it
+  is recorded and the order reads `paid`; if a lookup fails, or a press gets no lookup within 15 seconds, "pay" is
+  refused. A press the limits refuse reads "Busy, try again.": one
   more reason is the per-account cap, an `account_id` that already holds `max_open_per_account` open invoices (its
   other orders' invoices, for an account of either class). An invoice stops holding its slot when it is paid (once its payment is
   completed: for an order with an on-chain amount, after the on-chain rail has been told; if that fails, the slot is
