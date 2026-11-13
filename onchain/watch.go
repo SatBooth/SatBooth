@@ -1099,7 +1099,9 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 			if t.dead {
 				k := store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}
 				cur, have, err := s.st.CurrentMark(ctx, k)
-				if err != nil { // the output stays due: it is read again in the next pass
+				if err != nil { // the output stays due: it is read again in the next pass, which is not stamped good
+					s.workFailed = true
+					stale[t.o.ID] = struct{}{}
 					if err := s.trackFailed(ctx, "mark-read", err); ctx.Err() != nil {
 						return err
 					}
