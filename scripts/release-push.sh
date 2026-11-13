@@ -12,10 +12,6 @@
 #   d. reads <tag> back and requires the pinned digest.
 # Every image is built and its tag read (a, b) before any tag is written (c), so a clash leaves no tag half moved.
 # Prints names and digests only.
-#
-# RELEASE_PUSH_TEST_NAMESPACE replaces the namespace (the part of a pinned ref before the image name) in the tests of
-# this script. It is honoured only for a loopback registry ("localhost:<port>/<path>" or "127.0.0.1:<port>/<path>");
-# any other value is refused.
 set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
@@ -34,12 +30,6 @@ cd "$(dirname "$0")/.."
 . scripts/release-lib.sh
 
 pins=scripts/release-pins.sh
-test_ns=
-if [ -n "${RELEASE_PUSH_TEST_NAMESPACE:-}" ]; then
-  [[ $RELEASE_PUSH_TEST_NAMESPACE =~ ^(localhost|127\.0\.0\.1):[0-9]+/[a-z0-9._/-]+$ ]] ||
-    fail "RELEASE_PUSH_TEST_NAMESPACE must be a loopback registry namespace: $RELEASE_PUSH_TEST_NAMESPACE"
-  test_ns=$RELEASE_PUSH_TEST_NAMESPACE
-fi
 
 # The pins must be the release at <tag> and equal what this checkout builds.
 "$pins" check "$outdir/digests.txt" "$tag" > /dev/null || fail "the built digests are not the pinned release $tag"
@@ -55,7 +45,6 @@ repos=()
 digests=()
 while read -r name ref; do
   repo=${ref%%:*}
-  if [ -n "$test_ns" ]; then repo=$test_ns/${repo##*/}; fi
   names+=("$name")
   repos+=("$repo")
   digests+=("${ref##*@}")

@@ -1,7 +1,7 @@
 name: release
 
-# A tag v<major>.<minor>.<patch>[-rc.<n>] (the maintainer signs it; operators verify it with `git tag -v`) builds the three release images on an amd64 and an arm64 runner,
-# requires both runners and the pins of the deploy bundles to agree on every digest, and, after the `release`
+# A tag v<major>.<minor>.<patch>[-rc.<n>] (the maintainer signs it; operators verify it with `git tag -v`) builds the
+# three release images on an amd64 and an arm64 runner, requires both runners and the pins of the deploy bundles to agree on every digest, and, after the `release`
 # environment is approved, pushes the images to GHCR, attests them and drafts a release. A run by hand (workflow
 # dispatch) and a pull request that touches the build do everything up to the agreement and push nothing.
 on:
@@ -219,22 +219,25 @@ jobs:
           subject-name: ${{ steps.pins.outputs.satbooth_name }}
           subject-digest: ${{ steps.pins.outputs.satbooth_digest }}
           push-to-registry: true
+          create-storage-record: false
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.pins.outputs.satbooth_relay_name }}
           subject-digest: ${{ steps.pins.outputs.satbooth_relay_digest }}
           push-to-registry: true
+          create-storage-record: false
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.pins.outputs.satbooth_tools_name }}
           subject-digest: ${{ steps.pins.outputs.satbooth_tools_digest }}
           push-to-registry: true
+          create-storage-record: false
       - name: Log out of GHCR
         if: always()
         run: docker logout ghcr.io
 
   draft:
-    needs: publish
+    needs: [publish, smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

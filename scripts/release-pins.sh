@@ -28,7 +28,7 @@ fail() { echo "release-pins: $*" >&2; exit 1; }
 
 root=${RELEASE_PINS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 
-# site_file <name> and site_pattern <name>: the file that pins the image, and the ERE of its one line.
+# site_file <name>: the file that pins the image.
 site_file() {
   case $1 in
     satbooth) echo "$root/deploy/public/compose.yml" ;;
@@ -45,7 +45,8 @@ site_needle() {
   esac
 }
 
-# site_ref <name>: the ref held by the one line of the site; fails when there is not exactly one such line.
+# site_ref <name>: the ref held by the site, that is by the line holding the needle; fails unless exactly one line
+# holds it.
 site_ref() {
   local file lines n
   file=$(site_file "$1")
@@ -61,7 +62,7 @@ site_ref() {
 ref_version() { local t=${1#*:}; printf '%s' "${t%%@*}"; }
 ref_digest() { printf '%s' "${1##*@}"; }
 
-# check_refs: every site is well formed and the three versions agree. Prints the shared version.
+# shared_version: every site is well formed and the three versions agree. Prints the shared version.
 shared_version() {
   local name ref v prefix want=''
   for name in "${names[@]}"; do

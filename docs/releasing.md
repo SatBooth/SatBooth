@@ -44,6 +44,14 @@ organisation owner does this once.
    The environment must show the reviewer, `prevent_self_review` false, `can_admins_bypass` false and a custom policy
    whose one entry is of type `tag` and named `v*`. Each ruleset must show `enforcement` `active`, the `refs/tags/v*`
    condition, its rules and its bypass actors as above.
+4. **Immutable releases.** Step 6 of the procedure relies on a published release being locked. Turn on the repository's
+   immutable-releases setting (Settings, General, Releases) and read it back:
+
+   ```sh
+   gh api repos/SatBooth/SatBooth/immutable-releases
+   ```
+
+   It must show `"enabled": true`.
 
 ## Procedure
 
@@ -55,6 +63,9 @@ organisation owner does this once.
    scripts/release-build.sh "$out"
    scripts/release-pins.sh set <version> "$out/digests.txt"
    ```
+
+   Run the build from a clean checkout that is up to date with `main`: CI builds the pull request's merge commit, and
+   an untracked `.go` file would enter the build context and change the digests.
 
    `<version>` is the tag, `v` included. Commit the three changed lines. The `agree` job of `release.yml` runs on the
    pull request, because it changes the pins: it builds the images on an amd64 and an arm64 runner, requires both to
@@ -87,9 +98,9 @@ organisation owner does this once.
    Before approving, read the three `match` lines in the summary of `agree`. A refused approval pushes nothing.
    `publish` rebuilds the images, checks them against the pins again, pushes them to the three packages by digest,
    points the tag `<version>` at each, and attests each image. `release-push.sh` never moves a registry tag that holds
-   another digest; it fails instead. Then `draft` creates a draft release (a prerelease for an rc) from
-   `scripts/release-notes.sh <tag>`, whose "Changes:" placeholder is one line to replace, and `smoke` pulls the
-   published images on an amd64 and an arm64 runner and runs `scripts/image-run-test.sh` on them.
+   another digest; it fails instead. Then `smoke` pulls the published images on an amd64 and an arm64 runner and runs
+   `scripts/image-run-test.sh` on them; only when it passes on both architectures does `draft` create a draft release
+   (a prerelease for an rc) from `scripts/release-notes.sh <tag>`, whose "Changes:" placeholder is one line to replace.
 
 5. **Check that the packages are public.** GitHub's documentation says that a package published by a workflow takes the
    visibility of the repository, so the three packages should be public. The first release confirms which case applies.
@@ -122,12 +133,20 @@ organisation owner does this once.
 
 ## When a run is refused
 
-If `agree` fails, the pins and the build disagree: nothing is pushed. If the approval is refused, nothing is pushed. If
-`publish` fails after some images were pushed, the registry holds only the pinned digests: `release-push.sh` never moves
-a registry tag that holds another digest, it fails instead. In every case the answer is the next version: fix the cause
-in a pull request, then tag that version. Never move or delete a tag: the tag rulesets forbid it, and an operator who
-verified the old tag must keep seeing the same commit under it. A tag that was pushed and did not publish stays,
-unreleased.
+If `agree` fails, the pins and the build disagree: nothing is pushed. If the approval is refused, nothing is pushed;
+reject the waiting deployment, so that it cannot be approved later.
+
+A failure that is not a disagreement (a network error, a runner that stopped, a failed call to the registry or to the
+attestation service) is retried on the same run with "Re-run failed jobs"; `publish` asks for the approval again. It is
+safe to repeat: it pushes the same digests, leaves a registry tag that already holds the pinned digest, and fails on one
+that holds another. `draft` runs only after `smoke` passed on both architectures, and leaves an existing release as it
+is.
+
+When the cause is in the tagged tree (a wrong pin, an error in a script or in the workflow, an image that fails
+`smoke`), the answer is the next version: fix the cause in a pull request, then tag that version. Never move or delete
+a tag: the tag rulesets forbid it, and an operator who verified the old tag must keep seeing the same commit under it.
+A tag that was pushed and did not publish stays, unreleased; images already pushed for it keep their registry tag, and
+no release names them.
 
 ## Between releases
 

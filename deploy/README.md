@@ -790,8 +790,8 @@ fail, and nothing of SatBooth's depends on them.
 
 **The node images** (`deploy/hub/bitcoind/Dockerfile`, `deploy/hub/monero/Dockerfile`, `deploy/hub/fulcrum/Dockerfile`)
 download the official release tarballs of Bitcoin Core 32.1 and Monero v0.18.5.4 (the qualified versions) and Fulcrum
-2.1.4, check them against pinned SHA-256 hashes, and copy the binaries onto `debian:13-slim` pinned by digest (decision
-5). The download tools stay in a build stage. bitcoind runs as 10001, monerod and wallet-rpc as 10002, the hub
+2.1.4, check them against pinned SHA-256 hashes, and copy the binaries onto `debian:13-slim` pinned by digest (plan 10,
+decision 5). The download tools stay in a build stage. bitcoind runs as 10001, monerod and wallet-rpc as 10002, the hub
 as 10003, Fulcrum as 10004 and the relay as 65532, each with a read-only root, no capabilities and `no-new-privileges`. No configuration, password or
 regtest setting is in an image.
 
