@@ -5,7 +5,8 @@
 # instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only
 # <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass, read-only) visible. <dir> is created with mode
 # 0700 if it is missing; an existing directory is left as it is. A symbolic link as <dir> is refused.
-# -dir and -host-dir are set here, never taken from the caller. Options are passed through unchanged, in order.
+# -dir and -host-dir are set here, never taken from the caller. With SATBOOTH_BUILD=1 the wrapper also adds
+# -source-build, so the start commands the report prints name the compose.build.yml of the host. Options are passed through unchanged, in order.
 # The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit
 # code is the command's (0 done, 1 refused or failed, 2 usage).
 set -euo pipefail
@@ -146,10 +147,13 @@ esac
 if [ "${SATBOOTH_BUILD:-}" = 1 ]; then
   # From source: the tools image is built from this repository.
   run_image=satbooth-tools:local
+  opts+=(-source-build)
   docker build -q --target satbooth-tools -t "$run_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
 else
   run_image=$tools_image
-  if ! docker pull "$run_image" >&2; then
+  # A ref pinned by digest is immutable: a copy that is already local is the same image, so the registry is needed
+  # only when there is none.
+  if ! docker image inspect "$run_image" > /dev/null 2>&1 && ! docker pull "$run_image" >&2; then
     echo "setup.sh: could not pull $run_image" >&2
     echo "setup.sh: check the network and the registry, or set SATBOOTH_BUILD=1 to build the image from source" >&2
     exit 1

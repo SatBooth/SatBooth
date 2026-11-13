@@ -192,7 +192,7 @@ func (lk *Lock) PublicFinish(handoff []byte, digest string, walletRPCPass []byte
 	if err := p.commit(root); err != nil {
 		return nil, err
 	}
-	n := []string{"Start SatBooth: docker compose -f deploy/public/compose.yml --env-file " + st.Public.HostDir +
+	n := []string{"Start SatBooth: " + lk.composeCmd("public") + " --env-file " + st.Public.HostDir +
 		"/compose.env up -d --build"}
 	if monero {
 		n = append(n, "Delete the carried password file from the channel you copied it through.")

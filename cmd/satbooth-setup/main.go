@@ -36,7 +36,8 @@ const usageText = `usage:
   satbooth-setup hub init      -dir <dir> [-host-dir <path>] -handoff <file> [-digest <digest>] [-answers <file>]
   satbooth-setup hub pair      -dir <dir> [-invoice-wallet <hex>] [-payout-wallet <hex>]
   satbooth-setup public finish -dir <dir> -handoff <file> [-digest <digest>] [-wallet-rpc-pass <file>]
-  any stage: -discard-incomplete (remove what an unfinished run of the stage left)`
+  any stage: -discard-incomplete (remove what an unfinished run of the stage left)
+             -source-build (the images are built from this repository: the start commands name compose.build.yml)`
 
 // run returns the exit code: 0 done, 2 usage, 1 anything else. Standard input answers the questions; the prompts go
 // to stderr and never repeat what was typed.
@@ -54,6 +55,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.SetOutput(io.Discard)
 	dir := fs.String("dir", "", "")
 	discard := fs.Bool("discard-incomplete", false, "")
+	sourceBuild := fs.Bool("source-build", false, "")
 	var answers, hubURL, hostDir, handoff, digest, invoiceW, payoutW, walletPass *string
 	var st setup.Stage
 	str := func(name string) *string { return fs.String(name, "", "") }
@@ -137,6 +139,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	defer lock.Close()
+	lock.SourceBuild = *sourceBuild
 	if err := lock.Preflight(st); err != nil {
 		return fail(stderr, err)
 	}

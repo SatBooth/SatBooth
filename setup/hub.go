@@ -80,7 +80,7 @@ func (lk *Lock) HubInit(a *HubAnswers, handoff []byte, digest string, rand io.Re
 	}
 
 	env := ha.HostDir + "/compose.env"
-	dc := "docker compose -f deploy/hub/compose.yml --env-file " + env
+	dc := lk.composeCmd("hub") + " --env-file " + env
 	next := []string{
 		"Start the hub alone: " + dc + " up -d --build hub",
 		"Open an SSH tunnel to its admin page: ssh -L 8080:" + ha.HubAdminAddr + ":8080 <hub host>   (then http://127.0.0.1:8080)",
@@ -159,7 +159,7 @@ func (lk *Lock) HubPair(invoiceWallet, payoutWallet string) (*Report, error) {
 	}
 	n := []string{
 		"Give the public host's operator this digest to compare: " + Digest(hb),
-		"Start the rest: docker compose -f deploy/hub/compose.yml --env-file " + st.Hub.HostDir + "/compose.env " + profile + "up -d --build",
+		"Start the rest: " + lk.composeCmd("hub") + " --env-file " + st.Hub.HostDir + "/compose.env " + profile + "up -d --build",
 		"Copy " + hd + "/setup/hub-to-public.json to the public host.",
 	}
 	if in.Monero {
