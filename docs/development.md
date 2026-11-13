@@ -19,7 +19,7 @@ The other scripts:
 | `scripts/image-run-test.sh <satbooth image> <relay image> <tools image>` | runs each release image as it ships (read-only root, no capabilities, user 65532) with a missing configuration (the tools image: `/satbooth-setup` with no arguments), and checks the refusal, the user and the environment | no |
 | `scripts/volume-init-test.sh` | runs each bundle's `volume-init` twice on directories laid out like an operator's and checks the owners and modes (Docker; on Linux, where a bind mount keeps the host's owner) | to pull the pinned images |
 
-CI (`.github/workflows/check.yml`) runs the first four; `.github/workflows/image.yml` builds both release images
+CI (`.github/workflows/check.yml`) runs the first four; `.github/workflows/image.yml` builds all three release images
 (`deploy/README.md`, "Build and check") and runs the last three. `scripts/check.sh` also checks both Compose bundles
 with `docker compose config` when Compose is installed (CI has it).
 
@@ -51,7 +51,7 @@ with no internet) and runs the tests in `qualify/`, which carry the build tag `q
 compiles them. It needs Docker with Compose and, on first use, the network to pull the pinned images, build bitcoind
 from the Bitcoin Core release tarball and the Monero image from the Monero v0.18.5.4 release tarball (`dev/regtest/monero/`,
 its SHA-256 pinned from the PGP-signed `hashes.txt`). The Lightning phases wait for an invoice to expire in real time, so they take about 20 minutes (1,230 s in plan 5's last run, on Docker Desktop with the images already
-built and cached); the on-chain phases follow, against the same bitcoind through SatBooth's own whitelisted RPC user (`dev/regtest/bitcoind/bitcoin.conf`), then the Monero phases, against `wallet-satbooth` through SatBooth's own client, then the refund phases (about 12 minutes, with the payout connection and the merchant's hub as the claimant's wallet), then the release images' phases (a `satbooth` container of the release image driven over HTTP only; the relays always run from the release image) and the public host's bundle (`deploy/public/compose.yml`, unmodified); the whole suite took 84 minutes in plan 10's run; a first run also pulls and builds the images and takes longer (not measured). `qualify/REPORT.md` lists what the phases measure and which ran on the image. `--keep` leaves the
+built and cached); the on-chain phases follow, against the same bitcoind through SatBooth's own whitelisted RPC user (`dev/regtest/bitcoind/bitcoin.conf`), then the Monero phases, against `wallet-satbooth` through SatBooth's own client, then the refund phases (about 12 minutes, with the payout connection and the merchant's hub as the claimant's wallet), then the release images' phases (a `satbooth` container of the release image driven over HTTP only; the relays always run from the release image) and the public host's bundle (`deploy/public/compose.yml` with its `compose.build.yml`); the whole suite took 84 minutes in plan 10's run; a first run also pulls and builds the images and takes longer (not measured). `qualify/REPORT.md` lists what the phases measure and which ran on the image. `--keep` leaves the
 environment up. `--only deploy` runs the setup and the public bundle's phases alone, `--only image` the setup,
 `TestOnchainSetup`, `TestMoneroSetup` and the release image's phases, `--only refund` the setup and the refund phases
 (about 15 minutes, most of it the 11-minute void wait), `--only hub` the setup and `TestQualify` with the check on the

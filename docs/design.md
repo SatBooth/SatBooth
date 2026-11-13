@@ -2112,8 +2112,8 @@ the threat model's §9 ("The setup command (plan 12)") carries the security rule
     `-handoff` or `-wallet-rpc-pass` (read-only, at a fixed path). It creates `<dir>` with mode 0700 when it is missing,
     sets `-dir` and, for stages 1 and 2, `-host-dir` itself (a caller who gives either is refused), and refuses before
     it creates or mounts anything a path with a colon (Docker's mount syntax), a mounted file that is a symbolic link or
-    not a regular file, and a repeated option. The report goes to standard output, the prompts and the image build to
-    standard error.
+    not a regular file, and a repeated option. The report goes to standard output, the prompts and the image pull or build
+    to standard error.
 14. **The gates.** `scripts/capslock.sh` compares the whole module with `docs/capslock.json` and then analyses
     `./cmd/satbooth-setup` and `./cmd/satbooth-pair` each alone, failing on a network capability, on a capslock failure
     and on an output without capabilities (the whole-module baseline lists the network for the package `setup` because

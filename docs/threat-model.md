@@ -887,11 +887,11 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds one, `/satbooth-relay`; the
   `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`. `scripts/image-check.sh` refuses any other file,
   in CI, and `.dockerignore` keeps the build context to the Go sources, `vendor/`, `go.mod`, `go.sum` and the three
-  files
-  `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root filesystem,
-  all capabilities dropped and `no-new-privileges`. On the hub host, bitcoind, Fulcrum, monerod and wallet-rpc are built
-  from the official release tarballs, checked against pinned SHA-256 hashes, on a digest-pinned `debian:13-slim`, and
-  Alby Hub is its release image pulled by digest; SatBooth's own images never contain them (`dependencies.md` §8).
+  files `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root
+  filesystem, all capabilities dropped and `no-new-privileges`. On the hub host, bitcoind, Fulcrum, monerod and
+  wallet-rpc are built from the official release tarballs, checked against pinned SHA-256 hashes, on a digest-pinned
+  `debian:13-slim`, and Alby Hub is its release image pulled by digest; SatBooth's own images never contain them
+  (`dependencies.md` §8).
 
 **Release images.** A release publishes the three SatBooth images to GHCR. The build is reproducible:
 `scripts/release-build.sh` builds for `linux/amd64` and `linux/arm64` with a BuildKit pinned by digest, fixed layer
@@ -900,39 +900,51 @@ compression and file times, and the same sources give the same digests on any ma
 
 What an operator verifies:
 
-- The tag. The maintainer signs the annotated tag `v<major>.<minor>.<patch>[-rc.<n>]`; the operator runs `git tag -v
-  <tag>` with the maintainer's key, taken from a source other than this repository's hosting.
+- The tag. The maintainer signs the annotated tag `v<major>.<minor>.<patch>[-rc.<n>]` with the release signing key. The
+  operator imports that key, compares its full fingerprint with the one in `SECURITY.md` ("Release signing key"), and
+  runs `git tag -v <tag>`. The tag signature is the only check of who authorised a release.
 - The pins in that tag's tree (`scripts/release-pins.sh show`): they are what the bundles pull.
 - Optionally, the attestation of each image: `gh attestation verify` with `--signer-workflow
   SatBooth/SatBooth/.github/workflows/release.yml`, `--source-ref refs/tags/<tag>` and `--deny-self-hosted-runners`
   accepts only a build by the release workflow, run from that tag on a GitHub-hosted runner.
-- Optionally, a rebuild: `scripts/release-build.sh out` and `scripts/release-pins.sh check out/digests.txt` must report
-  every digest as matching. This needs trust in nothing but the operator's own Docker, the pinned builder images and the
-  vendored sources.
+- Optionally, a rebuild, with the output directory outside the checkout: `scripts/release-build.sh "$out"` and
+  `scripts/release-pins.sh check "$out/digests.txt"` must report every digest as matching.
 
 What the release workflow can do. A tag push runs `.github/workflows/release.yml` from the tagged commit. Two builders,
 amd64 and arm64, must produce identical digests, and those must equal the pins of the tagged tree. Only then, and only
 after the `release` environment is approved, does the publish job push the images to the three GHCR packages, attest
-them and (in a later job) create a draft release. The environment needs the maintainer's approval, accepts only
-`v*` tags and cannot be bypassed by repository administrators. A ruleset on `v*` tags allows no update and no
-deletion, and creation only by the repository-admin role. The workflow checks that the tag is annotated, named like a
-release and at the run's commit; it does not verify the tag's signature, because a check written in the tagged tree
-would stop no one who controls that tree. The signature is the operator's check, and the environment and the tag
-ruleset are the controls that decide who can make the workflow publish. The publish job pushes the pinned digests and
-tags them with the version; it fails when a registry tag already holds another digest.
+them and (in a later job) create a draft release. The workflow checks that the tag is annotated, named like a release
+and at the run's commit; it does not verify the tag's signature, because a check written in the tagged tree would stop
+no one who controls that tree. The controls that decide who can make the workflow publish are two repository
+settings, which `docs/releasing.md` ("Before the first release") sets up and reads back. They are required
+configuration, not something the workflow enforces: the `release` environment needs the maintainer's approval, accepts
+deployments from `v*` tags only and cannot be bypassed by administrators; a ruleset on `refs/tags/v*` forbids update
+and deletion without bypass and restricts creation to the repository-admin role. A workflow that names an environment
+that does not exist gets one created without protection, so the settings must exist before the first release. The
+publish job pushes the pinned digests and tags them with the version; it fails when a registry tag already holds
+another digest.
 
 What a compromised run or a stolen token could still do. Any workflow that someone with write access to the repository
 pushes, on any branch, can request `packages: write` and push to the three packages without the environment. A
 compromised publish job could do the same. Either could push other digests or move a registry tag. Operators who use
 the tagged bundles pull by digest and are unaffected: the digest in the signed tag's tree names the content, whatever a
 registry tag says. A moved tag shows as a tag whose digest differs from the tagged pin (`scripts/release-smoke.sh
-<tag>` checks this, and refuses it). An operator who pulls by a registry tag takes this risk; the bundles do not. What
-the attestation adds is the proof of where a digest was built: an image pushed by another workflow has no attestation
-from the release workflow, and fails the `gh attestation verify` command above.
+<tag>` checks this, and refuses it). An operator who pulls by a registry tag takes this risk; the bundles do not. An
+image pushed by another workflow has no attestation from the release workflow, and fails the `gh attestation verify`
+command above.
 
-What is trusted. The `moby/buildkit` image and GitHub's hosted runners are trusted for building, not for what operators
-run: a bad builder or runner would produce digests that differ from an independent rebuild, and anyone can make one
-with the commands above. The draft release is published by the maintainer by hand, only after the `smoke` job (both
+A stolen credential of a repository administrator can create a `v*` tag and approve the `release` environment. The run
+then builds the tagged tree, attests it and passes the `smoke` job: the attestation is valid, because it proves where an
+image was built, not who authorised it. The signature of the tag is the only check of the latter, and an attacker
+without the release signing key cannot make one that verifies. Anyone with write access can also create or edit
+releases through a workflow, so the text of a release (its image refs and commands) is not authoritative. The signed
+tag's tree is.
+
+What is trusted. A rebuild checks the hosted runners and the release environment: a runner that built something else
+produces digests that differ from the operator's. It does not check the builder images. The pinned `moby/buildkit` and
+`golang` images are trusted alike by the release build and by every rebuild, which run the same pinned builders; a
+compromise of either, at the pinned digest, would give the same wrong digests in both. The pins are by digest and are
+reviewed when they change. The draft release is published by the maintainer by hand, only after the `smoke` job (both
 architectures) and an anonymous pull of the three packages have passed (`docs/releasing.md`).
 
 ## 7. Public DDoS

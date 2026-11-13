@@ -5,9 +5,10 @@ hub host and `public/` for the public host. The two hosts are never one machine 
 
 **Deploy from a release tag.** The bundles and `deploy/setup.sh` pin the three SatBooth images by tag and digest, and
 the pins in a tag's tree are the ones that release published. On both hosts, check out the tag of the release you
-deploy and verify it with `git tag -v <tag>`, using the maintainer's public key from a source you trust apart from this
-repository. Between releases, the pins on `main` name the last release while the code around them may be newer. "Release
-images" below says how to verify the images themselves, and `docs/releasing.md` is the maintainer's procedure.
+deploy and verify it with `git tag -v <tag>`, after importing the release signing key and comparing its fingerprint
+(`SECURITY.md`, "Release signing key"). Between releases, the pins on `main` name the last release while the code around
+them may be newer. "Release images" below says how to verify the images themselves, and `docs/releasing.md` is the
+maintainer's procedure.
 
 ## Set up with `satbooth-setup`
 
@@ -36,8 +37,7 @@ and what does not.
   admits only the public host to the hub host's ports; see "Per-host bundles"). Setting it up is yours. The two
   addresses are answers, and each must be outside the bundles' own Docker networks.
 - **Docker** with Compose on both hosts, and this repository checked out on both, at the release tag you deploy. The
-  setup wrapper needs Docker
-  Engine in its default mode: `deploy/setup.sh` refuses a rootless engine or Podman ("a rootless Docker engine or Podman
+  setup wrapper needs Docker Engine in its default mode: `deploy/setup.sh` refuses a rootless engine or Podman ("a rootless Docker engine or Podman
   is not supported by this wrapper (the bundles are qualified on Docker Engine in its default mode)"), because the
   bundles are qualified on the default mode only.
 - **From the admin system, the refund approval public key or keys**, if you want refunds: `satbooth-approve keygen
@@ -486,8 +486,8 @@ You need no trust in the registry: the pinned digest is in the tag's tree, which
 checks go further.
 
 By attestation. The release workflow attests each image (a signed build provenance, stored beside the image in the
-registry). For each ref printed by `scripts/release-pins.sh show`, with the tag in the ref replaced by `@` (the
-`<name>@sha256:<digest>` form), this accepts only the release workflow of this repository, run from this tag on a
+registry). For each ref printed by `scripts/release-pins.sh show`, remove the `:<tag>` part so that it reads
+`<name>@sha256:<digest>`. This accepts only the release workflow of this repository, run from this tag on a
 GitHub-hosted runner:
 
 ```sh
@@ -496,16 +496,21 @@ gh attestation verify oci://ghcr.io/satbooth/<name>@sha256:<digest> -R SatBooth/
   --source-ref refs/tags/<tag> --deny-self-hosted-runners
 ```
 
-By rebuild, which needs Docker with buildx. The build is reproducible: the same sources give the same digests on any
-machine. Build and compare with the pins (the second command prints `match` or `pinned X, built Y` for each image):
+The attestation proves where an image was built, not who authorised the release: the tag signature is that check.
+
+By rebuild, which needs Docker with buildx and `jq`. The build is reproducible: the same sources give the same digests
+on any machine. It writes large files, so give it a directory outside the checkout. Build and compare with the pins
+(the second command prints `match` or `pinned X, built Y` for each image):
 
 ```sh
-scripts/release-build.sh out
-scripts/release-pins.sh check out/digests.txt
+out=$(mktemp -d)
+scripts/release-build.sh "$out"
+scripts/release-pins.sh check "$out/digests.txt"
 ```
 
-The rebuild trusts only what you ran: the Go builder and BuildKit pinned below, and your own Docker. The release notes
-of each release print these commands with the refs filled in.
+A rebuild checks the hosted runners that made the release. It runs the same pinned BuildKit and Go images, so it does
+not check them: they are trusted by the release build and by every rebuild alike. The release notes of each release
+print these commands with the refs filled in, but the signed tag's tree is authoritative, not the notes.
 
 ### Build from source
 
@@ -540,7 +545,7 @@ code never calls `time.LoadLocation`), no shell, no package manager and no other
 | Pin | Version | Why it is current |
 |---|---|---|
 | `golang:1.27.4-trixie@sha256:b54b2639...` (the `build` and `certs` stages) | Go 1.27.4 on Debian 13 | The newest Go 1.27 patch release at the time of writing; the regtest setup runs these two images and uses the same pin for its `volume-init` helper (the bitcoind and Monero helpers use `debian:13-slim`). Nothing from these stages ships except the binaries and the CA bundle, which the `certs` stage takes from the `linux/amd64` image without running anything. |
-| `moby/buildkit:v0.34.1@sha256:99368f3e...` | BuildKit v0.34.1 | The builder of `scripts/release-lib.sh`, Docker's own BuildKit. It is pinned because layer compression and the exporter decide the release image digests. It is trusted to build, not for what operators run: a rebuild checks it. |
+| `moby/buildkit:v0.34.1@sha256:99368f3e...` | BuildKit v0.34.1 | The builder of `scripts/release-lib.sh`, Docker's own BuildKit. It is pinned because layer compression and the exporter decide the release image digests. It is trusted to build, not for what operators run; a rebuild runs the same pinned image, so it does not check it. |
 | `actions/checkout@3d3c42e5...` | v7.0.1 | The pin `check.yml` and `release.yml` use. |
 | `actions/upload-artifact@cf430e03...`, `actions/download-artifact@9000827c...` | v7.0.2, v8.0.2 | `release.yml` moves each runner's digests to the job that compares them (`upload-artifact` is also used by `qualify.yml`). |
 | `actions/attest-build-provenance@4d101475...` | v4.2.2 | `release.yml` attests each pushed image; the action wraps `actions/attest@508db95d...` (v4.2.1). |
@@ -571,8 +576,8 @@ scripts/image-run-test.sh satbooth:local satbooth-relay:local satbooth-tools:loc
 ```
 
 CI runs these checks on every pull request and every push to `main` (`image.yml`), with no registry login. Only the
-release workflow
-(`.github/workflows/release.yml`, `docs/releasing.md`) pushes to a registry, and only for a release tag.
+release workflow (`.github/workflows/release.yml`, `docs/releasing.md`) pushes to a registry, and only for a release
+tag.
 
 ## Per-host bundles
 

@@ -65,8 +65,8 @@ Run it:
 - [Configuration](docs/configuration.md): every key of the configuration file, with an example.
 - [Setting up bitcoind](docs/bitcoind.md): the node, the watch-only wallet and the descriptor for on-chain payments.
 - [Setting up monerod and monero-wallet-rpc](docs/monero.md): the node and the view-only wallet for Monero payments.
-- [Deploying with Docker Compose](deploy/README.md): the release images, how to verify them, and the bundle of each
-  host.
+- [Deploying with Docker Compose](deploy/README.md): the release images, how to verify them (the release signing key is
+  in [SECURITY.md](SECURITY.md)), and the bundle of each host.
 - [Releasing](docs/releasing.md): how a release is made, tagged and published.
 - [Migrating from BTCPay Server](docs/migrating-from-btcpay.md): what moves, what does not, and the API mapping.
 

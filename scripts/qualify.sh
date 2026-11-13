@@ -181,7 +181,7 @@ oneoff_clean() {
   done
 }
 
-# The public host's bundle, from the setup command's output: deploy/public/compose.yml, run with
+# The public host's bundle (plan 10), from the setup command's output (plan 12): deploy/public/compose.yml, run with
 # its compose.build.yml, the regtest override and values (dev/regtest/deploy-public.override.yml, deploy-public.env) as
 # a project of its own. A second SatBooth with its own data volume. Every file the bundle mounts is written by
 # `deploy/setup.sh <dir> public init` and `public finish`, which run before the bundle's first start; the test patches
@@ -398,7 +398,7 @@ hub_runs() {
   log "deploy/hub: the hub's HTTP port answers $1 on $host:$hub_admin_port: HTTP $code"
 }
 
-# The hub host's bundle, from stages 1 to 3 of the setup command: the first start (volume-init, the
+# The hub host's bundle, from stages 1 to 3 of the setup command (plan 12): the first start (volume-init, the
 # namespace holder, bitcoind and the hub), bitcoind's RPC users, then the relay once stage 3 wrote its configuration.
 # Subnets: 172.30.79.0/25 (the hub), 172.30.79.128/25 (Electrum), apart from the regtest network (172.30.78.0/24) and the
 # public bundle's (192.0.2.0/24). The private-link addresses are loopback ones (regtest only): a second stage 1 run, with
@@ -608,7 +608,7 @@ kill_hub() {
   recreate_relay "$hub"
 }
 
-# The release image: SatBooth as the shipped satbooth image, driven over HTTP only by the TestImage phases. It
+# The release image (plan 10): SatBooth as the shipped satbooth image, driven over HTTP only by the TestImage phases. It
 # runs last and alone: it uses the same invoice and payout connections and the same wallets as the in-process phases.
 # Every stop, start and one-off run is done here, between the phases (the qualify container has no Docker socket):
 #   satbooth         the service (172.30.78.40), read-only root, no capabilities, memlock -1, user 65532;
@@ -776,7 +776,7 @@ image_group() {
   sb_stop
 }
 
-# Lightning refunds: the same service with the payout block, the bootstrap's payout connection and an approval
+# Lightning refunds (plan 9): the same service with the payout block, the bootstrap's payout connection and an approval
 # key generated in the test. All refund phases but TestRefundBudget share one environment (/state/lightning/refund). Of
 # the earlier phases they need only TestBootstrap (state.json: the hubs, the connections' keys, the channel); every
 # other value they read is in their own phase file (refund.json), written by the phases of this group.
@@ -804,14 +804,14 @@ refund_group() {
   recreate_relay hub-merchant
   wait_running
   phase TestRefundFailedAfter
-  # Two claims over the budget left: one expires unsent, the other is voided while claimed.
+  # Two claims over the budget left: one expires unsent, the other is voided while claimed (plan 11).
   phase TestRefundBudget
   # Last: the crash and cut refunds are voided once their send marker is 11 minutes old (the phase waits out the
   # rest).
   phase TestRefundVoidUnknown
 }
 
-# The hubs' bitcoind user: the hubs reach the regtest bitcoind as the user hub, whose rpcwhitelist holds
+# The hubs' bitcoind user (plan 11): the hubs reach the regtest bitcoind as the user hub, whose rpcwhitelist holds
 # the eleven calls of their chain source (dev/regtest/bitcoind/bitcoin.conf, docs/dependencies.md §8). Bitcoin Core
 # 32.1 logs every call a whitelist refuses, at warning level and so whatever the debug categories, and answers it HTTP
 # 403 (src/httprpc.cpp:117 at v32.1: LogWarning("RPC User %s not allowed to call method %s", ...); :109 is the same
@@ -886,7 +886,7 @@ phase TestBuildFlags
 
 log "up: bitcoind and hubs"
 dc up -d bitcoind "${hubs[@]}"
-# Monero: wallet-satbooth waits for the view-only wallet's description, which TestMoneroSetup writes.
+# Monero (plan 8): wallet-satbooth waits for the view-only wallet's description, which TestMoneroSetup writes.
 log "up: monerod and the two wallet-rpc services"
 dc up -d monerod wallet-customer wallet-satbooth
 
@@ -909,7 +909,7 @@ for hub in "${hubs[@]}"; do
 done
 wait_running
 
-# On-chain, end to end: the same service, now with the on-chain rail on the regtest bitcoind through the
+# On-chain, end to end (plan 6): the same service, now with the on-chain rail on the regtest bitcoind through the
 # whitelisted satbooth user. All on-chain phases share one environment (/state/onchain, one data directory).
 
 # Shell snippet run inside the qualify container: curl with the credentials from the container's environment, given to
@@ -925,7 +925,7 @@ btc_rpc() {
   dc run --rm --no-deps -T --entrypoint sh qualify -c "$rpc_sh"'crl -fsS --max-time 120 --data-binary "$1" "http://172.30.78.2:18443/$2"' sh "$body" "${3-}" 2> /dev/null
 }
 
-# Polls getblockchaininfo for up to 3 minutes, then loads the miner wallet again: the bootstrap created it without
+# Polls getblockchaininfo for up to 3 minutes, then loads the miner wallet again: plan 4's bootstrap created it without
 # load_on_startup.
 wait_bitcoind() {
   log "waiting for bitcoind"
@@ -958,7 +958,7 @@ kill_bitcoind() {
   [ -n "$h0" ] && [ "${h1:-0}" -ge "$h0" ] || { echo "the chain shrank over the kill ($h0 to ${h1:-?})" >&2; return 1; }
 }
 
-# The on-chain phases in the order of the full run, with the bitcoind kills between them: from TestOnchainSetup to the
+# The on-chain phases (plan 6) in the order of the full run, with the bitcoind kills between them: from TestOnchainSetup to the
 # stuck pair, the last phase that uses an on-chain environment. They need only TestBootstrap (the hubs, wait_running) of the
 # earlier phases: no Lightning phase leaves anything they read, as the image group, which runs TestOnchainSetup straight
 # after the setup, shows.
@@ -1138,7 +1138,7 @@ phase TestLightningExpireAfter
 
 onchain_group
 
-# Monero, end to end: the same service with the Monero rail on the regtest monerod and SatBooth's view-only
+# Monero, end to end (plan 8): the same service with the Monero rail on the regtest monerod and SatBooth's view-only
 # wallet-rpc (wallet-satbooth, Digest login). All Monero phases share one environment (/state/monero) except the stuck
 # pair (/state/monero-stuck, a clock 7 days ahead).
 
@@ -1208,7 +1208,7 @@ phase TestMoneroLateAfter
 phase TestMoneroFiat
 phase TestMoneroBothRails
 
-# Lightning refunds: the refund group (above).
+# Lightning refunds (plan 9): the refund group (above).
 refund_group
 
 # The release image (the functions above): last and alone, then the public bundle, then the budget check.
