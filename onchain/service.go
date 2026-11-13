@@ -224,6 +224,7 @@ type Service struct {
 	trackFrom     string               // the order the next pass starts at
 	deferredSince map[string]time.Time // s.now() of the first pass that did not reach the order since it was served
 	tooWide       map[string]struct{}  // orders whose logTooWide this process logged; cleared at maxTooWide
+	carried       map[string]struct{}  // orders touched by discovery that the last pass did not reach
 
 	// bothAlerted is written by the pass (settle) and by lnpay's hook (LightningPaid) from its own goroutines.
 	bothMu      sync.Mutex          // guards bothAlerted
@@ -276,7 +277,7 @@ func New(cfg Config, st *store.Store, lg *ledger.Ledger, rpc RPC, ln Lightning, 
 		settleMu: &sync.Mutex{}, bothAlerted: map[string]struct{}{}, pastExpiry: st.OnchainOrdersPastExpiry, eventsFor: st.EventsForOrder,
 		diedInPass: map[store.TXOKey]struct{}{}, heldInPass: map[string]struct{}{}, behindSince: map[store.TXOKey]time.Time{},
 		heldBefore: map[store.TXOKey]struct{}{}, wall: time.Now, passCap: passCapOf(cfg),
-		deferredSince: map[string]time.Time{}, tooWide: map[string]struct{}{}}, nil
+		deferredSince: map[string]time.Time{}, tooWide: map[string]struct{}{}, carried: map[string]struct{}{}}, nil
 }
 
 func (s *Service) crash(point string) error {

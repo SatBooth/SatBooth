@@ -750,7 +750,13 @@ are marked as in §2.1: *source* or *observed*
   a restart, `loaded` false, no output is marked dead in that pass: an unconfirmed output missing from the mempool is
   skipped with one line, `src/rpc/mempool.cpp:1113`, `src/init.cpp:2130-2136` in Core 32.1); `listsinceblock` from the
   cursor with `target_confirmations` = `SettledDepth` + 1, keeping receives to issued addresses and dropping odd entries
-  one by one; `gettransaction` for the tracked transactions, shared by their outputs and paced at `poll_rate`, an order whole at a time, in turn from where the last pass stopped, with no new order started after `poll_seconds` of real time (an order not reached is not settled and reads stale after 3 × `poll_seconds`; one with more due transactions than one pass reads, `poll_seconds` × `poll_rate` and at least 8, is not read, and has an `ALERT`) (the sign
+  one by one; `gettransaction` for the tracked transactions, shared by their
+  outputs and paced at `poll_rate`, an order whole at a time, in turn from where the last pass stopped, with no new order
+  started after `poll_seconds` of real time. An order not reached is not settled and reads stale after 3 ×
+  `poll_seconds`; it is held (no final event is written or reported for it, and the other rail of a mixed order holds
+  its own as it does for an output it cannot judge), and, if the scan touched it, it is touched again in the next pass.
+  One with more due transactions than one pass reads, `poll_seconds` × `poll_rate` and at least 8, is not read and has
+  an `ALERT` (the sign
   of the confirmations first, then the mempool conflicts, then `getmempoolentry`, because 0 confirmations also means evicted or
   replaced). Since plan 6.1 an output found in neither is read again before it is marked dead: `getmempoolinfo` (bitcoind may have restarted
   inside the pass; loading means wait, *source*: Core 32.1 `src/rpc/mempool.cpp:1113`, `:1143`), `getmempoolentry`, then

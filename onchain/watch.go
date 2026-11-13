@@ -896,7 +896,9 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 // one always does); an order that has started is finished. An order with more due transactions than passCap is not
 // read at all (logTooWide, once per order per process), and neither is one not reached: both are in skip, so that
 // nothing of theirs is settled in this pass, and the first is in stale at once; the second only after it has gone
-// unreached for more than three poll intervals (deferredSince). touched gains the orders of the outputs refreshed; skip
+// unreached for more than three poll intervals (deferredSince). An order not reached is also held (heldInPass: no final
+// event is written or reported for it before its turn), and one that discovery touched is carried (carried) to the next
+// pass's touched. touched gains the orders of the outputs refreshed; skip
 // gains those of the outputs that failed, and of those that cannot be judged while the mempool is not loaded
 // (logLoading, once per pass); stale gains only the first. An output that cannot be judged because the wallet is
 // behind the node's mempool (errBehind, logWalletBehind once per pass) skips nothing: it is in behindInPass, its order
@@ -911,6 +913,15 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 	// a replacement that the next pass's scan lists: settle holds the order's final event until then (diedInPass).
 	s.diedInPass, s.heldInPass = map[store.TXOKey]struct{}{}, map[string]struct{}{}
 	s.behindInPass = map[store.TXOKey]struct{}{}
+	// An order that discovery touched and an earlier pass did not reach is touched again: the new rows that touched it
+	// are stored now, so nothing else would bring it back to settle.
+	for id := range s.carried {
+		if _, err := s.order(ctx, orders, id); err != nil {
+			return nil, s.trackFailed(ctx, "order", err)
+		}
+		touched.add(id)
+	}
+	carried := map[string]struct{}{}
 	list, err := s.work(ctx, now, orders, touched, listedMined, stale)
 	if err != nil {
 		return nil, err
@@ -1009,6 +1020,10 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 		}
 		if closed {
 			skip[id] = true
+			if touched.seen[id] {
+				carried[id] = struct{}{}
+			}
+			s.heldInPass[id] = struct{}{} // its final event waits for its turn
 			since, ok := s.deferredSince[id]
 			if !ok {
 				since = now
@@ -1036,7 +1051,7 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 			}
 		}
 	}
-	s.trackFrom, s.deferredSince = next, deferred
+	s.trackFrom, s.deferredSince, s.carried = next, deferred, carried
 	if waiting {
 		s.log.Warn(logLoading)
 	}

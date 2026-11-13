@@ -353,8 +353,8 @@ reads `expired` while an on-time payment is live, and one whose settle keeps fai
 good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. Anyone who knows an order's address can pay it in more separate transactions than one pass reads
 (`poll_seconds` × `poll_rate`, at least 8): that order is then never read, recorded or given a final event, and the
 operator is told by `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by
-hand` (and by the window's end `ALERT`); the other orders are served in turn within `poll_seconds` and are not
-delayed beyond that. The cost
+hand` (and by the window's end `ALERT`); the other orders are served in turn, each at least once every few passes
+while the backlog lasts, and read "Checking payment…" after waiting more than 3 × `poll_seconds`. The cost
 is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one more `getmempoolinfo`,
 `getmempoolentry` and `gettransaction`, and a `gettxspendingprevout`, in the pass that marks it gone (six calls then; a
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for

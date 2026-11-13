@@ -1,6 +1,7 @@
 package onchain
 
 import (
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -315,6 +316,18 @@ func TestDeferredPaymentIsRecordedOnce(t *testing.T) {
 	if _, ok := e.fwd(m, 1); ok {
 		t.Fatal("m recorded twice")
 	}
+	if n := e.node.TxCalls(m); n < 2 {
+		t.Fatalf("m was not served again: %d reads", n)
+	}
+	forwards := 0
+	for ep := range uint32(3) {
+		if _, ok := e.fwd(m, ep); ok {
+			forwards++
+		}
+	}
+	if forwards != 1 {
+		t.Fatalf("%d forwards of m, want 1", forwards)
+	}
 	n := 0
 	for i, tx := range txs {
 		if tx == m {
@@ -397,4 +410,127 @@ func TestCrashMidRotationIsSafe(t *testing.T) {
 		}
 	}
 	e.safety(os...)
+}
+
+// A past-window order that only discovery touched, and that a pass did not reach, is touched again in the next pass:
+// its late output is recorded once the order is served.
+func TestDeferredDiscoveredOrderIsCarriedToItsTurn(t *testing.T) {
+	e := newWatchEnv(t)
+	o, a, late := lateAtWindowEnd(e)
+	e.node.Mine(6)
+	z := e.order(2_000_000) // watched, and listed before o
+	e.payOrder(z, 2_000_000)
+	e.node.Pay(a, 1_000) // a new row on o's address: discovery touches o
+	e.wallStep(11 * time.Second)
+	for range 2 {
+		e.clk.Advance(time.Second)
+		e.mustPass()
+	}
+	if _, ok := e.fwd(late, 0); !ok || !e.hasEvent(o, store.EventLate, 1) {
+		t.Fatalf("the late output is not recorded: %+v", e.events(o))
+	}
+	e.safety(o, z)
+}
+
+// An order that is only deferred when its window closes is not reported as left without a final event: it is held
+// until its turn.
+func TestDeferredAtWindowEndIsNotReported(t *testing.T) {
+	e := newWatchEnv(t)
+	z := e.order(20_000)
+	e.payOrder(z, 20_000)
+	e.mustPass()
+	o := e.order(10_000)
+	e.payOrder(o, 10_000) // mempool, never mined
+	e.mustPass()
+	e.pastExpiry(o)
+	e.mustPass()
+	e.toWindowEnd(o)
+	e.wallStep(11 * time.Second)
+	e.mustPass() // serves z; o is deferred in the pass in which its window closes
+	if e.count(logNoFinal) != 0 {
+		t.Fatal("reported while deferred")
+	}
+	e.clk.Advance(time.Second)
+	e.mustPass() // serves o
+	e.clk.Advance(time.Second)
+	e.mustPass()
+	if e.count(logNoFinal) != 0 || e.eventCount(o, store.EventUnderpaid) != 1 {
+		t.Fatalf("o: %+v, reports %d", e.events(o), e.count(logNoFinal))
+	}
+}
+
+// The peer rail sees a deferred order as held, so it writes no final event for it before it is read.
+func TestDeferredOrderIsHeldForThePeer(t *testing.T) {
+	e := newWatchEnv(t)
+	a, b := e.order(10_000), e.order(10_000)
+	e.payOrder(a, 10_000)
+	e.payOrder(b, 10_000)
+	e.wallStep(11 * time.Second)
+	held := func(o store.Order) bool {
+		v, ok, err := e.svc.View(bg, o)
+		if err != nil || !ok {
+			t.Fatal(err)
+		}
+		return v.Held
+	}
+	e.mustPass()
+	if held(a) == held(b) {
+		t.Fatalf("held: a %v, b %v; want exactly the order not reached", held(a), held(b))
+	}
+	notReached := a
+	if held(b) {
+		notReached = b
+	}
+	e.clk.Advance(time.Second)
+	e.mustPass() // it is served now
+	if held(notReached) {
+		t.Fatal("held after it was reached")
+	}
+}
+
+func TestOrderWithExactlyThePassCapIsServed(t *testing.T) {
+	e := newWatchEnv(t)
+	e.cap(8)
+	o := e.order(80_000)
+	var txs []string
+	for range 8 {
+		txs = append(txs, e.payOrder(o, 10_000))
+	}
+	e.node.Mine(1)
+	e.mustPasses(2)
+	for _, tx := range txs {
+		if e.node.TxCalls(tx) == 0 {
+			t.Fatal("a transaction of an order at the cap was not read")
+		}
+	}
+	if e.count(logTooWide) != 0 || e.stale(o) || e.eventCount(o, store.EventPaid) != 1 {
+		t.Fatalf("alerts %d, events %+v", e.count(logTooWide), e.events(o))
+	}
+	e.safety(o)
+}
+
+func TestPassCapOf(t *testing.T) {
+	for _, c := range []struct {
+		interval time.Duration
+		rate     float64
+		want     int
+	}{
+		{10 * time.Second, 5, 50},
+		{10 * time.Second, 1.01, 11}, // 10.1 rounds up
+		{2 * time.Second, 1, 8},      // 2 is below the floor
+		{10 * time.Second, 0.8, 8},   // exactly 8
+		{60 * time.Second, 10_000, 600_000},
+	} {
+		if got := passCapOf(Config{PollInterval: c.interval, PollRate: c.rate}); got != c.want {
+			t.Errorf("passCapOf(%v, %v) = %d, want %d", c.interval, c.rate, got, c.want)
+		}
+	}
+	e := newWatchEnv(t)
+	if want := passCapOf(e.svc.cfg); e.svc.passCap != want || want != int(math.Ceil(10*MaxPollRate)) {
+		t.Fatalf("New set passCap %d, want %d", e.svc.passCap, want)
+	}
+	d := newEnv(t)
+	if d.svc.passCap != 50 {
+		t.Fatalf("default passCap %d", d.svc.passCap)
+	}
 }
