@@ -238,8 +238,8 @@ func (s *Service) peerSeqs(ctx context.Context, o store.Order) ([]int, error) {
 // taken, and none of which is held while another lock is taken
 // except bothMu, which alertBoth holds across its log line (the log handler's own lock is a leaf too): seenMu (held
 // only to copy the observations' map pointer, in seenNow, called by orderViews here and in the peer's View of this
-// rail), mu (peerRail), bothMu, the peer's mu and staleMu in its View, and lnpay's mu in Status and MarkKnown. Rail takes the settle
-// mutex, then staleMu.
+// rail), mu (peerRail), bothMu, the peer's mu and staleMu in its View, and lnpay's mu in Status and
+// MarkKnown. Rail takes the settle mutex, then staleMu.
 // settle makes no RPC call. The peer is read through View and RevertedSeqs, which do not take the settle mutex (this
 // call holds it) and make no RPC call. unwatched, LightningPaid and confirmedSum take no settle mutex: they take seenMu
 // alone (through orderViews), as the publish in trackAll does.
@@ -409,9 +409,10 @@ func (s *Service) settle(ctx context.Context, o store.Order) error {
 	// Level-triggered: while the order is settled, every call alerts if Lightning reads paid and an on-chain record
 	// exists, whichever came first, so a call that failed or crashed before its alert is healed by the next one.
 	// lnpay's completion (LightningPaid) alerts when Lightning pays second, also once the output is settled deep and
-	// no longer read here. Each rail writes its record, then reads the other's, so at least one sees both: Lightning
-	// may have recorded its payment after step 1's read and run LightningPaid before this transfer existed, so a
-	// transfer created here is followed by one more Status read. It covers a record created and settled in the same
+	// no longer read here. Each rail writes its record, then reads the other's, so at least one sees both: the peer
+	// may have recorded its payment after step 1's read (and so may Lightning when it is not wired to the settle lock, as
+	// in tests, which then runs LightningPaid before this transfer exists), so a transfer created here is followed by
+	// one more Status read. It covers a record created and settled in the same
 	// call (no later call reads it). The read is local: steps 4 and 5 keep step 1's view, as step 2 used it.
 	// The peer joins the rule as Lightning does, with its money too (6.1-W: money on two rails needs a person), and is
 	// re-read after a creation as Lightning is.

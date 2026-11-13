@@ -280,9 +280,10 @@ func (s *Service) crash(point string) error {
 
 // SetPeer sets the Monero rail, which Address asks whether an order is already paid there and settle reads beside
 // Lightning (nil when the Monero rail is not configured).
-// settle is the mutex both rails hold for the whole of each settle (ruling 8-A1): one shared by the two rails, so a
-// settle never reads the peer's paid state while the peer's settle changes it; nil keeps the rail's own. Both are set
-// before Run.
+// settle is the mutex the rail holds for the whole of each settle (ruling 8-A1): one shared by the watched rails and
+// lnpay, so a settle never reads the peer's paid state, or Lightning's, while it changes. The service passes it
+// whenever a watched rail exists, with a nil peer when the other rail is absent; a nil settle keeps the rail's own,
+// which only tests use. Both are set before Run.
 func (s *Service) SetPeer(p rail.Peer, settle *sync.Mutex) {
 	s.mu.Lock()
 	s.peer = p

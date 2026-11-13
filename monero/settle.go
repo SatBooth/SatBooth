@@ -189,7 +189,9 @@ func (s *Service) peerSeqs(ctx context.Context, o store.Order) ([]int, error) {
 // Rail (ruling R1: a status read waits for the settle's end) and in lnpay's record of a payment, which holds no other
 // lock when it takes it, and which no holder of the settle mutex calls (lnpay's hook into the rails, LightningPaid,
 // takes no settle mutex); under it settle takes only leaf locks (mu, bothMu, the peer's mu and staleMu in its View,
-// lnpay's mu in Status and MarkKnown), none of which is held while the settle mutex is taken, and it makes no RPC call. The peer is read through View and RevertedSeqs, which do not take
+// lnpay's mu in Status and MarkKnown), none of which is held while the settle mutex is taken, and it makes no RPC
+// call. The pass's commit-and-settles section and walletChanged (address.go) take the mutex too, first and with no
+// other lock held. The peer is read through View and RevertedSeqs, which do not take
 // the settle mutex (this call holds it) and make no RPC call.
 func (s *Service) settle(ctx context.Context, o store.Order, unknown map[store.PaymentKey]bool) error {
 	mu := s.settleLock()

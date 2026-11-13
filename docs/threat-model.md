@@ -466,7 +466,8 @@ settle, so the other rail's state cannot change in between (its own settle is th
 reversal on one rail landing inside the other's settle gave an `order.paid_again` that no payment backed, or, when
 both rails' payments reverted together, no `order.reverted` at all. A Lightning payment is written under the same
 lock: a settle that read Lightning unpaid writes its reversal and events first, and one that starts
-later reads it paid. A recording waits for at most one settle in progress, and the hub lookup is made before the lock.
+later reads it paid. A recording waits for whatever holds the lock: one on-chain settle, a Monero pass's commit and settles, or a status
+read. The hub lookup is made before the lock.
 A status read (the API, the checkout
 page) takes the same lock (ruling R1): a settle used to record a new payment before it reversed an old one, and a read
 between the two summed both, so an order whose reorged-out payment was replaced by another could read `paid` for a

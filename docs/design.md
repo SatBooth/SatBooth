@@ -1396,12 +1396,14 @@ reading of the source). Every decision below is built.
 
 **Rulings 8-A1 to 8-A5 (plan 8).** Each fixes a defect that a failing test showed first.
 
-- **8-A1: one settle lock for the watched rails.** Both rails hold one `sync.Mutex`, installed with `SetPeer`, for
-  the whole of each settle (a rail without a peer holds its own). The peer's paid state changes only in its settle, so
-  it cannot change between a settle's read of it and its event writes: no `order.paid_again` without money, and no
-  lost `order.reverted` when both rails revert together. Under it settle takes only leaf locks and makes no RPC call.
-  `LightningPaid` writes no event and lnpay's `order.paid` never reverts, so neither takes it. The cost: settles of
-  different orders on the two rails no longer overlap (milliseconds per order).
+- **8-A1: one settle lock for the watched rails.** The watched rails and lnpay share one `sync.Mutex`, installed with
+  `SetPeer` and `SetSettleLock`, whenever at least one watched rail is configured (a single rail has no peer, but still
+  shares the lock with lnpay). Each rail holds it for the whole of each settle. The peer's paid state changes only in
+  its settle, so it cannot change between a settle's read of it and its event writes: no `order.paid_again` without
+  money, and no lost `order.reverted` when both rails revert together. lnpay holds it only while it writes a payment's
+  ledger transfer, which is what its status reads as paid; its `order.paid` event write and `LightningPaid` do not take
+  it. Under it settle takes only leaf locks and makes no RPC call. The cost: settles of different orders on the two
+  rails no longer overlap (milliseconds per order).
 - **8-A2: the cursor is only where the next scan starts;** confirmations come from the wallet's height (8-T7b above).
 - **8-A3: the press checks the base address after `create_address` too** (8-T7a above).
 - **8-A4: the cursor still advances when entries drop** (holding it would let one bad entry grow every listing without
@@ -1422,7 +1424,7 @@ reading of the source). Every decision below is built.
   settle mutex while it reads, so it never sees a settle half done: settle records a new payment before it reverses an
   old one, and a read between them summed both (an order whose 0.6 of 1 XMR was reorged out while another 0.6 was
   mined read `paid`). `View`, the peer path that the other rail's settle calls while it holds the mutex, reads
-  without it. A rail without a peer holds its own mutex. A press (`Address`) still reads the peer's `View` without the
+  without it. With a single watched rail the mutex is shared with lnpay alone. A press (`Address`) still reads the peer's `View` without the
   lock: a half-done settle there can only over-count, which refuses the press (`ErrPaid`), the safe side. (Since S1
   below a settle's ledger records are one batch, so not even an interrupted settle is half done in the ledger.)
 - **R5: an early plan 8 store is refused,** as above; no migration (no release exists).

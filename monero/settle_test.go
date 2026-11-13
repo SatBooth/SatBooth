@@ -189,7 +189,11 @@ func TestLightningRecordWaitsForAReversalMonero(t *testing.T) {
 		switch p {
 		case "settle:after-status":
 			go func() { _, err := ln.Pay(context.Background(), o.Token); payDone <- err }()
-			<-hub.looked
+			select {
+			case <-hub.looked:
+			case <-time.After(5 * time.Second):
+				return errors.New("the hub was never asked about the invoice")
+			}
 			time.Sleep(200 * time.Millisecond)
 		case "settle:after-transfers":
 			if lnTransferExists(e, inv) {

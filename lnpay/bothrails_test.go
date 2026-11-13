@@ -447,3 +447,33 @@ func TestRecordUnderSettleLockWithConcurrentReads(t *testing.T) {
 		}
 	}
 }
+
+// A record whose context ends while it waits for the held settle lock writes nothing; a later reconcile records the
+// payment exactly once.
+func TestRecordCancelledWhileWaitingForTheSettleLock(t *testing.T) {
+	e := newEnv(t)
+	mu := &sync.Mutex{}
+	e.svc.SetSettleLock(mu)
+	o := e.order("a", 3_000_000)
+	inv := e.mustPay(o)
+	e.w.settle(inv.PaymentHash, inv.AmountMsat)
+	mu.Lock()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- e.svc.reconcile(ctx, inv) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	mu.Unlock()
+	if err := <-done; err == nil {
+		t.Fatal("a cancelled record reported success")
+	}
+	if e.transfers(o) != 0 || e.eventCount(store.EventPaid, o.ID) != 0 {
+		t.Fatal("a cancelled record wrote")
+	}
+	if err := e.svc.reconcile(context.Background(), inv); err != nil {
+		t.Fatal(err)
+	}
+	if e.transfers(o) != 1 || e.eventCount(store.EventPaid, o.ID) != 1 {
+		t.Fatal("not recorded once")
+	}
+}
