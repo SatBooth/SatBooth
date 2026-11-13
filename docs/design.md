@@ -750,7 +750,7 @@ are marked as in §2.1: *source* or *observed*
   a restart, `loaded` false, no output is marked dead in that pass: an unconfirmed output missing from the mempool is
   skipped with one line, `src/rpc/mempool.cpp:1113`, `src/init.cpp:2130-2136` in Core 32.1); `listsinceblock` from the
   cursor with `target_confirmations` = `SettledDepth` + 1, keeping receives to issued addresses and dropping odd entries
-  one by one; `gettransaction` for every tracked output, paced at `poll_rate` (the sign of the confirmations first, then
+  one by one; `gettransaction` for every tracked transaction, shared by its outputs and paced at `poll_rate` (the sign of the confirmations first, then
   the mempool conflicts, then `getmempoolentry`, because 0 confirmations also means evicted or replaced). Since plan 6.1
   an output found in neither is read again before it is marked dead: `getmempoolinfo` (bitcoind may have restarted
   inside the pass; loading means wait, *source*: Core 32.1 `src/rpc/mempool.cpp:1113`, `:1143`), `getmempoolentry`, then
@@ -957,8 +957,8 @@ the merchant are in `docs/bitcoind.md`, the `limits` and `onchain` tables of `do
   transaction, when the scan lists that output with a confirmation (the sender rebroadcast it and it was mined); the
   output is then tracked and recorded by the usual rules. Updates and replaces stay refused, and the marks keep the
   history.
-- **The stuck set's bound and cost.** Bounded to on-time outputs not settled: each costs one `gettransaction` plus one
-  `getmempoolentry` a pass, paced at `poll_rate`, until it is mined `SettledDepth` deep with its record, or dead and
+- **The stuck set's bound and cost.** Bounded to on-time outputs not settled: each transaction costs one `gettransaction` plus one
+  `getmempoolentry` a pass, shared by its outputs and paced at `poll_rate`, until it is mined `SettledDepth` deep with its record, or dead and
   settled (6.1-O); the pass that marks it dead costs one more `getmempoolinfo`, `getmempoolentry` and
   `gettransaction`, and a `gettxspendingprevout` (six calls in that pass; the same each pass while the wallet is
   behind); an output already dead costs what a live one costs (two calls). A late
