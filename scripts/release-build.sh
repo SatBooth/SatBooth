@@ -73,7 +73,7 @@ load_release_test() {
   fi
   echo "release-build: $name: loading the archive did not give the pinned image; building into the image store"
   docker buildx build "${RELEASE_BUILD_FLAGS[@]}" --progress=quiet --target "$name" --platform "$plat" \
-    --output "type=docker,name=$name:release-test,rewrite-timestamp=true" . > /dev/null
+    --output "type=docker,name=$name:release-test,$RELEASE_EXPORT_ATTRS" . > /dev/null
   local have want
   have=$(docker image inspect "$name:release-test" |
     jq -c '.[0] | {rootfs: {diff_ids: .RootFS.Layers}, config: .Config}' | config_fields)
@@ -85,7 +85,7 @@ load_release_test() {
 : > "$outdir/digests.txt"
 for name in "${RELEASE_TARGETS[@]}"; do
   docker buildx build "${RELEASE_BUILD_FLAGS[@]}" --progress=quiet --target "$name" --platform "$RELEASE_PLATFORMS" \
-    --output "type=oci,dest=$outdir/$name.oci.tar,rewrite-timestamp=true" \
+    --output "type=oci,dest=$outdir/$name.oci.tar,$RELEASE_EXPORT_ATTRS" \
     --metadata-file "$outdir/$name.meta.json" . > /dev/null
   digest=$(jq -er '."containerimage.digest"' "$outdir/$name.meta.json")
   [ "$digest" = "$(top_digest "$outdir/$name.oci.tar")" ] || fail "$name: the archive's index is not the built digest"
@@ -99,7 +99,7 @@ arch=${platform#*/}
 for name in "${RELEASE_TARGETS[@]}"; do
   single=$outdir/$name-$arch.oci.tar
   docker buildx build "${RELEASE_BUILD_FLAGS[@]}" --progress=quiet --target "$name" --platform "$platform" \
-    --output "type=oci,dest=$single,rewrite-timestamp=true" . > /dev/null
+    --output "type=oci,dest=$single,$RELEASE_EXPORT_ATTRS" . > /dev/null
   want=$(platform_manifest "$outdir/$name.oci.tar" "$platform")
   got=$(top_digest "$single")
   [ "$got" = "$want" ] || fail "$name $platform: single-platform manifest $got differs from the index's $want"

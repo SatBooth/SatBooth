@@ -13,8 +13,13 @@ RELEASE_BUILDER=satbooth-release-${_release_buildkit_digest:0:12}
 RELEASE_PLATFORMS=linux/amd64,linux/arm64
 RELEASE_TARGETS=(satbooth satbooth-relay satbooth-tools)
 
-# Flags of every release build. SOURCE_DATE_EPOCH=0 sets every file time; the callers' --output adds
-# rewrite-timestamp=true. Provenance and SBOM attestations are left out: they hold build times and host data.
+# The exporter attributes of every release build, appended to every --output (type=oci here, type=image with push in
+# release-push.sh): OCI media types, gzip layers at one fixed level applied to every layer, and file times rewritten to
+# SOURCE_DATE_EPOCH. Each is set explicitly so no exporter default decides a digest.
+RELEASE_EXPORT_ATTRS=oci-mediatypes=true,compression=gzip,compression-level=6,force-compression=true,rewrite-timestamp=true
+
+# Flags of every release build. SOURCE_DATE_EPOCH=0 sets every file time. Provenance and SBOM attestations are left
+# out: they hold build times and host data.
 RELEASE_BUILD_FLAGS=(
   --builder "$RELEASE_BUILDER"
   --file deploy/image/Dockerfile
