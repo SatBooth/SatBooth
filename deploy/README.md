@@ -3,6 +3,12 @@
 This directory holds the release images (`image/`) and one Docker Compose bundle per host: `hub/` for the private
 hub host and `public/` for the public host. The two hosts are never one machine (CLAUDE.md).
 
+**Deploy from a release tag.** The bundles and `deploy/setup.sh` pin the three SatBooth images by tag and digest, and
+the pins in a tag's tree are the ones that release published. On both hosts, check out the tag of the release you
+deploy and verify it with `git tag -v <tag>`, using the maintainer's public key from a source you trust apart from this
+repository. Between releases, the pins on `main` name the last release while the code around them may be newer. "Release
+images" below says how to verify the images themselves, and `docs/releasing.md` is the maintainer's procedure.
+
 ## Set up with `satbooth-setup`
 
 `satbooth-setup` writes every configuration file of a host and generates every secret, once per host: you answer a few
@@ -29,7 +35,8 @@ and what does not.
 - **The private link between them**, with an IPv4 address on each (WireGuard, or a private network and a firewall that
   admits only the public host to the hub host's ports; see "Per-host bundles"). Setting it up is yours. The two
   addresses are answers, and each must be outside the bundles' own Docker networks.
-- **Docker** with Compose on both hosts, and this repository checked out on both. The setup wrapper needs Docker
+- **Docker** with Compose on both hosts, and this repository checked out on both, at the release tag you deploy. The
+  setup wrapper needs Docker
   Engine in its default mode: `deploy/setup.sh` refuses a rootless engine or Podman ("a rootless Docker engine or Podman
   is not supported by this wrapper (the bundles are qualified on Docker Engine in its default mode)"), because the
   bundles are qualified on the default mode only.
@@ -242,7 +249,8 @@ flag, an extra argument, or `-host-dir`, `-hub-url`, `-answers`, `-wallet-rpc-pa
    docker compose -f deploy/public/compose.yml --env-file <dir>/compose.env up -d --build
    ```
 
-   Hand over the secrets (step 5) before you run it.
+   Hand over the secrets (step 5) before you run it. (The printed commands use the pinned release images. To build
+   them from source, see "Build from source" under "Release images".)
 
    **Run `public finish` before the first start of this bundle**: at the first start `volume-init` gives `etc/` to the
    user 65532, and the setup command then refuses the directory: "setup: etc belongs to another user: give it back to
@@ -462,12 +470,64 @@ volume owned by 65532 with mode 0700. These are run options, not image content. 
 entry in every layer of a built image and fails on anything but the files below (regular files and directories only);
 CI runs it on each image.
 
+### Where the images live and how they are pinned
+
+A release publishes the three images to `ghcr.io/satbooth/satbooth`, `ghcr.io/satbooth/satbooth-relay` and
+`ghcr.io/satbooth/satbooth-tools`, for `linux/amd64` and `linux/arm64`, each as one multi-platform image tagged with the
+release version. The bundles do not pull by tag. Each pins `tag@sha256:<digest>` at three sites: the service `satbooth`
+of `deploy/public/compose.yml`, the service `relay` of `deploy/hub/compose.yml` and the `tools_image=` line of
+`deploy/setup.sh`. A tag in a registry can be moved; a digest cannot name other content. `scripts/release-pins.sh show`
+prints the three pinned refs of the checkout you are in, and `scripts/release-pins.sh check-format` checks that all
+three are well formed and carry one version.
+
+### Verify the images
+
+You need no trust in the registry: the pinned digest is in the tag's tree, which you verified with `git tag -v`. Two
+checks go further.
+
+By attestation. The release workflow attests each image (a signed build provenance, stored beside the image in the
+registry). For each ref printed by `scripts/release-pins.sh show`, with the tag in the ref replaced by `@` (the
+`<name>@sha256:<digest>` form), this accepts only the release workflow of this repository, run from this tag on a
+GitHub-hosted runner:
+
+```sh
+gh attestation verify oci://ghcr.io/satbooth/<name>@sha256:<digest> -R SatBooth/SatBooth \
+  --signer-workflow SatBooth/SatBooth/.github/workflows/release.yml \
+  --source-ref refs/tags/<tag> --deny-self-hosted-runners
+```
+
+By rebuild, which needs Docker with buildx. The build is reproducible: the same sources give the same digests on any
+machine. Build and compare with the pins (the second command prints `match` or `pinned X, built Y` for each image):
+
+```sh
+scripts/release-build.sh out
+scripts/release-pins.sh check out/digests.txt
+```
+
+The rebuild trusts only what you ran: the Go builder and BuildKit pinned below, and your own Docker. The release notes
+of each release print these commands with the refs filled in.
+
+### Build from source
+
+To run images you built yourself, not the release images, build them from this checkout. For the setup command, set
+`SATBOOTH_BUILD=1` in the environment of `deploy/setup.sh`: it builds the tools image on every run instead of pulling
+it. For each bundle, add that host's `compose.build.yml` after `compose.yml`:
+
+```sh
+docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file <your env file> up -d --build
+docker compose -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml --env-file <your env file> up -d --build
+```
+
+The built images are named `satbooth:local` and `satbooth-relay:local`, and the build needs Docker to pull the pinned
+Go builder. The override replaces the release image of every service that runs one: the public bundle's one-off service
+too. The qualification suite runs the bundles this way.
+
 ### Files in each image
 
 | Image | File | Reason |
 |---|---|---|
 | `satbooth` | `/satbooth` | The binary, built with `CGO_ENABLED=0 go build -trimpath -ldflags=-buildid=` from the vendored modules. |
-| `satbooth` | `/etc/ssl/certs/ca-certificates.crt` | The CA bundle, copied from the pinned builder. SatBooth makes outbound TLS connections: rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc. |
+| `satbooth` | `/etc/ssl/certs/ca-certificates.crt` | The CA bundle, copied from the pinned Go image (the `certs` stage, which always runs for `linux/amd64`, so the bytes do not depend on the build host). SatBooth makes outbound TLS connections: rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc. |
 | `satbooth-relay` | `/satbooth-relay` | The binary, built the same way. |
 | `satbooth-tools` | `/satbooth-setup` | The setup command, built the same way. It has no `ENTRYPOINT`: `deploy/setup.sh` names the command. |
 | `satbooth-tools` | `/satbooth-pair` | The pairing tool, built the same way. No CA bundle: neither tool uses the network. |
@@ -479,19 +539,26 @@ code never calls `time.LoadLocation`), no shell, no package manager and no other
 
 | Pin | Version | Why it is current |
 |---|---|---|
-| `golang:1.27.4-trixie@sha256:b54b2639...` (build stage only) | Go 1.27.4 on Debian 13 | The newest Go 1.27 patch release at the time of writing; the regtest setup runs these two images and uses the same pin for its `volume-init` helper (the bitcoind and Monero helpers use `debian:13-slim`). Nothing from this stage ships except the two binaries and the CA bundle. |
-| `actions/checkout@3d3c42e5...` | v7.0.1 | The pin `check.yml` uses. |
+| `golang:1.27.4-trixie@sha256:b54b2639...` (the `build` and `certs` stages) | Go 1.27.4 on Debian 13 | The newest Go 1.27 patch release at the time of writing; the regtest setup runs these two images and uses the same pin for its `volume-init` helper (the bitcoind and Monero helpers use `debian:13-slim`). Nothing from these stages ships except the binaries and the CA bundle, which the `certs` stage takes from the `linux/amd64` image without running anything. |
+| `moby/buildkit:v0.34.1@sha256:99368f3e...` | BuildKit v0.34.1 | The builder of `scripts/release-lib.sh`, Docker's own BuildKit. It is pinned because layer compression and the exporter decide the release image digests. It is trusted to build, not for what operators run: a rebuild checks it. |
+| `actions/checkout@3d3c42e5...` | v7.0.1 | The pin `check.yml` and `release.yml` use. |
+| `actions/upload-artifact@cf430e03...`, `actions/download-artifact@9000827c...` | v7.0.2, v8.0.2 | `release.yml` moves each runner's digests to the job that compares them (`upload-artifact` is also used by `qualify.yml`). |
+| `actions/attest-build-provenance@4d101475...` | v4.2.2 | `release.yml` attests each pushed image; the action wraps `actions/attest@508db95d...` (v4.2.1). |
 | `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770...` (hub bundle) | Alby Hub v1.24.6 | The version qualified against (`qualify/REPORT.md`); the same pin as the regtest hubs. |
 | `debian:13-slim@sha256:a72b4433...` (hub bundle) | Debian 13 | The base of the bitcoind and Monero images (decision 5), the `netns` holder and the hub bundle's `volume-init`; the same pin as the regtest helpers. |
 | Bitcoin Core 32.1, Monero v0.18.5.4 (hub bundle) | release tarballs, SHA-256 pinned | The versions qualified against; the hashes are the regtest images'. |
 | Fulcrum 2.1.4 (hub bundle) | release tarballs, SHA-256 pinned | The newest release (2026-10-18); the hashes are from its PGP-signed `shasums.txt`, see `docs/dependencies.md` §8. |
 
-The public bundle's `volume-init` uses the builder pin above: the public host already has that image, since it builds
-`satbooth` from it.
+The public bundle's `volume-init` uses the Go pin above: its `chown` and `chmod` need a shell, which the release images
+do not have, and this pinned image is the one the release build already uses, so the public host pulls one base image
+besides `satbooth`.
 
-The CA bundle is refreshed only when the builder digest is bumped. The digest is the full `sha256:` value in the Dockerfile; update the tag and the digest together.
+The CA bundle is refreshed only when the Go digest is bumped. The digest is the full `sha256:` value in the Dockerfile;
+update the tag and the digest together.
 
 ### Build and check
+
+To build one image and run the checks that CI runs on each:
 
 ```sh
 docker build -f deploy/image/Dockerfile --target satbooth -t satbooth:local .
@@ -503,7 +570,9 @@ scripts/image-check.sh satbooth-tools:local /satbooth-setup /satbooth-pair
 scripts/image-run-test.sh satbooth:local satbooth-relay:local satbooth-tools:local
 ```
 
-Images are built and tested locally and in CI only; nothing is pushed to a registry.
+CI runs these checks on every pull request and every push to `main` (`image.yml`), with no registry login. Only the
+release workflow
+(`.github/workflows/release.yml`, `docs/releasing.md`) pushes to a registry, and only for a release tag.
 
 ## Per-host bundles
 
@@ -716,8 +785,8 @@ fail, and nothing of SatBooth's depends on them.
 
 **The node images** (`deploy/hub/bitcoind/Dockerfile`, `deploy/hub/monero/Dockerfile`, `deploy/hub/fulcrum/Dockerfile`)
 download the official release tarballs of Bitcoin Core 32.1 and Monero v0.18.5.4 (the qualified versions) and Fulcrum
-2.1.4, check them against pinned SHA-256 hashes, and copy the binaries onto `debian:13-slim` pinned by digest (plan 10,
-decision 5). The download tools stay in a build stage. bitcoind runs as 10001, monerod and wallet-rpc as 10002, the hub
+2.1.4, check them against pinned SHA-256 hashes, and copy the binaries onto `debian:13-slim` pinned by digest (decision
+5). The download tools stay in a build stage. bitcoind runs as 10001, monerod and wallet-rpc as 10002, the hub
 as 10003, Fulcrum as 10004 and the relay as 65532, each with a read-only root, no capabilities and `no-new-privileges`. No configuration, password or
 regtest setting is in an image.
 

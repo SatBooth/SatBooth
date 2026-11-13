@@ -837,9 +837,10 @@ one-off runs between them (the bundle's whole step, under a minute).
 `scripts/qualify.sh --only deploy` runs the setup (the build, `TestBuildFlags`, the hubs and `TestBootstrap`, the relays
 and the hub restart) and then this group alone, for a targeted run; it is not the qualification, which runs the group
 inside the full suite. The group starts both bundles from what `deploy/setup.sh` (the tools image with
-`satbooth-setup`, run with no network) writes, not from files the test writes: the public host's bundle,
+`satbooth-setup`, built from this tree under `SATBOOTH_BUILD=1` and run with no network) writes, not from files the test
+writes: the public host's bundle,
 `deploy/public/compose.yml`, from stages 1 and 4, then the hub host's bundle, `deploy/hub/compose.yml`, from stages 2
-and 3 (first start). Both compose files run unmodified.
+and 3 (first start). Both compose files run with their `compose.build.yml`, which builds the images from this tree.
 
 ### The public bundle, from stages 1 and 4
 

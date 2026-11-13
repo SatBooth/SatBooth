@@ -14,9 +14,9 @@ import (
 	"github.com/satbooth/satbooth/setup"
 )
 
-// The public host's bundle (plan 10): deploy/public/compose.yml, run unmodified by scripts/qualify.sh with the
+// The public host's bundle: deploy/public/compose.yml, run by scripts/qualify.sh with its compose.build.yml, the
 // override dev/regtest/deploy-public.override.yml and the values of dev/regtest/deploy-public.env, from the files
-// that `satbooth-setup public init` and `public finish` wrote (plan 12). It is a second
+// that `satbooth-setup public init` and `public finish` wrote. It is a second
 // SatBooth with its own data volume and its own configuration directory, bind-mounted from the host as an operator does.
 // It joins the regtest network as a second network (the hub's relay, the webhook receiver and its private listener
 // are there), and keeps the bundle's own network, where its public listener is and where its one port is published.
