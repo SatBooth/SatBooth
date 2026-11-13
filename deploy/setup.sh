@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]
 #
-# Builds the tools image from this repository and runs `satbooth-setup` in it: no network, a read-only root, no
-# capabilities, the calling user, and only <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass,
-# read-only) visible. <dir> is created with mode 0700 if it is missing; an existing directory is left as it is. A
-# symbolic link as <dir> is refused.
-# -dir and -host-dir are set here, never taken from the caller. Options are passed through unchanged, in order.
-# The command's report goes to standard output, its prompts and the image build to standard error; the exit code is
-# the command's (0 done, 1 refused or failed, 2 usage).
+# Pulls the pinned release tools image (with SATBOOTH_BUILD=1 in the environment: builds it from this repository
+# instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only
+# <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass, read-only) visible. <dir> is created with mode
+# 0700 if it is missing; an existing directory is left as it is. A symbolic link as <dir> is refused.
+# -dir and -host-dir are set here, never taken from the caller. With SATBOOTH_BUILD=1 the wrapper also adds
+# -source-build, so the start commands the report prints name the compose.build.yml of the host. Options are passed
+# through unchanged, in order.
+# The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit
+# code is the command's (0 done, 1 refused or failed, 2 usage).
 set -euo pipefail
+
+case "${SATBOOTH_BUILD:-}" in
+  "" | 0 | 1) ;;
+  *) echo "setup.sh: SATBOOTH_BUILD must be empty, 0 or 1: ${SATBOOTH_BUILD}" >&2; exit 2 ;;
+esac
 
 usage() {
   echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]" >&2
@@ -27,6 +34,9 @@ case "$dir" in
 esac
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# The release image of the setup command, pinned by tag and digest (scripts/release-pins.sh). SATBOOTH_BUILD=1 builds
+# it from this repository instead.
+tools_image=ghcr.io/satbooth/satbooth-tools:v0.1.0-rc.1@sha256:eb55cf1cdd7a4a4a0c0f50179c99a5db58226f37ac59eb79a7ed311e38744cc9
 
 # Refuse a colon before anything is created (a relative <dir> is under the current directory).
 case "$dir" in
@@ -135,10 +145,24 @@ case "$host $stage" in
   "public init" | "hub init") hostopts=(-host-dir "$absdir") ;;
 esac
 
-docker build -q --target satbooth-tools -t satbooth-tools:local -f "$root/deploy/image/Dockerfile" "$root" >&2
+if [ "${SATBOOTH_BUILD:-}" = 1 ]; then
+  # From source: the tools image is built from this repository.
+  run_image=satbooth-tools:local
+  opts+=(-source-build)
+  docker build -q --target satbooth-tools -t "$run_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
+else
+  run_image=$tools_image
+  # A ref pinned by digest is immutable: a copy that is already local is the same image, so the registry is needed
+  # only when there is none.
+  if ! docker image inspect "$run_image" > /dev/null 2>&1 && ! docker pull "$run_image" >&2; then
+    echo "setup.sh: could not pull $run_image" >&2
+    echo "setup.sh: check the network and the registry, or set SATBOOTH_BUILD=1 to build the image from source" >&2
+    exit 1
+  fi
+fi
 
 exec docker run --rm -i \
   --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
   --user "$(id -u):$(id -g)" \
   -v "$absdir:/work" "${mounts[@]+"${mounts[@]}"}" \
-  satbooth-tools:local /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"
+  "$run_image" /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"

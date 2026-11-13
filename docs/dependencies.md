@@ -578,8 +578,12 @@ it minus what it has paid out (`db/queries/get_isolated_balance.go`).
       `os.Getenv`) through `lnpay`. It dials nothing (the client is passed in as `monero.RPC`), opens no file and runs
       no program. `monero/monerotest` (the in-memory wallet-rpc, imported by tests only) has no entry: capslock found
       no flagged path in it.
-- GitHub Actions pinned by commit SHA, with least-privilege `permissions:`. No third-party actions
-  beyond checkout and setup-go.
+- GitHub Actions pinned by commit SHA, with least-privilege `permissions:`. GitHub-owned actions only (`actions/`):
+  `checkout` v7.0.1, `setup-go` v7.0.0, `upload-artifact` v7.0.2, `download-artifact` v8.0.2 and
+  `attest-build-provenance` v4.2.2, which wraps `actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d` (v4.2.1).
+  `download-artifact` and `attest-build-provenance` are used by `release.yml` only (`upload-artifact` also by
+  `qualify.yml`); `attest-build-provenance` writes the signed build provenance of each release image, with the job's
+  OIDC token.
 - Each dependency has a row here: version, date, what it requires, OSV records, size, and why stdlib is
   not enough (CLAUDE.md).
 
@@ -653,10 +657,12 @@ image, and each pin, is in `deploy/README.md` ("Release images").
 
 | Image | Pin | Used for |
 |---|---|---|
-| Go builder | `golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9` | the build stage of `deploy/image/Dockerfile` (only the two binaries and its CA bundle leave it); the `volume-init` of the public bundle and of `dev/regtest/` |
+| Go builder | `golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9` | the `build` and `certs` stages of `deploy/image/Dockerfile` (only the binaries and the CA bundle leave them: the bundle comes from the `certs` stage, the `linux/amd64` image with no `RUN`); the `volume-init` of the public bundle and of `dev/regtest/` |
+| BuildKit | `moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c` (v0.34.1, published 2026-10-20; the newest release at least 14 days old when pinned) | the `docker-container` builder of `scripts/release-lib.sh`: Docker's own BuildKit, pinned because layer compression and the exporter decide the release image digests |
 | Debian | `debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2` | the bitcoind, Fulcrum and Monero images of the hub bundle and of `dev/regtest/`, the hub bundle's `netns` and `volume-init` |
 | Alby Hub | `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770…` (the table above) | the hub bundle and the regtest hubs |
-| `satbooth`, `satbooth-relay` | built locally from `deploy/image/Dockerfile`, `FROM scratch`; never pushed to a registry | the public bundle, the hub bundle's relay, and qualification |
+| Registry | `registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373` | test only: `scripts/release-push_test.sh` runs it on 127.0.0.1 and proves the absent, present-equal and present-other cases of the registry tag check of `scripts/release-push.sh` against a real OCI distribution server. The Docker official image of CNCF Distribution, pulled anonymously from Docker Hub in CI like the other base images; no release image contains it |
+| `satbooth`, `satbooth-relay`, `satbooth-tools` | built from `deploy/image/Dockerfile`, `FROM scratch`, and published by the release workflow to `ghcr.io/satbooth/<name>:<version>`; the bundles and `deploy/setup.sh` pin each by `tag@digest`, and `compose.build.yml` or `SATBOOTH_BUILD=1` builds from source | the public bundle, the hub bundle's relay, the setup command, and (built from source) qualification |
 
 **The font.** The logo's wordmark (`docs/logo/satbooth-logo*.svg`) is Rubik 2.300 (github.com/googlefonts/rubik, the
 variable font at weight 800), SIL Open Font License 1.1, with its letters converted to paths. No font file is in the

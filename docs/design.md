@@ -1807,13 +1807,21 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    65532:65532 with no shell, no package manager and no passwd file. The builder is the digest-pinned
    `golang:1.27.4-trixie`, with `GOFLAGS=-mod=vendor GOPROXY=off GOTOOLCHAIN=local CGO_ENABLED=0` and `go build
    -trimpath -ldflags=-buildid=`. The `satbooth` image holds `/satbooth` and `/etc/ssl/certs/ca-certificates.crt`,
-   copied from the builder (rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc); the
+   copied from the digest-pinned Go image's `certs` stage, always the `linux/amd64` one (rate providers, webhooks,
+   `wss://` relays and an `https://` bitcoind or wallet-rpc); the
    `satbooth-relay` image holds `/satbooth-relay`; the `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`
    (no entrypoint, no CA bundle: neither uses the network). `scripts/image-check.sh` lists every entry in every layer of the
    exported image and refuses any other file; `scripts/image-run-test.sh` runs each image with a read-only root, all
    capabilities dropped and `no-new-privileges`, and checks its refusal of a missing configuration (for the tools image,
-   `/satbooth-setup` without arguments), its user and its environment. CI runs all three (`.github/workflows/image.yml`); nothing is pushed to a registry. `deploy/README.md`
-   states the reason of each file and each pin. Both databases keep SQLite's temporary data in memory (`temp_store`),
+   `/satbooth-setup` without arguments), its user and its environment. CI runs all three (`.github/workflows/image.yml`)
+   and pushes nothing. A release tag runs
+   `.github/workflows/release.yml`, which builds the three images reproducibly for `linux/amd64` and `linux/arm64`
+   (`scripts/release-build.sh`: the same sources give the same digests), requires the digests to equal the pins of the
+   deploy bundles, and, after the maintainer approves the `release` environment, pushes them to GHCR, attests them and
+   drafts the release. The bundles and `deploy/setup.sh` pull each image by `tag@digest`; `SATBOOTH_BUILD=1`, or a
+   bundle's `compose.build.yml`, builds from source instead. `deploy/README.md` states the reason of each file and each
+   pin, `docs/releasing.md` the procedure, and the threat model's §6 what an operator verifies. Both databases keep
+   SQLite's temporary data in memory (`temp_store`),
    because the release image has no writable temp directory.
 2. **The pair stamp.** The store and the ledger each hold a `pair` row (id, generation and nonce; the ledger also a
    `pending` generation and its nonce), and SatBooth refuses to start on two databases that are not from the same
@@ -1922,7 +1930,8 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    the wrapped payout wallet, the wallet-rpc kill, store reads after a stop) keep running `service.Run` in the qualify
    container, built with the image's flags (`TestBuildFlags` checks them). No fiat phase runs on the image: the rate
    providers need `https`, which the closed regtest network cannot reach. `TestDeployPublic` brings up
-   `deploy/public/compose.yml` unmodified against the regtest hub side and checks the running container's options, its
+   `deploy/public/compose.yml`, with its `compose.build.yml`, against the regtest hub side and checks the running
+   container's options, its
    one published port, a payment, a backup and its restore. `scripts/qualify.sh --only deploy` runs the setup and that
    group alone, `--only image` the setup, the on-chain and Monero setup phases and the image's phases, `--only refund`
    the setup and the refund phases, `--only hub` the setup and `TestQualify` with the check on the hub's unknown-app
@@ -2112,15 +2121,17 @@ the threat model's §9 ("The setup command (plan 12)") carries the security rule
       through".
 13. **The tools image and the wrapper.** The `satbooth-tools` target of `deploy/image/Dockerfile` holds
     `/satbooth-setup` and `/satbooth-pair` and nothing else (no entrypoint, no CA bundle). `deploy/setup.sh <dir> <host>
-    <stage> [options]` builds it (`satbooth-tools:local`, from this repository, on every run: the Go build is offline,
-    the modules being vendored, but the first build needs Docker to pull the pinned base image) and runs the one stage
+    <stage> [options]` pulls it by the `tag@digest` it pins, when that image is not already local (with
+    `SATBOOTH_BUILD=1` it builds `satbooth-tools:local` from this repository instead, on every run: the Go build is
+    offline, the modules being vendored, but the first build needs Docker to pull the pinned base image) and runs
+    the one stage
     in a container with `--network none`, `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges` and the
     calling user's numeric id, mounting only `<dir>` (read-write, as `/work`) and each file named by `-answers`,
     `-handoff` or `-wallet-rpc-pass` (read-only, at a fixed path). It creates `<dir>` with mode 0700 when it is missing,
     sets `-dir` and, for stages 1 and 2, `-host-dir` itself (a caller who gives either is refused), and refuses before
     it creates or mounts anything a path with a colon (Docker's mount syntax), a mounted file that is a symbolic link or
-    not a regular file, and a repeated option. The report goes to standard output, the prompts and the image build to
-    standard error.
+    not a regular file, and a repeated option. The report goes to standard output, the prompts and the image pull or
+    build to standard error.
 14. **The gates.** `scripts/capslock.sh` compares the whole module with `docs/capslock.json` and then analyses
     `./cmd/satbooth-setup` and `./cmd/satbooth-pair` each alone, failing on a network capability, on a capslock failure
     and on an output without capabilities (the whole-module baseline lists the network for the package `setup` because

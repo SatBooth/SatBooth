@@ -721,3 +721,32 @@ func TestEmptyFlagValuesAreUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// With -source-build the printed start commands add the host's compose.build.yml; without it they do not.
+func TestSourceBuildFlagNamesTheBuildFile(t *testing.T) {
+	for _, flagGiven := range []bool{false, true} {
+		pubDir, hubDir, aDir := tmp(t), tmp(t), tmp(t)
+		pubFile := writeJSON(t, aDir, "pub.json", everyRailAnswers())
+		hubFile := writeJSON(t, aDir, "hub.json", hubAnswersFor("/srv/satbooth-hub"))
+		extra := []string{}
+		if flagGiven {
+			extra = []string{"-source-build"}
+		}
+		r := do("", append([]string{"public", "init", "-dir", pubDir, "-host-dir", "/srv/satbooth", "-answers", pubFile}, extra...)...)
+		if r.code != 0 {
+			t.Fatalf("flag %v: %d %s", flagGiven, r.code, r.errOut)
+		}
+		h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
+		hf := filepath.Join(aDir, "public-to-hub.json")
+		os.WriteFile(hf, h1, 0o600)
+		r = do("", append([]string{"hub", "init", "-dir", hubDir, "-host-dir", "/srv/satbooth-hub", "-handoff", hf,
+			"-answers", hubFile, "-digest", setup.Digest(h1)}, extra...)...)
+		wantHub := "docker compose -f deploy/hub/compose.yml --env-file /srv/satbooth-hub/compose.env up -d --build hub"
+		if flagGiven {
+			wantHub = "docker compose -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml --env-file /srv/satbooth-hub/compose.env up -d --build hub"
+		}
+		if r.code != 0 || !strings.Contains(r.out, wantHub) || strings.Contains(r.out, "compose.build.yml") != flagGiven {
+			t.Fatalf("flag %v: %d %s\n%s", flagGiven, r.code, r.errOut, r.out)
+		}
+	}
+}
