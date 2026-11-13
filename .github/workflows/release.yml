@@ -159,7 +159,7 @@ jobs:
           echo "$result"
           [ -z "$note" ] || echo "$note"
           if [ "$status" -ne 0 ] && [ "$enforce" = yes ]; then
-            echo "the built digests are not the pinned ones" >&2
+            echo "the pins do not match this build or this tag" >&2
             exit 1
           fi
 
@@ -184,10 +184,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           scripts/release-pins.sh check-tag "$TAG"
-          if [ "$(git cat-file -t "refs/tags/$TAG" 2> /dev/null || true)" != tag ]; then
-            # The checkout keeps the commit only; the repository is public, so the tag object needs no token.
-            git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
-          fi
+          # The checkout keeps the tag object of an annotated tag; a lightweight tag is a bare commit reference.
           [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || { echo "$TAG is not an annotated tag" >&2; exit 1; }
           [ "$(git for-each-ref --format='%(tag)' "refs/tags/$TAG")" = "$TAG" ] ||
             { echo "the tag object is not named $TAG" >&2; exit 1; }
