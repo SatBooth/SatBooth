@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -38,10 +39,22 @@ const (
 	logSettleFailed = "settle failed"
 )
 
+const (
+	logTooWide = "ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by hand"
+	maxTooWide = 4096
+)
+
+// passCapOf is the most due transactions of one order that a pass reads: what one pass's pacing reads in
+// PollInterval, and at least 8, which is more than an ordinary order has (a payment, a top-up, a fee bump or two).
+func passCapOf(cfg Config) int {
+	return max(int(math.Ceil(cfg.PollInterval.Seconds()*cfg.PollRate)), 8)
+}
+
 // trackedOutput is an output the pass polls, with its order.
 type trackedOutput struct {
-	x store.TXO
-	o store.Order
+	x     store.TXO
+	o     store.Order
+	extra bool // a late output of an order past its watch window, read only because its order is about to be settled
 }
 
 // crashError is a test hook's abort: it ends the pass at once, as a crash would.
@@ -176,14 +189,14 @@ func (s *Service) pass(ctx context.Context) error {
 
 	// 2. Discover.
 	orders := map[string]store.Order{}
-	touched, err := s.discover(ctx, bi, now, orders)
+	touched, listedMined, err := s.discover(ctx, bi, now, orders)
 	if err != nil {
 		return err
 	}
 
 	// 3. Track.
 	skip, stale := map[string]bool{}, map[string]struct{}{}
-	refreshed, err := s.trackAll(ctx, now, loaded, orders, touched, skip, stale)
+	refreshed, err := s.trackAll(ctx, now, loaded, orders, touched, listedMined, skip, stale)
 	if err != nil {
 		return err
 	}
@@ -423,10 +436,11 @@ func (s *Service) order(ctx context.Context, orders map[string]store.Order, id s
 
 // discover is step 2: listsinceblock from the stored cursor, the receives to issued addresses recorded with the new
 // cursor, and the after-window ALERT for the newly added rows. It returns the orders of the added rows.
-func (s *Service) discover(ctx context.Context, bi btcrpc.BlockchainInfo, now time.Time, orders map[string]store.Order) (*orderList, error) {
+func (s *Service) discover(ctx context.Context, bi btcrpc.BlockchainInfo, now time.Time, orders map[string]store.Order) (
+	touched *orderList, listedMined map[store.TXOKey]bool, err error) {
 	cur, ok, err := s.st.Cursor(ctx)
 	if err != nil {
-		return nil, s.scanFailed(ctx, "cursor", err)
+		return nil, nil, s.scanFailed(ctx, "cursor", err)
 	}
 	from := bi.BestBlockHash // only when Check never ran on this store: Check records the first cursor
 	if ok {
@@ -454,42 +468,42 @@ func (s *Service) discover(ctx context.Context, bi btcrpc.BlockchainInfo, now ti
 	}
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		s.callFailed("listsinceblock", err)
-		return nil, passEnd{"listsinceblock", err}
+		return nil, nil, passEnd{"listsinceblock", err}
 	}
 	if sb.Dropped > 0 {
 		s.log.Warn(logDropped, "count", sb.Dropped)
 	}
-	kept, addrs, err := s.keep(ctx, sb.Transactions, now, orders)
+	kept, addrs, listedMined, err := s.keep(ctx, sb.Transactions, now, orders)
 	if err != nil {
-		return nil, s.scanFailed(ctx, "keep", err)
+		return nil, nil, s.scanFailed(ctx, "keep", err)
 	}
 	added, err := s.st.RecordScan(ctx, kept, store.Cursor{BlockHash: sb.LastBlock, Height: bi.Blocks, At: now})
 	if err != nil {
 		if ctx.Err() != nil { // a stop, not a failed scan
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		// ErrInvalid: a lastblock that is no hash. keep drops rows listed otherwise, and clamps an inherited first-seen
 		// to now, so RecordScan's refusal of a first-seen after now is only its backstop.
 		if errors.Is(err, store.ErrInvalid) {
 			s.callFailed("listsinceblock", err)
-			return nil, passEnd{"listsinceblock", err}
+			return nil, nil, passEnd{"listsinceblock", err}
 		}
 		s.log.Error(logScanFailed, "at", "record-scan")
-		return nil, err
+		return nil, nil, err
 	}
 	// The cursor is persisted in the same transaction as the outputs it covers, after them, so a crash before
 	// RecordScan re-delivers everything on the next pass.
 	if err := s.at("scan:after-record"); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	touched := &orderList{}
+	touched = &orderList{}
 	for _, x := range added {
 		o, err := s.order(ctx, orders, addrs[x.Address].OrderID)
 		if err != nil {
-			return nil, s.scanFailed(ctx, "order", err)
+			return nil, nil, s.scanFailed(ctx, "order", err)
 		}
 		// Past the window a new row never carries an on-time first-seen: inherit gives one only inside the window
 		// (decision 9), and RecordScan stores the clock's now otherwise. So every row added past the window is a
@@ -499,7 +513,7 @@ func (s *Service) discover(ctx context.Context, bi btcrpc.BlockchainInfo, now ti
 		}
 		touched.add(o.ID)
 	}
-	return touched, nil
+	return touched, listedMined, nil
 }
 
 // keep filters listsinceblock's entries: receives of a positive amount (at most MaxSat) to an address SatBooth issued,
@@ -510,7 +524,8 @@ func (s *Service) discover(ctx context.Context, bi btcrpc.BlockchainInfo, now ti
 //
 // keep also gives an RBF replacement the first-seen it inherits (inherit), which RecordScan stores for a new row; a
 // stored row keeps its own. now is the pass's clock, orders its order cache.
-func (s *Service) keep(ctx context.Context, l []btcrpc.WalletTx, now time.Time, orders map[string]store.Order) ([]store.TXO, map[string]store.Address, error) {
+func (s *Service) keep(ctx context.Context, l []btcrpc.WalletTx, now time.Time, orders map[string]store.Order) (
+	[]store.TXO, map[string]store.Address, map[store.TXOKey]bool, error) {
 	var cand []btcrpc.WalletTx
 	var addrList []string
 	addrSeen := map[string]bool{}
@@ -525,11 +540,11 @@ func (s *Service) keep(ctx context.Context, l []btcrpc.WalletTx, now time.Time, 
 		}
 	}
 	if len(cand) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	addrs, err := s.st.AddressesByAddress(ctx, addrList)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var kept []store.TXO
 	var rivals [][]string // the walletconflicts of each kept entry, joined over its listings
@@ -560,7 +575,7 @@ func (s *Service) keep(ctx context.Context, l []btcrpc.WalletTx, now time.Time, 
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 		case err != nil:
-			return nil, nil, err
+			return nil, nil, nil, err
 		default:
 			stored[i] = true
 			if old.Address != x.Address || old.AmountSat != x.AmountSat {
@@ -581,9 +596,16 @@ func (s *Service) keep(ctx context.Context, l []btcrpc.WalletTx, now time.Time, 
 		kept, rivals, stored = k2, r2, s2
 	}
 	if err := s.inherit(ctx, kept, rivals, stored, now, addrs, orders); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return kept, addrs, nil
+	// The stored outputs that this listing shows with a confirmation.
+	listedMined := map[store.TXOKey]bool{}
+	for i, x := range kept {
+		if stored[i] && x.Confirmed {
+			listedMined[store.TXOKey{TxID: x.TxID, Vout: x.Vout}] = true
+		}
+	}
+	return kept, addrs, listedMined, nil
 }
 
 // inherit is plan 6.1's inheritance rule (narrowed by Rulings 6.1-S
@@ -758,24 +780,30 @@ func (s *Service) exclusive(ctx context.Context, o store.Order, txid string, con
 	return true, nil
 }
 
-// trackAll is step 3: every output that is not settled (the store leaves the settled ones out, in any process) of an
-// order inside its watch window, and every on-time one past it (store.WatchedTXOs), refreshed with gettransaction (and
-// getmempoolentry), asked once per transaction in the pass and shared by its outputs (passReads), each output judged
-// on its own; a tick of PollRate on the real clock paces the first read of each transaction. touched gains the orders
-// of the outputs refreshed; skip gains those of the outputs that failed, and of those that cannot be judged while the
-// mempool is not loaded (logLoading, once per pass); stale gains only the first. An output that cannot be judged
-// because the wallet is behind the node's mempool (errBehind, logWalletBehind once per pass) skips nothing: it is in
-// behindInPass, its order in heldInPass (so that settle writes no final event and leftWithoutFinal waits), and the
-// order's other outputs go on. After them it reads the late outputs of the touched orders that are past
-// their window (unwatched), so that nothing is recorded or settled for good without a reading of this pass; a failed
-// one of those puts its order in stale only. It returns the outputs refreshed in this pass: only their marks were
-// verified after this pass's scan.
-func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orders map[string]store.Order, touched *orderList,
-	skip map[string]bool, stale map[string]struct{}) ([]trackedOutput, error) {
-	// Every mark of this step comes after the pass's listsinceblock (step 2), so an output marked dead here may have
-	// a replacement that the next pass's scan lists: settle holds the order's final event until then (diedInPass).
-	s.diedInPass, s.heldInPass = map[store.TXOKey]struct{}{}, map[string]struct{}{}
-	s.behindInPass = map[store.TXOKey]struct{}{}
+// orderWork is the due outputs of one order, grouped by transaction, oldest first seen first: its watched outputs and,
+// when the order is past its watch window and settle will look at it, its late outputs (extras).
+type orderWork struct {
+	o     store.Order
+	txids [][]trackedOutput
+}
+
+// resting reports whether a watched output is not due in this pass.
+func (s *Service) resting(store.TXO) bool { return false }
+
+// work is the start of step 3: the orders with something to read, in a stable order (the position of each order's
+// oldest watched output in the store's list, then the orders of touched that have only extras), each with its due
+// outputs grouped by transaction. The extras are the outputs that settle could record in this pass and no watched read
+// covers: of the orders that are past their watch window and in touched or with a watched output (those are the only
+// orders settled past it), the outputs whose current mark is mempool or mined, that are not recorded, not foreign and
+// not watched. They are late outputs: an on-time one is watched (store.WatchedTXOs) until it is settled, and a settled
+// one is recorded or dead. A mempool mark is read too: the extra read itself can turn a mined mark into a mempool one
+// (its block was reorged out), and the output must be read again when it is mined again. An output with no mark (a new
+// row after the window) is not read: such a payment is not recorded, by design. It relies on the two other selections
+// of settle's orders, store.OnchainOrdersPastExpiry and store.OrdersAwaitingPaidAgain, returning only orders inside
+// their window (a test pins it): every output of those is read by the first arm of WatchedTXOs. A store error puts the
+// order in stale and goes on; its extras are not read, as an unread output counts zero (boundOut).
+func (s *Service) work(ctx context.Context, now time.Time, orders map[string]store.Order, touched *orderList,
+	listedMined map[store.TXOKey]bool, stale map[string]struct{}) ([]orderWork, error) {
 	watched, err := s.st.WatchedTXOs(ctx, now)
 	if err != nil {
 		return nil, s.trackFailed(ctx, "watched", err)
@@ -788,26 +816,118 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 	if err != nil {
 		return nil, s.trackFailed(ctx, "addresses", err)
 	}
-	list := make([]trackedOutput, 0, len(watched))
+	var list []orderWork
+	at := map[string]int{} // order id -> index in list
+	group := map[string]map[string]int{}
+	add := func(o store.Order, x store.TXO, extra bool) {
+		i, ok := at[o.ID]
+		if !ok {
+			i = len(list)
+			at[o.ID] = i
+			list = append(list, orderWork{o: o})
+			group[o.ID] = map[string]int{}
+		}
+		g, ok := group[o.ID][x.TxID]
+		if !ok {
+			g = len(list[i].txids)
+			group[o.ID][x.TxID] = g
+			list[i].txids = append(list[i].txids, nil)
+		}
+		list[i].txids[g] = append(list[i].txids[g], trackedOutput{x: x, o: o, extra: extra})
+	}
+	listed := make(map[store.TXOKey]bool, len(watched))
+	hasWatched := map[string]bool{}
 	for _, x := range watched {
 		o, err := s.order(ctx, orders, addrs[x.Address].OrderID)
 		if err != nil {
 			return nil, s.trackFailed(ctx, "order", err)
 		}
-		list = append(list, trackedOutput{x: x, o: o})
+		listed[store.TXOKey{TxID: x.TxID, Vout: x.Vout}] = true
+		hasWatched[o.ID] = true
+		if !s.resting(x) {
+			add(o, x, false)
+		}
+	}
+	// The order of the list: the orders with watched outputs, then the orders of touched without.
+	ids := make([]string, 0, len(list)+len(touched.ids))
+	for _, w := range list {
+		ids = append(ids, w.o.ID)
+	}
+	for _, id := range touched.ids {
+		if !hasWatched[id] {
+			ids = append(ids, id)
+		}
+	}
+	candidates := map[string]bool{}
+	for _, id := range touched.ids {
+		candidates[id] = true
+	}
+	for id := range hasWatched {
+		candidates[id] = true
+	}
+	for _, id := range ids {
+		o := orders[id]
+		if !candidates[id] || now.Before(o.ExpiresAt.Add(store.WatchWindow)) {
+			continue
+		}
+		views, err := s.orderViews(ctx, o, false)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			s.log.Error(logTrackFailed, "at", "views")
+			stale[id] = struct{}{}
+			continue
+		}
+		for _, v := range views {
+			if k := (store.TXOKey{TxID: v.x.TxID, Vout: v.x.Vout}); !listed[k] && v.Marked && v.Kind != store.MarkDead &&
+				!v.Recorded && !v.Foreign {
+				add(o, v.x, true)
+			}
+		}
+	}
+	return list, nil
+}
+
+// trackAll is step 3: the due outputs (work) of the orders, served whole and in turn, starting where the last pass
+// stopped. Each is refreshed with gettransaction (and getmempoolentry), asked once per transaction in the pass and
+// shared by its outputs (passReads), each output judged on its own; a tick of PollRate on the real clock paces the first
+// read of each transaction. No order starts once PollInterval of real time has passed since the step began (the first
+// one always does); an order that has started is finished. An order with more due transactions than passCap is not
+// read at all (logTooWide, once per order per process), and neither is one not reached: both are in skip, so that
+// nothing of theirs is settled in this pass, and the first is in stale at once; the second only after it has gone
+// unreached for more than three poll intervals (deferredSince). touched gains the orders of the outputs refreshed; skip
+// gains those of the outputs that failed, and of those that cannot be judged while the mempool is not loaded
+// (logLoading, once per pass); stale gains only the first. An output that cannot be judged because the wallet is
+// behind the node's mempool (errBehind, logWalletBehind once per pass) skips nothing: it is in behindInPass, its order
+// in heldInPass (so that settle writes no final event and leftWithoutFinal waits), and the order's other outputs go on.
+// The extras are read after the watched outputs of their order, so that nothing is recorded or settled for good
+// without a reading of this pass; a failed one puts its order in stale only. It returns the outputs refreshed in this
+// pass: only their marks were verified after this pass's scan.
+func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orders map[string]store.Order, touched *orderList,
+	listedMined map[store.TXOKey]bool, skip map[string]bool, stale map[string]struct{}) ([]trackedOutput, error) {
+	began := s.wall()
+	// Every mark of this step comes after the pass's listsinceblock (step 2), so an output marked dead here may have
+	// a replacement that the next pass's scan lists: settle holds the order's final event until then (diedInPass).
+	s.diedInPass, s.heldInPass = map[store.TXOKey]struct{}{}, map[string]struct{}{}
+	s.behindInPass = map[store.TXOKey]struct{}{}
+	list, err := s.work(ctx, now, orders, touched, listedMined, stale)
+	if err != nil {
+		return nil, err
 	}
 
 	tick := time.NewTicker(time.Duration(float64(time.Second) / s.cfg.PollRate))
 	defer tick.Stop()
-	reads := newPassReads()
+	reads := newPassReads() // dropped at the end of the step
 	var end passEnd
 	var refreshed []trackedOutput
 	seen := map[store.TXOKey]observed{} // the pass's observations, published at the normal return
 	waiting, walletBehind := false, false
 	// one refreshes one output. An extra output (a late one past its window, read only because its order is about to
-	// be settled: unwatched) that fails puts its order in the stale set and nowhere else: the zero default of boundOut
+	// be settled) that fails puts its order in the stale set and nowhere else: the zero default of boundOut
 	// already keeps it unrecorded, and a skip would let a bad late answer block the on-time payment of the same order.
-	one := func(t trackedOutput, extra bool) error {
+	one := func(t trackedOutput) error {
+		extra := t.extra
 		// The pacing is for the node's calls: only the first read of a transaction in this pass takes a tick.
 		if reads.has(t.x.TxID, stepTx) {
 			if err := ctx.Err(); err != nil {
@@ -823,7 +943,9 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 		obs, observedOK, err := s.track(ctx, reads, t.x, loaded)
 		switch {
 		case err == nil:
-			touched.add(t.o.ID)
+			if !extra {
+				touched.add(t.o.ID)
+			}
 			refreshed = append(refreshed, t)
 			if observedOK {
 				seen[store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}] = obs
@@ -858,24 +980,63 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 		}
 		return nil
 	}
-	listed := make(map[store.TXOKey]bool, len(list))
-	for _, t := range list {
-		listed[store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}] = true
-		if err := one(t, false); err != nil {
-			return nil, err
+
+	// Serve the orders in turn from trackFrom (the head when it is gone or unset).
+	from := 0
+	if i := slices.IndexFunc(list, func(w orderWork) bool { return w.o.ID == s.trackFrom }); i >= 0 {
+		from = i
+	}
+	deferred := map[string]time.Time{}
+	started, closed := 0, false
+	next := ""
+	for n := range list {
+		w := list[(from+n)%len(list)]
+		id := w.o.ID
+		if len(w.txids) > s.passCap {
+			skip[id] = true
+			stale[id] = struct{}{}
+			if _, logged := s.tooWide[id]; !logged {
+				if len(s.tooWide) >= maxTooWide {
+					clear(s.tooWide)
+				}
+				s.tooWide[id] = struct{}{}
+				s.log.Error(logTooWide, "order", id)
+			}
+			continue
+		}
+		if started > 0 && !closed && s.wall().Sub(began) >= s.cfg.PollInterval {
+			closed = true
+		}
+		if closed {
+			skip[id] = true
+			since, ok := s.deferredSince[id]
+			if !ok {
+				since = now
+			}
+			deferred[id] = since
+			if now.Sub(since) > 3*s.cfg.PollInterval {
+				stale[id] = struct{}{}
+			}
+			if next == "" {
+				next = id
+			}
+			continue
+		}
+		started++
+		for _, extras := range []bool{false, true} { // the watched outputs, then the late ones
+			for _, g := range w.txids {
+				for _, t := range g {
+					if t.extra != extras || (extras && skip[id]) {
+						continue
+					}
+					if err := one(t); err != nil {
+						return nil, err
+					}
+				}
+			}
 		}
 	}
-	// Every output a pass records or settles for good was read in the pass: the late outputs of an order past its
-	// window that this pass will settle are not watched, so they are read here, before the observations are published.
-	extra, err := s.unwatched(ctx, now, orders, touched, skip, listed, stale)
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range extra {
-		if err := one(t, true); err != nil {
-			return nil, err
-		}
-	}
+	s.trackFrom, s.deferredSince = next, deferred
 	if waiting {
 		s.log.Warn(logLoading)
 	}
@@ -888,43 +1049,6 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 	s.seen, s.behindSeen = seen, s.behindInPass
 	s.seenMu.Unlock()
 	return refreshed, nil
-}
-
-// unwatched lists the outputs that settle could record in this pass and no read of the pass covers: of the orders in
-// touched that are past their watch window (those are the only orders settled past it), the outputs whose current mark
-// is mempool or mined, that are not recorded, not foreign and not in listed. They are late outputs: an on-time one is
-// watched (store.WatchedTXOs) until it is settled, and a settled one is recorded or dead. A mempool mark is read too:
-// the extra read itself can turn a mined mark into a mempool one (its block was reorged out), and the output must be
-// read again when it is mined again. An output with no mark (a new row after the window) is not read: such a payment
-// is not recorded, by design. It relies on the two other selections of settle's orders,
-// store.OnchainOrdersPastExpiry and store.OrdersAwaitingPaidAgain, returning only orders inside their window (a test
-// pins it): every output of those is read by the first arm of WatchedTXOs. A store error puts the order in stale and
-// goes on; it is not skipped, as an unread output counts zero (boundOut).
-func (s *Service) unwatched(ctx context.Context, now time.Time, orders map[string]store.Order, touched *orderList,
-	skip map[string]bool, listed map[store.TXOKey]bool, stale map[string]struct{}) ([]trackedOutput, error) {
-	var out []trackedOutput
-	for _, id := range touched.ids {
-		o := orders[id]
-		if skip[id] || now.Before(o.ExpiresAt.Add(store.WatchWindow)) {
-			continue
-		}
-		views, err := s.orderViews(ctx, o, false)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			s.log.Error(logTrackFailed, "at", "views")
-			stale[id] = struct{}{}
-			continue
-		}
-		for _, v := range views {
-			if k := (store.TXOKey{TxID: v.x.TxID, Vout: v.x.Vout}); !listed[k] && v.Marked && v.Kind != store.MarkDead &&
-				!v.Recorded && !v.Foreign {
-				out = append(out, trackedOutput{x: v.x, o: o})
-			}
-		}
-	}
-	return out, nil
 }
 
 // errLoading means an output with no confirmation is not in bitcoind's mempool while the mempool is not loaded yet:
@@ -1328,7 +1452,7 @@ func (s *Service) settleDone(ctx context.Context, now time.Time, refreshed []tra
 		}
 		k := store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}
 		// A paid order (on either rail) needs no person for a dead output: the ALERT is not logged. Nor is it for a
-		// late output (read only because its order was settled, unwatched): it was never an on-time payment. It is asked
+		// late output (read only because its order was settled, an extra of work): it was never an on-time payment. It is asked
 		// before the write: once settled the output is never read again, so a stop between the write and the ALERT
 		// would lose it; a stop before the write settles nothing and the next pass asks again.
 		leftPool := dead && !paid && t.x.FirstSeen.Before(t.o.ExpiresAt) && !s.carriedOn(ctx, t)

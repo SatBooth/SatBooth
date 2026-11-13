@@ -283,7 +283,7 @@ func TestReminedAtTheSameHeightNeedsItsOwnObservation(t *testing.T) {
 }
 
 // settle's orders (the past-expiry and the awaiting-paid-again selections) are inside their watch window at any clock,
-// the premise of unwatched: an order past its window is settled only when a pass touched it.
+// the premise of the extras of work: an order past its window is settled only when a pass touched it.
 func TestOrderSelectionsAreInsideTheWindow(t *testing.T) {
 	e := newWatchEnv(t)
 	var orders []store.Order
@@ -376,7 +376,7 @@ func TestSettledNeedsTheBoundedDepth(t *testing.T) {
 }
 
 // A late output past its window whose block is reorged out is read again, in every pass that touches its order: the
-// extra read marks it mempool (a mempool mark is followed too, unwatched), and once it is mined again the next touching
+// extra read marks it mempool (a mempool mark is followed too, work), and once it is mined again the next touching
 // pass reads it and records it late, once, from that reading. Cost per pass while it is in the mempool: one
 // gettransaction and one getmempoolentry.
 func TestLateOutputBackInThePoolIsReadAgain(t *testing.T) {
@@ -450,7 +450,7 @@ func TestPublishedObservationsAreNeverWritten(t *testing.T) {
 	}
 }
 
-// unwatched reads only what the pass has not read: a foreign late output costs no call, and an output of the watched
+// work lists only what the pass has not read: a foreign late output costs no call, and an output of the watched
 // list is read once (TestLateReadFailureDoesNotBlockTheOnTimePayment counts the latter).
 func TestUnwatchedSkipsAForeignOutput(t *testing.T) {
 	e := newWatchEnv(t)

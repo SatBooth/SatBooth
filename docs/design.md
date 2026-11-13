@@ -750,7 +750,7 @@ are marked as in §2.1: *source* or *observed*
   a restart, `loaded` false, no output is marked dead in that pass: an unconfirmed output missing from the mempool is
   skipped with one line, `src/rpc/mempool.cpp:1113`, `src/init.cpp:2130-2136` in Core 32.1); `listsinceblock` from the
   cursor with `target_confirmations` = `SettledDepth` + 1, keeping receives to issued addresses and dropping odd entries
-  one by one; `gettransaction` for every tracked transaction, shared by its outputs and paced at `poll_rate` (the sign
+  one by one; `gettransaction` for the tracked transactions, shared by their outputs and paced at `poll_rate`, an order whole at a time, in turn from where the last pass stopped, with no new order started after `poll_seconds` of real time (an order not reached is not settled and reads stale after 3 × `poll_seconds`; one with more due transactions than one pass reads, `poll_seconds` × `poll_rate` and at least 8, is not read, and has an `ALERT`) (the sign
   of the confirmations first, then the mempool conflicts, then `getmempoolentry`, because 0 confirmations also means evicted or
   replaced). Since plan 6.1 an output found in neither is read again before it is marked dead: `getmempoolinfo` (bitcoind may have restarted
   inside the pass; loading means wait, *source*: Core 32.1 `src/rpc/mempool.cpp:1113`, `:1143`), `getmempoolentry`, then
@@ -2252,7 +2252,7 @@ From these follow the rules below, as built.
   The watched outputs are read every pass, as before. A late output (first seen at or after its order's expiry) of an
   order past its watch window is not watched. A pass settles such an order only when it was touched (a new payment to
   its address, or an on-time output still followed), and before it settles, `trackAll` reads again each late output of
-  that order whose current mark is in the mempool or mined, that is not recorded and not foreign (`unwatched`,
+  that order whose current mark is in the mempool or mined, that is not recorded and not foreign (`work`,
   `onchain/watch.go`). It is then recorded late from that reading, or not at all when the transaction is gone: its mark
   becomes dead and no `order.late` is sent. A late payment still in the mempool when its window closes, and mined later,
   is recorded late (`order.late` and its `ALERT`) when its order is next touched and it has its tier's confirmations; a

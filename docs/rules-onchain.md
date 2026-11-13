@@ -221,11 +221,18 @@
   be (replaced, double spent, evicted, or still unconfirmed) is tracked until its order's watch window closes, and an
   on-time one past it (see "The watch window"): finding those scans the stored payments once a pass. A settled
   payment is stored as such, so after a start only the payments not yet settled are polled; a payment whose poll
-  failed, or that a pass did not reach, is not settled. So a pass
-  with N tracked transactions takes about N / `poll_rate` seconds: at the defaults, 50 fit in one 10 second pass before
-  passes stretch. The page reads "Checking payment…" when no pass has succeeded for 3 poll intervals plus the last good
-  pass's duration, so a long healthy pass does not trip it, and for one order alone when its settle or a call for one
-  of its payments failed in the last pass (the API's `onchain.stale`). bitcoind not answering ends the pass with one `ALERT:
+  failed, or that a pass did not reach, is not settled. A pass reads the orders in turn, each one whole, for about
+  `poll_seconds`: it starts no new order once `poll_seconds` have passed since it began its reads, and an order it has
+  started it finishes, so one order with many payments stretches a pass by at most its own reads. The next pass starts
+  with the first order the last one did not reach. An order that is not reached waits for its turn, is not settled
+  meanwhile, and keeps its place; the discovery of new payments (their first-seen times) runs in every pass. The page
+  reads "Checking payment…" when no pass has succeeded for 3 poll intervals plus the last good pass's duration, so a
+  long healthy pass does not trip it; for one order alone when its settle or a call for one of its payments failed in
+  the last pass, or when it has gone unreached for more than 3 × `poll_seconds` (the API's `onchain.stale`). An order
+  with more separate payments than one pass reads (`poll_seconds` × `poll_rate`, at least 8) is not read or settled:
+  it reads "Checking payment…" and gets `ALERT: an on-chain order has more payments than one pass reads; it is not
+  settled; check it by hand` (with its id, once per order each time SatBooth starts), and the merchant handles it by
+  hand. A payment with many outputs is one read and does not count more than one. bitcoind not answering ends the pass with one `ALERT:
   bitcoind call failed` (with the method and the error code). Until a pass succeeds nothing is recorded and no event is
   added (a Lightning-only order's `expired` follows the clock and still shows in the API; an on-chain order's
   `expired` and `underpaid` wait for their events); the next good pass catches up from the stored scan position.
@@ -252,12 +259,15 @@
   - `ALERT: an on-time on-chain payment past its watch window left bitcoind's mempool; SatBooth stops polling it and
     will notice it again only if it is mined` (at or after the window's end, for each on-time payment that is gone and
     was not carried on by a fee bump, whether it died then or earlier, unless its order reads paid);
+  - `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by hand` (once per
+    order each time SatBooth starts; see "The watcher's cost");
   - `ALERT: an on-chain order left its watch window without a final event; check it by hand` (an order whose settle,
     or whose payments' calls, kept failing, whose Lightning side is still not done, or whose Monero rail was still
     being paid or stale at the window's end; no event is added. Once per
     order, and again after a restart within a week of the window's end. When the pass at the window's end holds the
     final event because an on-time payment died after its scan, the check waits one pass: the next pass reports the
-    order only if it still has no final event);
+    order only if it still has no final event. An order too wide for one pass is never settled, so it gets this
+    `ALERT` too);
   - `ALERT: an on-chain payment was reverted by a reorg`;
   - `ALERT: a reverted on-chain payment confirmed again`, or `ALERT: an order reverted by a reorg or a double spend
     was paid again on Lightning` when Lightning's payment, not the chain's, makes the reverted order paid again (the

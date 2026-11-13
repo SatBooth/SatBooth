@@ -218,6 +218,13 @@ type Service struct {
 	heldBefore map[store.TXOKey]struct{}
 	leftHeld   []store.Order
 
+	// Step 3 serves whole orders in turn (trackAll). The pass's goroutine only; all in memory, lost with the process.
+	wall          func() time.Time     // the real clock of step 3's deadline (a test seam)
+	passCap       int                  // the most due transactions of one order that a pass reads (passCapOf)
+	trackFrom     string               // the order the next pass starts at
+	deferredSince map[string]time.Time // s.now() of the first pass that did not reach the order since it was served
+	tooWide       map[string]struct{}  // orders whose logTooWide this process logged; cleared at maxTooWide
+
 	// bothAlerted is written by the pass (settle) and by lnpay's hook (LightningPaid) from its own goroutines.
 	bothMu      sync.Mutex          // guards bothAlerted
 	bothAlerted map[string]struct{} // orders whose both-rails ALERT this process logged (settle.go)
@@ -268,7 +275,8 @@ func New(cfg Config, st *store.Store, lg *ledger.Ledger, rpc RPC, ln Lightning, 
 		callTimeout: cfg.CallTimeout, pressWait: PressWait, flights: map[string]*flight{}, alloc: make(chan struct{}, 1),
 		settleMu: &sync.Mutex{}, bothAlerted: map[string]struct{}{}, pastExpiry: st.OnchainOrdersPastExpiry, eventsFor: st.EventsForOrder,
 		diedInPass: map[store.TXOKey]struct{}{}, heldInPass: map[string]struct{}{}, behindSince: map[store.TXOKey]time.Time{},
-		heldBefore: map[store.TXOKey]struct{}{}}, nil
+		heldBefore: map[store.TXOKey]struct{}{}, wall: time.Now, passCap: passCapOf(cfg),
+		deferredSince: map[string]time.Time{}, tooWide: map[string]struct{}{}}, nil
 }
 
 func (s *Service) crash(point string) error {

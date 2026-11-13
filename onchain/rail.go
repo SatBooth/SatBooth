@@ -38,7 +38,8 @@ const (
 // the transfer that first made the sum reach the amount. Stale is true when no pass has succeeded within 3
 // PollIntervals plus the last good pass's duration (so a long healthy pass, many tracked transactions at PollRate, does not
 // read stale while the next one runs), before the first good pass (the page shows "checking"), and for an order in the
-// stale set of the last pass that reached its end: one of its outputs' calls failed, or its settle failed (pass).
+// stale set of the last pass that reached its end: one of its outputs' calls failed, its settle failed (pass), it has
+// gone unreached by step 3 for more than 3 PollIntervals, or it has more due transactions than one pass reads.
 type Rail struct {
 	State                                string
 	Address                              string

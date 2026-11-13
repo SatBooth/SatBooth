@@ -350,7 +350,11 @@ expiry by up to one pass (longer while a pass holds the event for a fee bump the
 replacing a payment can keep an order's final event waiting for as long as they pay the fees, within the order's watch window, on
 either rail of a mixed order, and the paid state is not affected), the order never
 reads `expired` while an on-time payment is live, and one whose settle keeps failing past its window reads `new` for
-good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. The cost
+good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. Anyone who knows an order's address can pay it in more separate transactions than one pass reads
+(`poll_seconds` × `poll_rate`, at least 8): that order is then never read, recorded or given a final event, and the
+operator is told by `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by
+hand` (and by the window's end `ALERT`); the other orders are served in turn within `poll_seconds` and are not
+delayed beyond that. The cost
 is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one more `getmempoolinfo`,
 `getmempoolentry` and `gettransaction`, and a `gettxspendingprevout`, in the pass that marks it gone (six calls then; a
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for

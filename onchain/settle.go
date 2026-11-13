@@ -241,7 +241,7 @@ func (s *Service) peerSeqs(ctx context.Context, o store.Order) ([]int, error) {
 // rail), mu (peerRail), bothMu, the peer's mu and staleMu in its View, and lnpay's mu in Status and
 // MarkKnown. Rail takes the settle mutex, then staleMu.
 // settle makes no RPC call. The peer is read through View and RevertedSeqs, which do not take the settle mutex (this
-// call holds it) and make no RPC call. unwatched, LightningPaid and confirmedSum take no settle mutex: they take seenMu
+// call holds it) and make no RPC call. work, LightningPaid and confirmedSum take no settle mutex: they take seenMu
 // alone (through orderViews), as the publish in trackAll does.
 func (s *Service) settle(ctx context.Context, o store.Order) error {
 	mu := s.settleLock()
