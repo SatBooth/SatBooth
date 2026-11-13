@@ -2,7 +2,9 @@ package onchain
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/satbooth/satbooth/btcrpc"
 	"github.com/satbooth/satbooth/onchain/onchaintest"
@@ -53,42 +55,74 @@ func TestOneGettransactionPerTransaction(t *testing.T) {
 	e.safety(o)
 }
 
-// A shared answer still gets each output's own checks: an output whose amount differs from its row is skipped with
-// its order stale, and the other output of the same transaction is recorded.
+// A shared answer still gets each output's own checks, and one output's bad check does not reach the others: of two
+// outputs of one transaction, the one whose amount differs from its row is skipped with its order stale, and the other
+// is mined, recorded and not stale, whichever of the two is read first.
 func TestSharedReadKeepsPerOutputChecks(t *testing.T) {
-	e := newWatchEnv(t)
-	a, b := e.order(10_000), e.order(20_000)
-	tx := e.node.PayWith(1, []onchaintest.Out{{Address: e.addr(a), Sat: 10_000}, {Address: e.addr(b), Sat: 20_000}})
-	e.svc.rpc = &badTx{RPC: e.node, txid: tx, f: func(t *btcrpc.Transaction) {
-		for i := range t.Outputs {
-			if t.Outputs[i].Vout == 1 {
-				t.Outputs[i].ValueSat = 20_001
+	for _, bad := range []uint32{0, 1} {
+		t.Run(fmt.Sprintf("bad vout %d", bad), func(t *testing.T) {
+			e := newWatchEnv(t)
+			orders := []store.Order{e.order(10_000), e.order(20_000)}
+			amounts := []int64{10_000, 20_000}
+			tx := e.node.PayWith(1, []onchaintest.Out{{Address: e.addr(orders[0]), Sat: amounts[0]},
+				{Address: e.addr(orders[1]), Sat: amounts[1]}})
+			e.svc.rpc = &badTx{RPC: e.node, txid: tx, f: func(t *btcrpc.Transaction) {
+				for i := range t.Outputs {
+					if t.Outputs[i].Vout == bad {
+						t.Outputs[i].ValueSat++
+					}
+				}
+			}}
+			e.node.Mine(1)
+			before := e.node.TxCalls(tx)
+			e.mustPass()
+			good := 1 - bad
+			if n := e.count(logBadTx); n != 1 {
+				t.Fatalf("%d bad-transaction lines\n%s", n, e.log)
 			}
-		}
-	}}
-	e.node.Mine(1)
-	before := e.node.TxCalls(tx)
+			if m, ok := e.markOf(tx, good); !ok || m.Kind != store.MarkMined {
+				t.Fatalf("the good output's mark: %+v %v", m, ok)
+			}
+			if _, ok := e.lookup(PaidTransferID(tx, good, 0)); !ok {
+				t.Fatal("the good output is not recorded")
+			}
+			if e.rail(orders[good]).Stale {
+				t.Fatal("the good output's order is stale")
+			}
+			if !e.rail(orders[bad]).Stale {
+				t.Fatal("the bad output's order is not stale")
+			}
+			if _, ok := e.markOf(tx, bad); ok {
+				t.Fatal("the bad output has a mark")
+			}
+			if _, ok := e.lookup(PaidTransferID(tx, bad, 0)); ok {
+				t.Fatal("the bad output is recorded")
+			}
+			if n := e.node.TxCalls(tx) - before; n != 1 {
+				t.Fatalf("%d gettransaction calls", n)
+			}
+		})
+	}
+}
+
+// One transaction takes one tick of the pacing, however many outputs it has: 40 outputs at 10 a second take one tick
+// (0.1 s) and the time to record them, not four seconds of ticks.
+func TestSharedReadTakesOneTick(t *testing.T) {
+	e := newEnv(t)
+	e.mod = func(c *Config) { c.PollRate = 10 }
+	e.svc = e.newService()
+	e.ready()
+	o := e.order(500_000)
+	tx := e.node.PayWith(1, manyOuts(e.addr(o), 40, 1_000))
+	start := time.Now()
 	e.mustPass()
-	if n := e.count(logBadTx); n != 1 {
-		t.Fatalf("%d bad-transaction lines\n%s", n, e.log)
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("a pass over one transaction took %v", d)
 	}
-	if m, ok := e.markOf(tx, 0); !ok || m.Kind != store.MarkMined {
-		t.Fatalf("a's mark: %+v %v", m, ok)
-	}
-	if _, ok := e.fwd(tx, 0); !ok {
-		t.Fatal("a's output is not recorded")
-	}
-	if !e.rail(b).Stale {
-		t.Fatal("b is not stale")
-	}
-	if _, ok := e.markOf(tx, 1); ok {
-		t.Fatal("b's output has a mark")
-	}
-	if _, ok := e.fwd(tx, 1); ok {
-		t.Fatal("b's output is recorded")
-	}
-	if n := e.node.TxCalls(tx) - before; n != 1 {
-		t.Fatalf("%d gettransaction calls", n)
+	for v := range uint32(40) {
+		if _, ok := e.markOf(tx, v); !ok {
+			t.Fatalf("output %d has no mark", v)
+		}
 	}
 }
 

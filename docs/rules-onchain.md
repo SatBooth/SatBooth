@@ -207,15 +207,16 @@
   `listsinceblock` from the last scan position, then
   refreshes the tracked payments with one `gettransaction` for each transaction (and a `getmempoolentry` if it has no
   confirmation), shared by all its payments to SatBooth's addresses and paced at `poll_rate` transactions a second, so
-  the load on bitcoind follows the number of transactions, not of outputs, and does not follow traffic. Before it marks a payment gone, it asks
-  again: one more `getmempoolinfo` (bitcoind may have restarted inside the pass and not have loaded its mempool yet),
-  `getmempoolentry` and `gettransaction` (a block may have mined it since the first read), and then one
-  `gettxspendingprevout` (does another mempool transaction spend its inputs: bitcoind's wallet may be behind its node,
+  the load on bitcoind follows the number of transactions, not of outputs, and does not follow traffic. Before it
+  marks a payment gone, it asks again: one more `getmempoolinfo` (bitcoind may have restarted inside the pass and not have loaded
+  its mempool yet), `getmempoolentry` and `gettransaction` (a block may have mined it since the first read), and
+  then one `gettxspendingprevout` (does another mempool transaction spend its inputs: bitcoind's wallet may be behind its node,
   and then the payment is not marked gone for up to 60 seconds, and is asked again in each pass, at the same
   cost); a payment already
   marked gone costs what a live one costs (two calls per transaction: `gettransaction` and `getmempoolentry`; a live
   unconfirmed one costs the same two, and the pass that marks it gone six). The answers are kept for the pass only, so
-  each payment is still judged on its own, but a transaction paying many outputs costs the calls of one. A payment is tracked until it is recorded `SettledDepth`
+  each payment is still judged on its own answers' checks and its own mark, but a transaction paying many outputs
+  costs the calls of one. A payment is tracked until it is recorded `SettledDepth`
   deep; one that never will
   be (replaced, double spent, evicted, or still unconfirmed) is tracked until its order's watch window closes, and an
   on-time one past it (see "The watch window"): finding those scans the stored payments once a pass. A settled

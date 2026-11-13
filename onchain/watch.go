@@ -761,11 +761,12 @@ func (s *Service) exclusive(ctx context.Context, o store.Order, txid string, con
 // trackAll is step 3: every output that is not settled (the store leaves the settled ones out, in any process) of an
 // order inside its watch window, and every on-time one past it (store.WatchedTXOs), refreshed with gettransaction (and
 // getmempoolentry), asked once per transaction in the pass and shared by its outputs (passReads), each output judged
-// on its own; a tick of PollRate on the real clock paces the first read of each transaction. touched gains the orders of the outputs refreshed; skip gains
-// those of the outputs that failed, and of those that cannot be judged while the mempool is not loaded (logLoading,
-// once per pass); stale gains only the first. An output that cannot be judged because the wallet is behind the node's
-// mempool (errBehind, logWalletBehind once per pass) skips nothing: it is in behindInPass, its order in heldInPass (so
-// that settle writes no final event and leftWithoutFinal waits), and the order's other outputs go on. After them it reads the late outputs of the touched orders that are past
+// on its own; a tick of PollRate on the real clock paces the first read of each transaction. touched gains the orders
+// of the outputs refreshed; skip gains those of the outputs that failed, and of those that cannot be judged while the
+// mempool is not loaded (logLoading, once per pass); stale gains only the first. An output that cannot be judged
+// because the wallet is behind the node's mempool (errBehind, logWalletBehind once per pass) skips nothing: it is in
+// behindInPass, its order in heldInPass (so that settle writes no final event and leftWithoutFinal waits), and the
+// order's other outputs go on. After them it reads the late outputs of the touched orders that are past
 // their window (unwatched), so that nothing is recorded or settled for good without a reading of this pass; a failed
 // one of those puts its order in stale only. It returns the outputs refreshed in this pass: only their marks were
 // verified after this pass's scan.
@@ -1058,7 +1059,8 @@ func (r *passReads) has(txid string, step readStep) bool {
 	return ok
 }
 
-// miss prepares a fresh call of step for txid: it drops the stored answers of the later steps.
+// miss prepares a fresh call of step for txid: it drops the stored answers of the later steps. Today every output
+// takes the steps in order, so nothing later is stored; this keeps the stored steps a prefix if a path ever skips one.
 func (r *passReads) miss(txid string, step readStep) {
 	for st := step; st <= stepSpenders; st++ {
 		delete(r.m, readKey{txid, st})
