@@ -63,7 +63,7 @@ type trackedOutput struct {
 // deadPollMax is the longest a resting output waits between two reads: the period lnpay watches a closed invoice at.
 const deadPollMax = 10 * time.Minute
 
-// deadPoll is the backoff of one resting output: the number of reads since its order's final event (at most 6), when
+// deadPoll is the backoff of one resting output: the number of reads since its order's final event (at most 9), when
 // the next is due and when the last was made.
 type deadPoll struct {
 	step         int
@@ -97,7 +97,7 @@ func (s *Service) polledDead(k store.TXOKey, dead bool, now time.Time) {
 		return
 	}
 	p := s.deadPolls[k]
-	p.step = min(p.step+1, 6)
+	p.step = min(p.step+1, 9)
 	p.next, p.readAt = now.Add(min(s.cfg.PollInterval<<p.step, deadPollMax)), now
 	s.deadPolls[k] = p
 }
@@ -830,6 +830,9 @@ func (s *Service) exclusive(ctx context.Context, o store.Order, txid string, con
 type orderWork struct {
 	o     store.Order
 	txids [][]trackedOutput
+	// resting is how many of txids are made only of resting outputs that are due (at most passCap of them are taken per
+	// pass): they are not counted toward passCap.
+	resting int
 }
 
 // work is the start of step 3: the orders with something to read, in a stable order (the position of each order's
@@ -889,6 +892,7 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 		return nil, s.trackFailed(ctx, "marks", err)
 	}
 	finals := map[string]bool{} // order id -> its final event exists; read once, for the orders with a dead output
+	failed := map[string]bool{} // order id -> its events read failed in this pass (logged once)
 	var late []trackedOutput    // the resting outputs that are due: read after the order's other transactions
 	for i, x := range watched {
 		o, err := s.order(ctx, orders, addrs[x.Address].OrderID)
@@ -902,34 +906,67 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 		if cur, marked := marks[k]; marked && cur.Kind == store.MarkDead {
 			final, ok := finals[o.ID]
 			if !ok {
-				// A failed read leaves the output due: it is read as before, and settle reports the failure.
 				ev, err := s.readEvents(ctx, o.ID)
-				if err != nil && ctx.Err() != nil {
-					return nil, ctx.Err()
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					s.log.Error(logTrackFailed, "at", "events")
+					stale[o.ID] = struct{}{}
+					failed[o.ID] = true
 				}
 				final = err == nil && ev.Final
 				finals[o.ID] = final
 			}
+			if failed[o.ID] {
+				// Its events are unknown: the output is read, as an unjudged one, from the budget of resting reads.
+				late = append(late, t)
+				continue
+			}
 			if final {
 				v, err := s.outputView(ctx, o, x, false)
-				if err != nil && ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
-				if err == nil {
-					t.dead = !v.Recorded && !v.Foreign
-					if s.resting(v, cur, marked, listedMined[k], final) {
-						if s.due(o, k, now) {
-							late = append(late, t)
-						}
-						continue
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
 					}
+					s.log.Error(logTrackFailed, "at", "ledger")
+					stale[o.ID] = struct{}{}
+					late = append(late, t)
+					continue
+				}
+				t.dead = !v.Recorded && !v.Foreign
+				if s.resting(v, cur, marked, listedMined[k], final) {
+					if s.due(o, k, now) {
+						late = append(late, t)
+					}
+					continue
 				}
 			}
 		}
 		add(t)
 	}
+	// Resting outputs are read at most passCap transactions of an order in a pass, and never count toward passCap: the
+	// ones not taken stay due, with their backoff unchanged, for the next passes.
+	taken := map[string]map[string]bool{} // order id -> the transactions of its resting outputs taken
 	for _, t := range late {
+		id, txid := t.o.ID, t.x.TxID
+		if _, ok := group[id][txid]; ok && !taken[id][txid] {
+			add(t) // a transaction that also pays a non-resting output of the order costs nothing more
+			continue
+		}
+		if !taken[id][txid] {
+			if len(taken[id]) >= s.passCap {
+				continue
+			}
+			if taken[id] == nil {
+				taken[id] = map[string]bool{}
+			}
+			taken[id][txid] = true
+		}
 		add(t)
+	}
+	for id, m := range taken {
+		list[at[id]].resting = len(m)
 	}
 	for k := range s.deadPolls { // only the watched outputs keep a backoff
 		if !listed[k] {
@@ -1102,7 +1139,7 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 	for n := range list {
 		w := list[(from+n)%len(list)]
 		id := w.o.ID
-		if len(w.txids) > s.passCap {
+		if len(w.txids)-w.resting > s.passCap {
 			skip[id] = true
 			stale[id] = struct{}{}
 			if _, logged := s.tooWide[id]; !logged {

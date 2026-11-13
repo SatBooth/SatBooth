@@ -360,7 +360,10 @@ is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one 
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for
 one already marked gone until its order has its final event, then a read with a backoff (2 × `poll_seconds`, doubling up
 to 10 minutes, at the window's end, and at once when a scan lists it mined; those payments do not count toward the order's
-payment cap), and one scan of the stored payments a pass. There is no calendar cap on the tracking (Ruling
+payment cap, and a pass reads at most that number of an order's resting transactions). At the 10-minute ceiling K resting
+transactions cost about K / 60 reads in a pass of 10 seconds: thousands of replaced transactions of orders with their
+final event can fill a pass's reads, while discovery still runs and other orders are still served in turn; each replacement
+costs the payer a higher fee. Each pass also scans the stored payments once. There is no calendar cap on the tracking (Ruling
 6.1-3); a fee bump of it inherits its first-seen only inside the window (decision 9). Read in Core 32.1
 (*source*; `docs/rules-onchain.md`, "The watch window",
 has the lines): the watch-only wallet itself resubmits a received unconfirmed transaction to the mempool every 12 to

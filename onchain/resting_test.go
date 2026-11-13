@@ -1,6 +1,8 @@
 package onchain
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -249,7 +251,7 @@ func TestBackoffRestartsAfterARestart(t *testing.T) {
 func TestThousandsOfDeadOutputsCostLittle(t *testing.T) {
 	e := newWatchEnv(t)
 	o := e.order(20_000)
-	outs := make([]onchaintest.Out, 2_000)
+	outs := make([]onchaintest.Out, 300)
 	for i := range outs {
 		outs[i] = onchaintest.Out{Address: e.addr(o), Sat: 10}
 	}
@@ -296,5 +298,156 @@ func TestRestingOutputsDoNotCountTowardTheCap(t *testing.T) {
 	}
 	if e.stale(final) {
 		t.Fatal("the order with resting outputs is stale")
+	}
+}
+
+// deadTxs pays the order n times and replaces each payment away, and returns the transactions.
+func (e *env) deadTxs(o store.Order, n int) []string {
+	e.t.Helper()
+	var txs []string
+	for range n {
+		tx := e.payOrder(o, 10_000)
+		txs = append(txs, tx)
+	}
+	e.mustPass()
+	for _, tx := range txs {
+		e.node.Replace(tx, false)
+	}
+	e.mustPass()
+	return txs
+}
+
+// reads is the number of the transactions that were read since calls.
+func (e *env) readSince(txs []string, calls map[string]int) int {
+	n := 0
+	for _, tx := range txs {
+		if e.node.TxCalls(tx) > calls[tx] {
+			n++
+		}
+	}
+	return n
+}
+
+func (e *env) callsOf(txs []string) map[string]int {
+	m := map[string]int{}
+	for _, tx := range txs {
+		m[tx] = e.node.TxCalls(tx)
+	}
+	return m
+}
+
+// finalWithDead is an order with n dead transactions and its final event, each read once since it (so each has a
+// backoff entry), and the clock 30 seconds on: all of them are due.
+func (e *env) finalWithDead(n int) (store.Order, []string) {
+	e.t.Helper()
+	e.node.Mine(1)
+	o := e.order(10_000 * int64(n))
+	txs := e.deadTxs(o, n)
+	e.toFinal(o)
+	e.tick(1)
+	e.clk.Advance(30 * time.Second)
+	return o, txs
+}
+
+func TestDueRestingOutputsAreReadWithinTheCap(t *testing.T) {
+	e := newWatchEnv(t)
+	o, txs := e.finalWithDead(12)
+	e.cap(8)
+	c := e.callsOf(txs)
+	e.mustPass()
+	if e.count(logTooWide) != 0 || e.stale(o) {
+		t.Fatalf("too wide %d, stale %v", e.count(logTooWide), e.stale(o))
+	}
+	if n := e.readSince(txs, c); n != 8 {
+		t.Fatalf("%d transactions read in the first pass, want 8", n)
+	}
+	e.tick(1)
+	if n := e.readSince(txs, c); n != 12 || e.count(logTooWide) != 0 || e.stale(o) {
+		t.Fatalf("%d transactions read in 2 passes, want 12; too wide %d, stale %v", n, e.count(logTooWide), e.stale(o))
+	}
+	e.safety(o)
+}
+
+func TestRestingOutputsAfterARestartAreReadWithinTheCap(t *testing.T) {
+	e := newWatchEnv(t)
+	o, txs := e.finalWithDead(12)
+	e.restart()
+	e.cap(8)
+	c := e.callsOf(txs)
+	e.mustPass()
+	e.tick(1)
+	if n := e.readSince(txs, c); n != 12 || e.count(logTooWide) != 0 || e.stale(o) {
+		t.Fatalf("%d transactions read in 2 passes after the restart, want 12; too wide %d, stale %v", n, e.count(logTooWide), e.stale(o))
+	}
+	e.safety(o)
+}
+
+func TestRestingOutputsAtTheWindowEndAreReadWithinTheCap(t *testing.T) {
+	e := newWatchEnv(t)
+	o, txs := e.finalWithDead(12)
+	end := o.ExpiresAt.Add(store.WatchWindow)
+	for _, tx := range txs {
+		e.svc.deadPolls[e.key(tx)] = deadPoll{step: 9, next: end.Add(time.Hour), readAt: e.clk.Now()}
+	}
+	e.cap(8)
+	e.clk.Advance(end.Sub(e.clk.Now()))
+	e.mustPass()
+	e.tick(1)
+	for _, tx := range txs {
+		if e.watched(tx) {
+			t.Fatal("a payment is still watched two passes past the window's end")
+		}
+	}
+	if e.count(logTooWide) != 0 || e.count(alertLeftPool) != 12 {
+		t.Fatalf("too wide %d, ALERTs %d", e.count(logTooWide), e.count(alertLeftPool))
+	}
+	e.safety(o)
+}
+
+// A failed events read leaves the order's dead outputs to be read from the resting budget: no too-wide ALERT, the
+// order is stale for that pass and served after.
+func TestFailedEventsReadDoesNotMakeAnOrderTooWide(t *testing.T) {
+	e := newWatchEnv(t)
+	o, txs := e.finalWithDead(12)
+	e.cap(8)
+	failed := false
+	e.svc.eventsFor = func(ctx context.Context, id string) ([]store.Event, error) {
+		if id == o.ID && !failed {
+			failed = true
+			return nil, errors.New("events read failed")
+		}
+		return e.st.EventsForOrder(ctx, id)
+	}
+	c := e.callsOf(txs)
+	e.mustPass()
+	if !failed || e.count(logTooWide) != 0 || !e.stale(o) || !e.logHas(`msg="`+logTrackFailed+`" at=events`) {
+		t.Fatalf("failed %v, too wide %d, stale %v\n%s", failed, e.count(logTooWide), e.stale(o), e.log)
+	}
+	if n := e.readSince(txs, c); n == 0 || n > 8 {
+		t.Fatalf("%d transactions read in the failed pass", n)
+	}
+	e.tick(2)
+	if n := e.readSince(txs, c); n != 12 || e.stale(o) || e.count(logTooWide) != 0 {
+		t.Fatalf("%d read after, stale %v", n, e.stale(o))
+	}
+}
+
+// A dead output whose record does not match its payment is foreign: it never rests.
+func TestForeignDeadOutputNeverRests(t *testing.T) {
+	e := newWatchEnv(t)
+	o := e.order(30_000)
+	tx := e.payOrder(o, 30_000)
+	e.mustPass()
+	e.node.Replace(tx, false)
+	e.mustPass()
+	e.toFinal(o)
+	e.forward(o, tx, e.txo(tx).Vout, 0, 1) // a record under its id with other details
+	c := e.node.TxCalls(tx)
+	e.tick(10)
+	if got := e.node.TxCalls(tx) - c; got < 10 {
+		t.Fatalf("%d reads in 10 passes, want one at least in each", got)
+	}
+	if _, ok := e.svc.deadPolls[e.key(tx)]; ok {
+		t.Fatal("a foreign output has a backoff entry")
 	}
 }

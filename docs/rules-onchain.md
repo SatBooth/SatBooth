@@ -221,11 +221,17 @@
   marked gone costs what a live one costs (two calls per transaction: `gettransaction` and `getmempoolentry`; a live
   unconfirmed one costs the same two, and the pass that marks it gone six) until its order has its final event
   (`order.paid`, `order.expired` or `order.underpaid`). From then on a payment that is gone, has no record in the
-  ledger and is not foreign rests: it is read 2, 4, 8, 16 and 32 times `poll_seconds` after the last read, then every
-  10 minutes; at the end of its order's watch window, which settles it; and at once when a scan lists it mined. It
-  does not count toward the number of payments of an order that one pass reads. A payment that comes back to the
+  ledger and is not foreign rests: it is read 2 × `poll_seconds` after its last read, then twice as long after each
+  read, up to every 10 minutes (20, 40, 80, 160, 320 and then 600 seconds at the default); at the end of its order's
+  watch window (which settles an on-time one; a late one just leaves the watched set); and at once when a scan lists it
+  mined. It does not count toward the number of payments of an order that one pass reads, and a pass reads at most that
+  number of an order's resting transactions: the rest wait for the next passes, so the reads at a window's end, or
+  after a start, of an order with many of them are spread over several passes. A payment that comes back to the
   mempool with no block is seen at its next read, at most 10 minutes later. The backoff is kept in memory: after a
-  start, each resting payment is read once, then follows it again. The answers are kept for the pass only, so
+  start, each resting payment is read once, then follows it again. Accepted residual: at the 10-minute ceiling, K
+  resting transactions cost about K / 60 reads in a pass of 10 seconds, so thousands of replaced transactions of orders
+  that have their final event can fill a pass's reads; discovery still runs, other orders are still served in turn, and
+  each replacement costs the payer a higher fee. The answers are kept for the pass only, so
   each payment is still judged on its own answers' checks and its own mark, but a transaction paying many outputs
   costs the calls of one. A payment is tracked until it is recorded `SettledDepth`
   deep; one that never will
