@@ -98,20 +98,25 @@ organisation owner does this once.
    Before approving, read the three `match` lines in the summary of `agree`. A refused approval pushes nothing.
    `publish` rebuilds the images, checks them against the pins again, pushes them to the three packages by digest,
    points the tag `<version>` at each, and attests each image. `release-push.sh` never moves a registry tag that holds
-   another digest; it fails instead. Then `smoke` pulls the published images on an amd64 and an arm64 runner and runs
-   `scripts/image-run-test.sh` on them; only when it passes on both architectures does `draft` create a draft release
+   another digest that was there when it read the tag; it fails instead. It reads a tag and creates it a moment
+   later, so a concurrent writer with package-write rights (threat model §6) could still create the tag in between;
+   operators who pull by digest are unaffected. Then `smoke` pulls the published images on an amd64 and an arm64
+   runner and runs `scripts/image-run-test.sh` on them; only when it passes on both architectures does `draft` create a draft release
    (a prerelease for an rc) from `scripts/release-notes.sh <tag>`, whose "Changes:" placeholder is one line to replace.
 
 5. **Check that the packages are public.** GitHub's documentation says that a package published by a workflow takes the
    visibility of the repository, so the three packages should be public. The first release confirms which case applies.
    If a package is not public, an organisation owner sets it public in the package's settings. Making a package public
    cannot be undone, and package administrators can also change its visibility, so look at all three before the
-   check. Then, logged out of the registry and from a checkout of the tag, pull and run the images as an operator
+   check. Then, logged out of the registry and from a clean checkout of the tag, pull and run the images as an operator
    would:
 
    ```sh
    docker logout ghcr.io
-   git switch --detach <tag>
+   git tag -v <tag>
+   git switch --detach "refs/tags/<tag>^{commit}"
+   git rev-parse HEAD                  # must equal the next line
+   git rev-parse "refs/tags/<tag>^{commit}"
    scripts/release-smoke.sh <tag>
    ```
 

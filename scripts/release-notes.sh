@@ -39,8 +39,10 @@ cat <<TEXT
 
 ## Deploy
 
-Deploy from this tag: \`git checkout $tag\` (verify it with \`git tag -v $tag\`). The Compose files and
-\`deploy/setup.sh\` of the tag pin the images above by digest.
+Deploy from this tag, in a clean checkout. Verify the tag with \`git tag -v $tag\`, then select its commit with
+\`git switch --detach "refs/tags/$tag^{commit}"\`, and check that \`git rev-parse HEAD\` equals
+\`git rev-parse "refs/tags/$tag^{commit}"\`. The Compose files and \`deploy/setup.sh\` of the tag pin the images
+above by digest.
 
 ## Verify the images
 

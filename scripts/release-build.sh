@@ -8,7 +8,7 @@
 # The same inputs give the same digests. With a <platform> (linux/amd64 or linux/arm64) it also builds each image for
 # that platform alone into <name>-<arch>.oci.tar, requires its manifest digest to equal the one the multi-platform
 # index lists for the platform, loads it into the local Docker as <name>:release-test, and requires the loaded image
-# to be that image. RELEASE_NO_CACHE=1 builds without the cache. Prints names and digests only.
+# to be that image by its ID. RELEASE_NO_CACHE=1 builds without the cache. Prints names and digests only.
 set -euo pipefail
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
@@ -51,16 +51,12 @@ platform_manifest() {
        if length == 1 then .[0].digest else error("not one manifest for the platform") end'
 }
 
-# The fields of an image config that decide how a container starts, as one normalised JSON line.
-config_fields() {
-  jq -cS '{layers: (.rootfs.diff_ids // []), user: (.config.User // ""), entrypoint: (.config.Entrypoint // []),
-           cmd: (.config.Cmd // []), env: (.config.Env // []), workdir: (.config.WorkingDir // "")}'
-}
-
 # Loads <name>:release-test from a single-platform archive and requires it to be the image whose manifest digest is
-# <manifest>. The archive is loaded as it is and the loaded image's ID must be that manifest or its config. A Docker
-# that refuses the archive or reports another ID gets the same platform built straight into its image store
-# (cached, same builder); that image's layers and config must equal those of the index's manifest.
+# <manifest>. The archive is loaded as it is and the loaded image's ID must be that manifest or its config (the ID of
+# the containerd image store is the manifest digest, that of the classic store the config digest). A Docker that
+# refuses the archive or reports another ID gets the same platform built straight into its image store (cached, same
+# builder), and the ID of that image must be the manifest or config digest too. Anything else fails: no partial
+# comparison of the configuration stands in for the identity.
 # Arguments: <name> <platform> <archive> <manifest>.
 load_release_test() {
   local name=$1 plat=$2 archive=$3 manifest=$4 loaded config
@@ -74,12 +70,10 @@ load_release_test() {
   echo "release-build: $name: loading the archive did not give the pinned image; building into the image store"
   docker buildx build "${RELEASE_BUILD_FLAGS[@]}" --progress=quiet --target "$name" --platform "$plat" \
     --output "type=docker,name=$name:release-test,$RELEASE_EXPORT_ATTRS" . > /dev/null
-  local have want
-  have=$(docker image inspect "$name:release-test" |
-    jq -c '.[0] | {rootfs: {diff_ids: .RootFS.Layers}, config: .Config}' | config_fields)
-  want=$(blob "$archive" "$config" | config_fields)
-  [ "$have" = "$want" ] || fail "$name:release-test differs from the index's $plat image"
-  echo "release-build: $name:release-test has the layers and config of the index's $plat image"
+  loaded=$(docker image inspect --format '{{.Id}}' "$name:release-test")
+  { [ "$loaded" = "$manifest" ] || [ "$loaded" = "$config" ]; } ||
+    fail "$name:release-test has ID $loaded, not the index's $plat manifest $manifest or its config $config"
+  echo "release-build: $name:release-test, built into the image store, has ID $loaded"
 }
 
 : > "$outdir/digests.txt"

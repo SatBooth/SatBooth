@@ -922,7 +922,9 @@ deployments from `v*` tags only and cannot be bypassed by administrators. Two ru
 forbids update and deletion, with no bypass, so a tag can be neither moved nor removed; the other restricts creation to
 the repository-admin role. A workflow that names an environment that does not exist gets one created without
 protection, so the settings must exist before the first release. The publish job pushes the pinned digests and tags
-them with the version; it fails when a registry tag already holds another digest.
+them with the version; it fails when a registry tag already holds another digest. That holds for the tags present when the job reads
+them: it reads a tag, then creates it, so a concurrent writer with package-write rights, covered below, could still
+create the tag in between. Operators who pull by digest are unaffected.
 
 What a compromised run or a stolen token could still do. Any workflow that someone with write access to the repository
 pushes, on any branch, can request `packages: write` and push to the three packages without the environment. A

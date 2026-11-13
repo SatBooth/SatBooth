@@ -4,9 +4,10 @@ This directory holds the release images (`image/`) and one Docker Compose bundle
 hub host and `public/` for the public host. The two hosts are never one machine (CLAUDE.md).
 
 **Deploy from a release tag.** The bundles and `deploy/setup.sh` pin the three SatBooth images by tag and digest, and
-the pins in a tag's tree are the ones that release published. On both hosts, check out the tag of the release you
-deploy and verify it with `git tag -v <tag>`, after importing the release signing key and comparing its fingerprint
-(`SECURITY.md`, "Release signing key"). Between releases, the pins on `main` name the last release while the code around
+the pins in the tree of a tag are the ones that release published. On both hosts, in a clean checkout, verify the tag of
+the release you deploy with `git tag -v <tag>`, after importing the release signing key and comparing its fingerprint
+(`SECURITY.md`, "Release signing key"), then run `git switch --detach "refs/tags/<tag>^{commit}"` and check that
+`git rev-parse HEAD` equals `git rev-parse "refs/tags/<tag>^{commit}"`. Between releases, the pins on `main` name the last release while the code around
 them may be newer. "Release images" below says how to verify the images themselves, and `docs/releasing.md` is the
 maintainer's procedure.
 

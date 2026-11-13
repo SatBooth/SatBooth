@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: scripts/release-pins.sh show | check-format | version | check <digests.txt> [<tag>] | check-tag <tag>
-#        | set <version> <digests.txt>
+#        | check-bundles | set <version> <digests.txt>
 # The release images are pinned by tag and digest at three sites: the service `satbooth` of deploy/public/compose.yml,
 # the service `relay` of deploy/hub/compose.yml, and the tools_image= line of deploy/setup.sh. This script reads and
 # rewrites those three lines, and nothing else.
@@ -14,6 +14,12 @@
 #                 writes) and, with a <tag>, the version equals it; prints each name with "match" or
 #                 "pinned X, built Y"
 #   check-tag     exits 0 iff <tag> is a release tag (RELEASE_TAG_RE of scripts/release-lib.sh); reads no site
+#   check-bundles exits 0 iff each base bundle, rendered by `docker compose` with every profile on and its example.env,
+#                 runs exactly the pinned refs: the effective image of `satbooth` and `satbooth-oneoff` (deploy/public)
+#                 and of `relay` (deploy/hub) equals the ref `show` prints, and every other service's image is outside
+#                 the namespace and is pinned by digest or is a local build (`:local`). It reads what Compose resolves,
+#                 not the text of the files, so an `image:` that overrides the pinned one is seen. Needs `docker
+#                 compose` and `jq`; no daemon
 #   set           rewrites the three sites to <version> and the digests of <digests.txt>: every new content is written
 #                 to a temporary file beside its site first, read back by the rules of check-format, and the sites are
 #                 replaced only when all three are ready and well formed
@@ -187,6 +193,41 @@ case $cmd in
     [ "$#" -eq 2 ] || fail "usage: check-tag <tag>"
     [[ $2 =~ $RELEASE_TAG_RE ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $2"
     ;;
+  check-bundles)
+    [ "$#" -eq 1 ] || fail "usage: check-bundles"
+    docker compose version > /dev/null 2>&1 || fail "check-bundles: docker compose is not available"
+    command -v jq > /dev/null || fail "check-bundles: jq is not available"
+    shared_version
+    status=0
+    for host in public hub; do
+      dir=$root/deploy/$host
+      [ -f "$dir/compose.yml" ] && [ -f "$dir/example.env" ] ||
+        fail "check-bundles: no compose.yml and example.env in $dir"
+      # The shell's environment would override the env file: its variables are unset for the call.
+      unset_vars=()
+      while IFS= read -r var; do unset_vars+=(-u "$var"); done < <(grep -oE '^[A-Z0-9_]+' "$dir/example.env" || true)
+      rendered=$(env ${unset_vars[@]+"${unset_vars[@]}"} docker compose --profile "*" -f "$dir/compose.yml" \
+        --env-file "$dir/example.env" config --format json) || fail "check-bundles: $dir/compose.yml does not render"
+      case $host in
+        public) want=$(jq -n --arg r "${SITE_REFS[0]}" '{satbooth: $r, "satbooth-oneoff": $r}') ;;
+        hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r}') ;;
+      esac
+      problems=$(jq -r --arg ns "$NAMESPACE/" --argjson want "$want" '
+        .services as $s
+        | ($want | to_entries[] | select($s[.key].image != .value)
+            | "\(.key) runs \($s[.key].image // "no image"), not \(.value)"),
+          ($s | to_entries[] | select($want[.key] == null) | (.value.image // "") as $img
+            | select(($img | startswith($ns)) or ($img | test("@sha256:[0-9a-f]{64}$|:local$") | not))
+            | "\(.key) runs \($img | if . == "" then "no image" else . end);"
+              + " it must be outside \($ns) and pinned by digest or local")
+        ' <<< "$rendered") || fail "check-bundles: cannot read the rendering of $dir/compose.yml"
+      if [ -n "$problems" ]; then
+        while IFS= read -r line; do echo "deploy/$host: $line" >&2; done <<< "$problems"
+        status=1
+      fi
+    done
+    [ "$status" -eq 0 ] || fail "a base bundle runs an image other than the pinned one"
+    ;;
   set)
     [ "$#" -eq 3 ] || fail "usage: set <version> <digests.txt>"
     [[ $2 =~ ^$version_re$ ]] || fail "not a version like v1.2.3 or v1.2.3-rc.1: $2"
@@ -240,6 +281,6 @@ case $cmd in
     ;;
   *)
     fail "usage: release-pins.sh show | check-format | version | check <digests.txt> [<tag>] | check-tag <tag>" \
-      "| set <version> <digests.txt>"
+      "| check-bundles | set <version> <digests.txt>"
     ;;
 esac

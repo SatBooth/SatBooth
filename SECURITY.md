@@ -35,5 +35,7 @@ gpg --fingerprint '5BEB DE79 EDDE D015 7398 1D4F 70C6 001B 0A49 776E'
 git tag -v <tag>
 ```
 
-`git tag -v` must report a good signature from that fingerprint. A change of the release signing key is announced by a
+`git tag -v` must report a good signature from that fingerprint. Then, in a clean checkout, select the tag's commit
+with `git switch --detach "refs/tags/<tag>^{commit}"` (not `git checkout <tag>`, which takes a local branch of the same
+name first) and check that `git rev-parse HEAD` equals `git rev-parse "refs/tags/<tag>^{commit}"`. A change of the release signing key is announced by a
 commit signed with the old key, which states the new fingerprint.

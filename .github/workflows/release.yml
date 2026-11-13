@@ -97,6 +97,8 @@ jobs:
           cmp digests/amd64/digests.txt digests/arm64/digests.txt
           echo "The amd64 and arm64 runners built the same digests:"
           cat digests/amd64/digests.txt
+      - name: Require the deploy bundles to run the pinned images
+        run: scripts/release-pins.sh check-bundles
       - name: Compare the digests with the pins
         env:
           EVENT_NAME: ${{ github.event_name }}

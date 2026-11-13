@@ -22,7 +22,8 @@ while read -r name ref || [ -n "$name" ]; do
 done <<< "$shown"
 [ "$n" -eq 3 ] || fail "show printed $n refs, want 3"
 
-for want in 'Changes: (to be written before publishing)' "git checkout $tag" "git tag -v $tag" \
+for want in 'Changes: (to be written before publishing)' "git tag -v $tag" \
+  "git switch --detach \"refs/tags/$tag^{commit}\"" "git rev-parse HEAD" \
   'out=$(mktemp -d)' 'scripts/release-build.sh "$out"' \
   'scripts/release-pins.sh check "$out/digests.txt"'; do
   grep -qF -- "$want" <<< "$notes" || fail "the text lacks: $want"
@@ -34,8 +35,10 @@ while read -r name ref || [ -n "$name" ]; do refs+=("$ref"); done <<< "$shown"
 expected=$(
   printf 'Changes: (to be written before publishing)\n\n## Images\n\n'
   for ref in "${refs[@]}"; do printf -- '- `%s`\n' "$ref"; done
-  printf '\n## Deploy\n\nDeploy from this tag: `git checkout %s` (verify it with `git tag -v %s`). The Compose files and\n' "$tag" "$tag"
-  printf '`deploy/setup.sh` of the tag pin the images above by digest.\n\n## Verify the images\n\n'
+  printf '\n## Deploy\n\nDeploy from this tag, in a clean checkout. Verify the tag with `git tag -v %s`, then select its commit with\n' "$tag"
+  printf '`git switch --detach "refs/tags/%s^{commit}"`, and check that `git rev-parse HEAD` equals\n' "$tag"
+  printf '`git rev-parse "refs/tags/%s^{commit}"`. The Compose files and `deploy/setup.sh` of the tag pin the images\n' "$tag"
+  printf 'above by digest.\n\n## Verify the images\n\n'
   printf 'By attestation, which accepts only the release workflow of this repository, run from this tag on a GitHub-hosted\nrunner, for each image:\n\n'
   for ref in "${refs[@]}"; do
     printf '    gh attestation verify oci://%s -R SatBooth/SatBooth \\\n' "${ref/:$tag@/@}"
