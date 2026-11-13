@@ -48,9 +48,9 @@ hub_ips=(172.30.78.10 172.30.78.20)
 dc() { docker compose --profile manual --profile image -p "$project" -f "$compose" "$@"; }
 log() { printf '== qualify: %s\n' "$*"; }
 
-# The public host's bundle (TestDeployPublic): deploy/public/compose.yml with its compose.build.yml, with the regtest override and
-# values, as a project of its own. Its two host directories exist only while its phases run; the placeholders let
-# Compose interpolate the file for build and down outside them.
+# The public host's bundle (TestDeployPublic): deploy/public/compose.yml with its compose.build.yml, the regtest
+# override and values, as a project of its own. Its two host directories exist only while its phases run; the
+# placeholders let Compose interpolate the file for build and down outside them.
 deploy_project=satbooth-regtest-deploy
 deploy_root="" # a temporary directory of this user's, holding etc/ (SATBOOTH_ETC) and backups/ (SATBOOTH_BACKUPS)
 deploy_etc=""
@@ -58,7 +58,8 @@ deploy_backups=""
 ddc() {
   SATBOOTH_ETC="${deploy_etc:-/nonexistent}" SATBOOTH_BACKUPS="${deploy_backups:-/nonexistent}" \
     docker compose --profile oneoff -p "$deploy_project" -f deploy/public/compose.yml \
-    -f deploy/public/compose.build.yml -f dev/regtest/deploy-public.override.yml --env-file dev/regtest/deploy-public.env "$@"
+    -f deploy/public/compose.build.yml -f dev/regtest/deploy-public.override.yml \
+    --env-file dev/regtest/deploy-public.env "$@"
 }
 # rm_tree <dir>: removes a host directory of this run, and what other users own inside it (a container empties it: it
 # belongs to root, 65532 or a service's user), then the directory itself, which stays this user's.
@@ -180,9 +181,9 @@ oneoff_clean() {
   done
 }
 
-# The public host's bundle (plan 10), from the setup command's output (plan 12): deploy/public/compose.yml,
-# run with its compose.build.yml, the regtest override and values (dev/regtest/deploy-public.override.yml, deploy-public.env) as a
-# project of its own. A second SatBooth with its own data volume. Every file the bundle mounts is written by
+# The public host's bundle (plan 10), from the setup command's output (plan 12): deploy/public/compose.yml, run with
+# its compose.build.yml, the regtest override and values (dev/regtest/deploy-public.override.yml, deploy-public.env) as
+# a project of its own. A second SatBooth with its own data volume. Every file the bundle mounts is written by
 # `deploy/setup.sh <dir> public init` and `public finish`, which run before the bundle's first start; the test patches
 # only the regtest topology into satbooth.json (three keys, listed in qualify/REPORT.md). Lightning only, no payout
 # block. It runs after the satbooth container stopped for good (both use the invoice connection), and before

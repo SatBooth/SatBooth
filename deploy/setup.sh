@@ -2,13 +2,18 @@
 # Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]
 #
 # Pulls the pinned release tools image (with SATBOOTH_BUILD=1 in the environment: builds it from this repository
-# instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass,
-# read-only) visible. <dir> is created with mode 0700 if it is missing; an existing directory is left as it is. A
-# symbolic link as <dir> is refused.
+# instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only
+# <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass, read-only) visible. <dir> is created with mode
+# 0700 if it is missing; an existing directory is left as it is. A symbolic link as <dir> is refused.
 # -dir and -host-dir are set here, never taken from the caller. Options are passed through unchanged, in order.
-# The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit code is
-# the command's (0 done, 1 refused or failed, 2 usage).
+# The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit
+# code is the command's (0 done, 1 refused or failed, 2 usage).
 set -euo pipefail
+
+case "${SATBOOTH_BUILD:-}" in
+  "" | 0 | 1) ;;
+  *) echo "setup.sh: SATBOOTH_BUILD must be empty, 0 or 1: ${SATBOOTH_BUILD}" >&2; exit 2 ;;
+esac
 
 usage() {
   echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]" >&2
@@ -27,8 +32,8 @@ case "$dir" in
 esac
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-# The release image of the setup command, pinned by tag and digest (scripts/release-pins.sh). SATBOOTH_BUILD=1 builds it
-# from this repository instead.
+# The release image of the setup command, pinned by tag and digest (scripts/release-pins.sh). SATBOOTH_BUILD=1 builds
+# it from this repository instead.
 tools_image=ghcr.io/satbooth/satbooth-tools:v0.1.0-rc.1@sha256:9b2ff55fe8ef1b831f415c11334bbb34b9a4d3d1e364bfa76874f591f160fe2f
 
 # Refuse a colon before anything is created (a relative <dir> is under the current directory).
@@ -140,14 +145,19 @@ esac
 
 if [ "${SATBOOTH_BUILD:-}" = 1 ]; then
   # From source: the tools image is built from this repository.
-  tools_image=satbooth-tools:local
-  docker build -q --target satbooth-tools -t "$tools_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
+  run_image=satbooth-tools:local
+  docker build -q --target satbooth-tools -t "$run_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
 else
-  docker pull "$tools_image" >&2
+  run_image=$tools_image
+  if ! docker pull "$run_image" >&2; then
+    echo "setup.sh: could not pull $run_image" >&2
+    echo "setup.sh: check the network and the registry, or set SATBOOTH_BUILD=1 to build the image from source" >&2
+    exit 1
+  fi
 fi
 
 exec docker run --rm -i \
   --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
   --user "$(id -u):$(id -g)" \
   -v "$absdir:/work" "${mounts[@]+"${mounts[@]}"}" \
-  "$tools_image" /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"
+  "$run_image" /satbooth-setup "$host" "$stage" -dir /work "${hostopts[@]+"${hostopts[@]}"}" "${opts[@]+"${opts[@]}"}"
