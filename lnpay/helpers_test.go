@@ -173,6 +173,7 @@ type env struct {
 	log    *syncBuf
 	svc    *Service
 	refs   int
+	pclk   *paceClock // set by withFakePace
 }
 
 func newEnv(t *testing.T, opts ...func(*env)) *env {
@@ -208,6 +209,9 @@ func (e *env) open() {
 	e.svc, err = New(cfg, e.st, e.lg, e.w, lim, e.clk.Now, slog.New(slog.NewTextHandler(e.log, nil)))
 	if err != nil {
 		e.t.Fatal(err)
+	}
+	if e.pclk != nil {
+		e.svc.pace.now, e.svc.pace.sleep, e.svc.pace.after = e.pclk.now, e.pclk.sleep, firedAfter
 	}
 }
 
@@ -348,4 +352,76 @@ func sameAcct(t *testing.T, e *env, when string) map[string]int {
 		t.Fatalf("%s: byAcct %v, recount %v", when, live, re)
 	}
 	return live
+}
+
+// paceClock is a fake clock for the lookup pace: sleep advances it at once.
+type paceClock struct {
+	mu    sync.Mutex
+	start time.Time
+	t     time.Time
+}
+
+func (c *paceClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *paceClock) sleep(ctx context.Context, d time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+	return nil
+}
+
+// firedAfter is a timer that has already fired: a preflight that has to queue gives up at once.
+func firedAfter(time.Duration) <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	ch <- time.Time{}
+	return ch
+}
+
+// withFakePace puts the pace of the env's service on a fake clock that sleep advances, and makes a queued preflight
+// give up at once.
+func withFakePace(e *env) { e.pclk = &paceClock{start: epoch, t: epoch} }
+
+// paceElapsed is the time the pace's fake clock has been advanced by.
+func (e *env) paceElapsed() time.Duration {
+	e.t.Helper()
+	c := e.pclk
+	if c == nil {
+		e.t.Fatal("withFakePace not used")
+	}
+	return c.now().Sub(c.start)
+}
+
+// holdPreflightPlace takes the preflight place, as a press waiting for its slot does, until release is called.
+func (e *env) holdPreflightPlace() (release func()) {
+	e.t.Helper()
+	if err := e.svc.pace.acquire(context.Background(), time.Hour); err != nil {
+		e.t.Fatal(err)
+	}
+	var once sync.Once
+	release = func() { once.Do(e.svc.pace.release) }
+	e.t.Cleanup(release)
+	return release
+}
+
+// count is the number of times sub occurs in the log.
+func (e *env) count(sub string) int { return strings.Count(e.log.String(), sub) }
+
+// accountAtCapWithExpiredInvoice makes five open invoices for one account, the first expired 30 s ago and not
+// closed, and returns that invoice and its order.
+func (e *env) accountAtCapWithExpiredInvoice() (store.Order, store.Invoice) {
+	e.t.Helper()
+	first := e.order("capped", 3_000_000)
+	inv := e.mustPay(first)
+	e.clk.Advance(inv.ExpiresAt.Sub(e.clk.Now()) + 30*time.Second)
+	for range 4 {
+		e.mustPay(e.order("capped", 3_000_000))
+	}
+	return first, inv
 }

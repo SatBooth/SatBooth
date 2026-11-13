@@ -184,7 +184,7 @@ func TestMempoolLoadingMarksNothingDead(t *testing.T) {
 	tg := e.payOrder(gone, 30_000)
 	e.pass()
 	e.clk.Advance(time.Hour - 2*time.Minute)
-	open2 := e.order(15_000) // still open after the others expire
+	open2 := e.order(9_000) // still open after the others expire
 	t2 := e.payOrder(open2, 15_000)
 	e.pass()
 	for _, id := range []string{to, tp, tg, t2} {
@@ -470,4 +470,60 @@ func TestLiveMoneyAfterAnUnpaidEventReadsUnderpaid(t *testing.T) {
 		}
 		e.safety(o)
 	})
+}
+
+// A 0-tier order paid by three transactions, all evicted and then rebroadcast, with the passes capped at one
+// transaction: when the events read fails in the step that chooses the work, the order is skipped. The two
+// transactions not read in that pass are still marked gone, and settling the order would reverse their records.
+func TestFailedEventsReadInWorkSkipsTheOrder(t *testing.T) {
+	e := newZeroConfEnv(t)
+	o := e.order(9_000)
+	txids := []string{e.payOrder(o, 3_000), e.payOrder(o, 3_000), e.payOrder(o, 3_000)}
+	e.passes(3)
+	for _, x := range txids {
+		if _, ok := e.fwd(x, 0); !ok {
+			t.Fatalf("setup: %s is not recorded %+v\n%s", x, e.rail(o), e.log)
+		}
+	}
+	if !e.rail(o).Paid {
+		t.Fatalf("setup: %+v", e.rail(o))
+	}
+	for _, x := range txids {
+		e.node.Evict(x)
+	}
+	e.pass() // every output marked gone, the reversals held
+	for _, x := range txids {
+		e.node.Rebroadcast(x)
+	}
+	e.cap(1)
+	failed := 0
+	e.svc.eventsFor = func(ctx context.Context, id string) ([]store.Event, error) {
+		if failed == 0 {
+			failed++
+			return nil, errors.New("events read failed")
+		}
+		return e.st.EventsForOrder(ctx, id)
+	}
+	good := e.svc.lastGoodPass.Load()
+	if err := e.pass(); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.eventsFor = e.st.EventsForOrder
+	if failed != 1 {
+		t.Fatalf("the events read failed %d times, want 1", failed)
+	}
+	if e.svc.lastGoodPass.Load() != good {
+		t.Fatal("a pass with a failed events read was stamped good")
+	}
+	for _, x := range txids {
+		if _, ok := e.rev(x, 0); ok {
+			t.Fatalf("%s was reversed\n%s", x, e.log)
+		}
+		if _, ok := e.fwd(x, 0); !ok {
+			t.Fatalf("%s lost its record\n%s", x, e.log)
+		}
+	}
+	if !e.rail(o).Paid || len(e.events(o)) != 1 {
+		t.Fatalf("Rail %+v, events %+v\n%s", e.rail(o), e.events(o), e.log)
+	}
 }

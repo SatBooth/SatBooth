@@ -112,9 +112,9 @@ Each invoice is a write to the hub.
 ## 2. Status-polling floods
 
 Browsers poll SatBooth, which answers from its own state. Node-side reconciliation runs at a fixed rate,
-so node load doesn't grow with the number of attackers. As built, the reconciler makes 5 lookups a second in
-total, however many invoices are open or pages are loaded; a notification only moves an invoice to the front of
-that queue.
+so node load doesn't grow with the number of attackers. As built, the reconciler and the presses' lookups together
+make at most 5 a second, however many invoices are open or pages are loaded; a notification only moves an invoice to
+the front of the reconciler's queue.
 
 ## 3. Fake or replayed "paid"
 
@@ -350,11 +350,20 @@ expiry by up to one pass (longer while a pass holds the event for a fee bump the
 replacing a payment can keep an order's final event waiting for as long as they pay the fees, within the order's watch window, on
 either rail of a mixed order, and the paid state is not affected), the order never
 reads `expired` while an on-time payment is live, and one whose settle keeps failing past its window reads `new` for
-good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. The cost
+good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. Anyone who knows an order's address can pay it in more separate transactions than one pass reads
+(`poll_seconds` × `poll_rate`, at least 8): that order is then not read at all (no new record, no reversal of a record it already holds, and no final event), and the
+operator is told by `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by
+hand` (and by the window's end `ALERT`); the other orders are served in turn, each at least once every few passes
+while the backlog lasts, and read "Checking payment…" after waiting more than 3 × `poll_seconds`. The cost
 is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one more `getmempoolinfo`,
 `getmempoolentry` and `gettransaction`, and a `gettxspendingprevout`, in the pass that marks it gone (six calls then; a
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for
-one already marked gone, and one scan of the stored payments a pass. There is no calendar cap on the tracking (Ruling
+one already marked gone until its order has its final event, then a read with a backoff (2 × `poll_seconds`, doubling up
+to about 10 minutes, at the window's end, and at once when a scan lists it mined; those payments do not count toward the order's
+payment cap, and a pass reads at most that number of an order's resting transactions). At the 10-minute ceiling K resting
+transactions cost about K / 60 reads in a pass of 10 seconds: thousands of replaced transactions of orders with their
+final event can fill a pass's reads, while discovery still runs and other orders are still served in turn; each replacement
+costs the payer a higher fee. Each pass also scans the stored payments once. There is no calendar cap on the tracking (Ruling
 6.1-3); a fee bump of it inherits its first-seen only inside the window (decision 9). Read in Core 32.1
 (*source*; `docs/rules-onchain.md`, "The watch window",
 has the lines): the watch-only wallet itself resubmits a received unconfirmed transaction to the mempool every 12 to
@@ -464,8 +473,11 @@ access to wallet-rpc's private link.
 then writes `order.paid_again` or `order.reverted` from it; both rails hold one shared lock for the whole of each
 settle, so the other rail's state cannot change in between (its own settle is the only writer). Without it, a
 reversal on one rail landing inside the other's settle gave an `order.paid_again` that no payment backed, or, when
-both rails' payments reverted together, no `order.reverted` at all. Lightning needs no such lock: it writes only
-`order.paid`, the same idempotent event, and a Lightning payment never reverts. A status read (the API, the checkout
+both rails' payments reverted together, no `order.reverted` at all. A Lightning payment is written under the same
+lock: a settle that read Lightning unpaid writes its reversal and events first, and one that starts
+later reads it paid. A recording waits for whatever holds the lock: one on-chain settle, a Monero pass's commit and settles, or a status
+read. The hub lookup is made before the lock.
+A status read (the API, the checkout
 page) takes the same lock (ruling R1): a settle used to record a new payment before it reversed an old one, and a read
 between the two summed both, so an order whose reorged-out payment was replaced by another could read `paid` for a
 moment with no `order.paid` behind it. Since ruling S1 a settle writes all its ledger records (the new payments'

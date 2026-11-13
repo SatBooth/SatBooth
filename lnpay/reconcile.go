@@ -26,7 +26,8 @@ type cursor struct {
 }
 
 // Run runs the reconciler until ctx ends (it then returns ctx.Err()). It looks up every open
-// invoice in turn, PollRate lookups a second in total, so its load does not depend on traffic. A
+// invoice in turn, PollRate lookups a second in total (the lookups a press makes before a second
+// invoice share that rate), so its load does not depend on traffic. A
 // notification for one of our invoices moves that invoice to the front of the queue; it is not
 // believed, the lookup is. The first step runs at once. After a round in which nothing was looked
 // up (no open invoices, or every entry skipped because it is fully recorded or stale and polled
@@ -44,10 +45,11 @@ func (s *Service) Run(ctx context.Context) error {
 	defer func() { cancel(); wg.Wait() }()
 
 	s.healPaid(ctx)
-	tick := time.NewTicker(time.Duration(float64(time.Second) / s.cfg.PollRate))
-	defer tick.Stop()
 	var c cursor
 	for {
+		if err := s.pace.wait(ctx); err != nil { // the first slot is now
+			return ctx.Err()
+		}
 		if c.idx >= len(c.snap) && !time.Now().Before(c.idleUntil) { // a new round: expire the orders that are due
 			if err := s.sweep(ctx); err != nil && ctx.Err() == nil {
 				s.log.Error(logStepFailed)
@@ -61,11 +63,6 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 		if err != nil && ctx.Err() == nil {
 			s.log.Error(logStepFailed)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
 		}
 	}
 }

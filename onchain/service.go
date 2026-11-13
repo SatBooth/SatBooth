@@ -198,6 +198,7 @@ type Service struct {
 	// is cleared with diedInPass. leftWithoutFinal reports none of them in that pass and carries them in
 	// leftHeld to the next pass's check, which reports those still without a final event. Both belong to the pass.
 	heldInPass map[string]struct{}
+	workFailed bool // step 3 could not read an order's events or ledger when choosing its work: the pass is not good
 	// behindInPass holds the outputs step 3 left unjudged in the current pass because bitcoind's wallet is behind its
 	// node's mempool (errBehind); cleared with diedInPass. The pass's settle counts the unrecorded ones as zero
 	// (Service.views). It belongs to the pass: only the pass's goroutine (trackAll, then settle) may read or write it;
@@ -217,6 +218,15 @@ type Service struct {
 	// process (each restart grants the hold once more). The pass's goroutine only.
 	heldBefore map[store.TXOKey]struct{}
 	leftHeld   []store.Order
+
+	// Step 3 serves whole orders in turn (trackAll). The pass's goroutine only; all in memory, lost with the process.
+	wall          func() time.Time          // the real clock of step 3's deadline (a test seam)
+	passCap       int                       // the most due transactions of one order that a pass reads (passCapOf)
+	trackFrom     string                    // the order the next pass starts at
+	deferredSince map[string]time.Time      // s.now() of the first pass that did not reach the order since it was served
+	tooWide       map[string]struct{}       // orders whose logTooWide this process logged; cleared at maxTooWide
+	carried       map[string]struct{}       // orders touched by discovery that the last pass did not reach
+	deadPolls     map[store.TXOKey]deadPoll // the backoff of the dead outputs read after their order's final event (watch.go)
 
 	// bothAlerted is written by the pass (settle) and by lnpay's hook (LightningPaid) from its own goroutines.
 	bothMu      sync.Mutex          // guards bothAlerted
@@ -268,7 +278,9 @@ func New(cfg Config, st *store.Store, lg *ledger.Ledger, rpc RPC, ln Lightning, 
 		callTimeout: cfg.CallTimeout, pressWait: PressWait, flights: map[string]*flight{}, alloc: make(chan struct{}, 1),
 		settleMu: &sync.Mutex{}, bothAlerted: map[string]struct{}{}, pastExpiry: st.OnchainOrdersPastExpiry, eventsFor: st.EventsForOrder,
 		diedInPass: map[store.TXOKey]struct{}{}, heldInPass: map[string]struct{}{}, behindSince: map[store.TXOKey]time.Time{},
-		heldBefore: map[store.TXOKey]struct{}{}}, nil
+		heldBefore: map[store.TXOKey]struct{}{}, wall: time.Now, passCap: passCapOf(cfg),
+		deferredSince: map[string]time.Time{}, tooWide: map[string]struct{}{}, carried: map[string]struct{}{},
+		deadPolls: map[store.TXOKey]deadPoll{}}, nil
 }
 
 func (s *Service) crash(point string) error {
@@ -280,9 +292,10 @@ func (s *Service) crash(point string) error {
 
 // SetPeer sets the Monero rail, which Address asks whether an order is already paid there and settle reads beside
 // Lightning (nil when the Monero rail is not configured).
-// settle is the mutex both rails hold for the whole of each settle (ruling 8-A1): one shared by the two rails, so a
-// settle never reads the peer's paid state while the peer's settle changes it; nil keeps the rail's own. Both are set
-// before Run.
+// settle is the mutex the rail holds for the whole of each settle (ruling 8-A1): one shared by the watched rails and
+// lnpay, so a settle never reads the peer's paid state, or Lightning's, while it changes. The service passes it
+// whenever a watched rail exists, with a nil peer when the other rail is absent; a nil settle keeps the rail's own,
+// which only tests use. Both are set before Run.
 func (s *Service) SetPeer(p rail.Peer, settle *sync.Mutex) {
 	s.mu.Lock()
 	s.peer = p

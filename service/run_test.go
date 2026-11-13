@@ -25,6 +25,8 @@ import (
 
 	"github.com/satbooth/satbooth/approval"
 	"github.com/satbooth/satbooth/descriptor"
+	"github.com/satbooth/satbooth/ledger"
+	"github.com/satbooth/satbooth/limits"
 	"github.com/satbooth/satbooth/lnpay"
 	"github.com/satbooth/satbooth/monero"
 	"github.com/satbooth/satbooth/monero/monerotest"
@@ -2678,5 +2680,117 @@ func TestOneProcessPerDataDir(t *testing.T) {
 	}
 	if err, logs := second(); err != nil {
 		t.Fatalf("Run after the first returned: %v / %s", err, logs)
+	}
+}
+
+// Lightning's payment record and every present watched rail wait for the one settle mutex that shareSettleLock hands
+// out, whichever rails are configured; nothing is shared when there is no watched rail.
+func TestOneSettleLockForRailsAndLightning(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		oc, xm bool
+	}{{"onchain only", true, false}, {"monero only", false, true}, {"both rails", true, true}} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.Background()
+			dir := t.TempDir()
+			st, err := store.Open(ctx, filepath.Join(dir, "orders.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			lg, err := ledger.Open(ctx, filepath.Join(dir, "ledger.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { st.Close(); lg.Close() })
+			lim, err := limits.New(limits.Config{RatePerSec: 1e6, Burst: 1 << 20, MaxMsat: 1_000_000_000, DailyMsat: 1 << 50}, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := newFakeWallet()
+			ln, err := lnpay.New(lnpay.Config{PollRate: 1000, Network: approval.Regtest}, st, lg, w, lim, time.Now, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var oc *onchain.Service
+			if c.oc {
+				d, err := descriptor.Parse("wpkh(" + testTpub + "/0/*)")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if oc, err = onchain.New(onchain.Config{Descriptor: d, Network: "regtest"}, st, lg, testNode(t), ln, time.Now, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var xm *monero.Service
+			if c.xm {
+				mw := monerotest.New(7)
+				if xm, err = monero.New(monero.Config{Address: mw.Primary(), Network: "regtest"}, st, lg, mw, ln, time.Now, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := shareSettleLock(ln, nil, nil); got != nil {
+				t.Fatal("a lock without a watched rail")
+			}
+			mu := shareSettleLock(ln, oc, xm)
+			if mu == nil {
+				t.Fatal("no lock")
+			}
+			o, _, err := st.CreateOrder(ctx, store.Order{AccountID: "acct", MerchantRef: "ref-1", AmountMsat: 3_000_000, AmountSat: 1000,
+				AmountPiconero: 1_000_000_000, ExpiresAt: time.Now().Add(time.Hour)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ln.Pay(ctx, o.Token); err != nil {
+				t.Fatal(err)
+			}
+			w.settleAll()
+
+			locked := true
+			release := func() {
+				if locked {
+					locked = false
+					mu.Unlock()
+				}
+			}
+			mu.Lock()
+			runCtx, stop := context.WithCancel(ctx)
+			runDone := make(chan error, 1)
+			go func() { runDone <- ln.Run(runCtx) }()
+			t.Cleanup(func() { release(); stop(); <-runDone })
+			railDone := map[string]chan error{}
+			if oc != nil {
+				ch := make(chan error, 1)
+				railDone["onchain"] = ch
+				go func() { _, err := oc.Rail(ctx, o); ch <- err }()
+			}
+			if xm != nil {
+				ch := make(chan error, 1)
+				railDone["monero"] = ch
+				go func() { _, err := xm.Rail(ctx, o); ch <- err }()
+			}
+			time.Sleep(50 * time.Millisecond)
+			for name, ch := range railDone {
+				select {
+				case err := <-ch:
+					t.Fatalf("%s Rail returned under the held lock: %v", name, err)
+				default:
+				}
+			}
+			if s, err := ln.Status(ctx, o.ID); err != nil || s.State == lnpay.StatePaid {
+				t.Fatalf("Lightning recorded under the held lock: %+v %v", s, err)
+			}
+			release()
+			for name, ch := range railDone {
+				select {
+				case <-ch:
+				case <-time.After(5 * time.Second):
+					t.Fatalf("%s Rail blocked after the lock was released", name)
+				}
+			}
+			eventually(t, "Lightning recorded after the lock was released", func() bool {
+				s, err := ln.Status(ctx, o.ID)
+				return err == nil && s.State == lnpay.StatePaid
+			})
+		})
 	}
 }

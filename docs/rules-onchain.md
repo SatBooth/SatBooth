@@ -14,7 +14,9 @@
   trusting the payer for that amount. A record made from the mempool is reversed only when its payment is gone
   (replaced, double spent, or evicted); a reorg that puts it back in the mempool keeps it. Inside the watch window, an
   evicted record that comes back is recorded again: `order.reverted` when it left (if the order stopped reading paid),
-  then `order.paid_again` when it is back. It is settled only once mined `SettledDepth` deep. A late payment is never
+  then `order.paid_again` when it is back (once the order has its final event, a payment that is gone and has no record
+  is read with a backoff, so a return to the mempool with no block is seen within about 10 minutes and the record waits
+  that long; see "The watcher's cost"). It is settled only once mined `SettledDepth` deep. A late payment is never
   recorded from the mempool, whatever the tier: it needs at least 1 confirmation, so a late payment replaced before a
   block sends no `order.late`. A payment that counted, was evicted before the expiry and was broadcast again after it
   keeps its first-seen time, so it still counts and is recorded from the mempool once it is back (tested with the test
@@ -111,7 +113,9 @@
   `seq` (and an `ALERT`). A payment re-mined in another block keeps its record. After a reorg puts it back in the
   mempool the rail reads `seen` (`underpaid` past the expiry, where `order.reverted` backs it); on a 0 tier the record
   stays and the order stays paid (it counts from the mempool).
-- **The watch window.** The address and its payments are watched until 7 days after the order's expiry. When the
+- **The watch window.** The address and its payments are watched until 7 days after the order's expiry. An order that a
+  pass did not reach is read in a later one, and a late payment that the scan listed for it is still
+  handled then, as it would have been in the pass that found it. When the
   window closes with on-time payments that reach the amount but are not confirmed enough to be recorded, the order
   reads `underpaid` and gets `order.underpaid` with `ALERT: an order was underpaid at the end of its watch window; its
   payment is not yet confirmed enough and stays tracked` (once its Lightning side is done, and unless it already has a
@@ -125,7 +129,8 @@
     (not when a fee bump that inherited its first-seen time carries the payment on; SatBooth matches the two by that
     time, to the second, so an unrelated payment of the order first seen in the same second can also silence it). If
     a later scan lists it mined, it is tracked again and recorded by the usual rules. A rebroadcast seen only in the
-    mempool does not bring it back, so an order at a 0 tier then waits for a block. The same `ALERT` comes at the
+    mempool does not bring it back, so an order at a 0 tier then waits for a block. Between the order's final event and
+    the window's end, a payment that comes back to the mempool with no block is seen within about 10 minutes. The same `ALERT` comes at the
     window's end for every on-time payment that died earlier and was never carried on (a cancelled or double-spent
     on-time payment, for example), unless the order reads paid by its events (`order.paid`, with no `order.reverted`
     that `order.paid_again` has not answered): a person has nothing to do then. SatBooth stops polling it either way.
@@ -205,24 +210,48 @@
   still show it. Once an on-chain payment is seen, the checkout page offers no Lightning.
 - **The watcher's cost.** Every `poll_seconds` a pass makes one `getblockchaininfo`, one `getmempoolinfo` and one
   `listsinceblock` from the last scan position, then
-  refreshes each tracked payment with one `gettransaction` (and a `getmempoolentry` if it has no confirmation), paced
-  at `poll_rate` a second, so the load on bitcoind does not follow traffic. Before it marks a payment gone, it asks
-  again: one more `getmempoolinfo` (bitcoind may have restarted inside the pass and not have loaded its mempool yet),
-  `getmempoolentry` and `gettransaction` (a block may have mined it since the first read), and then one
-  `gettxspendingprevout` (does another mempool transaction spend its inputs: bitcoind's wallet may be behind its node,
+  refreshes the tracked payments with one `gettransaction` for each transaction (and a `getmempoolentry` if it has no
+  confirmation), shared by all its payments to SatBooth's addresses and paced at `poll_rate` transactions a second, so
+  the load on bitcoind follows the number of transactions, not of outputs, and does not follow traffic. Before it
+  marks a payment gone, it asks again: one more `getmempoolinfo` (bitcoind may have restarted inside the pass and not have loaded
+  its mempool yet), `getmempoolentry` and `gettransaction` (a block may have mined it since the first read), and
+  then one `gettxspendingprevout` (does another mempool transaction spend its inputs: bitcoind's wallet may be behind its node,
   and then the payment is not marked gone for up to 60 seconds, and is asked again in each pass, at the same
   cost); a payment already
-  marked gone costs what a live one costs (two calls: `gettransaction` and `getmempoolentry`; a live unconfirmed one
-  costs the same two, and the pass that marks it gone six). A payment is tracked until it is recorded `SettledDepth`
+  marked gone costs what a live one costs (two calls per transaction: `gettransaction` and `getmempoolentry`; a live
+  unconfirmed one costs the same two, and the pass that marks it gone six) until its order has its final event
+  (`order.paid`, `order.expired` or `order.underpaid`). From then on a payment that is gone, has no record in the
+  ledger and is not foreign rests: it is read 2 × `poll_seconds` after its last read, then twice as long after each
+  read, to about every 10 minutes (20, 40, 80, 160, 320 and then 600 seconds at the default); at the end of its order's
+  watch window (which settles an on-time one; a late one just leaves the watched set); and at once when a scan lists it
+  mined. It does not count toward the number of payments of an order that one pass reads, and a pass reads at most that
+  number of an order's resting transactions: the rest wait for the next passes, so the reads at a window's end, or
+  after a start, of an order with many of them are spread over several passes. A payment that comes back to the
+  mempool with no block is seen at its next read, about 10 minutes later at most (more when an order has more resting
+  transactions due than one pass reads: their reads spread over a few passes). The backoff is kept in memory: after a
+  start, each resting payment is read once, then follows it again. Accepted residual: at the 10-minute ceiling, K
+  resting transactions cost about K / 60 reads in a pass of 10 seconds, so thousands of replaced transactions of orders
+  that have their final event can fill a pass's reads; discovery still runs, other orders are still served in turn, and
+  each replacement costs the payer a higher fee. The answers are kept for the pass only, so
+  each payment is still judged on its own answers' checks and its own mark, but a transaction paying many outputs
+  costs the calls of one. A payment is tracked until it is recorded `SettledDepth`
   deep; one that never will
   be (replaced, double spent, evicted, or still unconfirmed) is tracked until its order's watch window closes, and an
   on-time one past it (see "The watch window"): finding those scans the stored payments once a pass. A settled
   payment is stored as such, so after a start only the payments not yet settled are polled; a payment whose poll
-  failed, or that a pass did not reach, is not settled. So a pass
-  with N tracked payments takes about N / `poll_rate` seconds: at the defaults, 50 fit in one 10 second pass before
-  passes stretch. The page reads "Checking payment…" when no pass has succeeded for 3 poll intervals plus the last good
-  pass's duration, so a long healthy pass does not trip it, and for one order alone when its settle or a call for one
-  of its payments failed in the last pass (the API's `onchain.stale`). bitcoind not answering ends the pass with one `ALERT:
+  failed, or that a pass did not reach, is not settled. A pass reads the orders in turn, each one whole, for about
+  `poll_seconds`: it starts no new order once `poll_seconds` have passed since it began its reads, and an order it has
+  started it finishes, so one order with many payments stretches a pass by at most its own reads. The next pass starts
+  with the first order the last one did not reach. An order that is not reached waits for its turn, is not settled
+  meanwhile, and keeps its place. An order with more payments than one pass reads is not read at all: no new record, no reversal of a record it already holds, and no final event; the merchant checks it by hand from the `ALERT`. The discovery of new payments (their first-seen times) runs in every pass. Meanwhile the
+  confirmation count it shows can read 0, as it does after a start, until a pass reads it. The page
+  reads "Checking payment…" when no pass has succeeded for 3 poll intervals plus the last good pass's duration, so a
+  long healthy pass does not trip it; for one order alone when its settle or a call for one of its payments failed in
+  the last pass, or when it has gone unreached for more than 3 × `poll_seconds` (the API's `onchain.stale`). An order
+  with more separate payments than one pass reads (`poll_seconds` × `poll_rate`, at least 8) is not read or settled:
+  it reads "Checking payment…" and gets `ALERT: an on-chain order has more payments than one pass reads; it is not
+  settled; check it by hand` (with its id, at least once per order each time SatBooth starts), and the merchant handles it by
+  hand. A payment with many outputs is one read and does not count more than one. Such an order is not read at all: no new record, no reversal of a record it already holds, and no final event; the merchant checks it by hand from the `ALERT`. bitcoind not answering ends the pass with one `ALERT:
   bitcoind call failed` (with the method and the error code). Until a pass succeeds nothing is recorded and no event is
   added (a Lightning-only order's `expired` follows the clock and still shows in the API; an on-chain order's
   `expired` and `underpaid` wait for their events); the next good pass catches up from the stored scan position.
@@ -249,12 +278,16 @@
   - `ALERT: an on-time on-chain payment past its watch window left bitcoind's mempool; SatBooth stops polling it and
     will notice it again only if it is mined` (at or after the window's end, for each on-time payment that is gone and
     was not carried on by a fee bump, whether it died then or earlier, unless its order reads paid);
+  - `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by hand` (at least once per
+    order each time SatBooth starts; see "The watcher's cost");
   - `ALERT: an on-chain order left its watch window without a final event; check it by hand` (an order whose settle,
     or whose payments' calls, kept failing, whose Lightning side is still not done, or whose Monero rail was still
     being paid or stale at the window's end; no event is added. Once per
     order, and again after a restart within a week of the window's end. When the pass at the window's end holds the
     final event because an on-time payment died after its scan, the check waits one pass: the next pass reports the
-    order only if it still has no final event);
+    order only if it still has no final event. The same holds for an order that a pass did not reach: it is held
+    until its turn, and the Monero rail of a mixed order holds its own final event meanwhile. An order too wide for one pass is never settled, so it gets this
+    `ALERT` too);
   - `ALERT: an on-chain payment was reverted by a reorg`;
   - `ALERT: a reverted on-chain payment confirmed again`, or `ALERT: an order reverted by a reorg or a double spend
     was paid again on Lightning` when Lightning's payment, not the chain's, makes the reverted order paid again (the

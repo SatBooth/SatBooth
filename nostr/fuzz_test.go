@@ -109,6 +109,8 @@ func FuzzParseEvent(f *testing.F) {
 	f.Add([]byte(""))
 	f.Add(paddedRaw(MaxEventJSON))
 	f.Add(paddedRaw(MaxEventJSON + 1))
+	// At the limit with content json.Marshal escapes: the marshalled form is over MaxEventJSON.
+	f.Add([]byte(strings.ReplaceAll(string(paddedRaw(MaxEventJSON)), "x", "<")))
 	f.Add([]byte(strings.Replace(baseRaw(), `"AQ=="`, "\"a\u2028\u2029b\"", 1)))
 	f.Add([]byte(strings.Replace(baseRaw(), `"AQ=="`, "\"a\xe2\x80\xa8\xe2\x80\xa9b\"", 1)))
 	sweep := make([]byte, 0, 256)
@@ -124,6 +126,12 @@ func FuzzParseEvent(f *testing.F) {
 		b, err := json.Marshal(e)
 		if err != nil {
 			t.Fatal(err)
+		}
+		// json.Marshal escapes <, >, & and U+2028/U+2029 as \uXXXX, so an event near MaxEventJSON can grow past it
+		// when marshalled again. ParseEvent refuses that by its size rule alone; the round trip is checked whenever
+		// the marshalled form is within the limit.
+		if len(b) > MaxEventJSON {
+			return
 		}
 		e2, err := ParseEvent(b)
 		if err != nil {

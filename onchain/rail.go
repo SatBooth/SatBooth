@@ -33,12 +33,13 @@ const (
 // waiting or seen for good (logNoFinal at its window end).
 // Confirmations is the least confirmation count of the counted live outputs, 0 if one of them is in the mempool or not
 // yet marked, and 0 with none. A mined output that is not recorded counts at most the reading of the last completed
-// pass (orderViews, boundOut), so it shows 0 until a pass has read its mark (after a start, a failed read, or a pass
-// that ended in step 3). Paid is ConfirmedSat >= the amount; Overpaid is Paid with more; PaidAt is the time of
+// pass (orderViews, boundOut), so it shows 0 until a pass has read its mark (after a start, a failed read, a pass
+// that ended in step 3, or a pass that did not reach its order). Paid is ConfirmedSat >= the amount; Overpaid is Paid with more; PaidAt is the time of
 // the transfer that first made the sum reach the amount. Stale is true when no pass has succeeded within 3
-// PollIntervals plus the last good pass's duration (so a long healthy pass, many tracked outputs at PollRate, does not
+// PollIntervals plus the last good pass's duration (so a long healthy pass, many tracked transactions at PollRate, does not
 // read stale while the next one runs), before the first good pass (the page shows "checking"), and for an order in the
-// stale set of the last pass that reached its end: one of its outputs' calls failed, or its settle failed (pass).
+// stale set of the last pass that reached its end: one of its outputs' calls failed, its settle failed (pass), it has
+// gone unreached by step 3 for more than 3 PollIntervals, or it has more due transactions than one pass reads.
 type Rail struct {
 	State                                string
 	Address                              string

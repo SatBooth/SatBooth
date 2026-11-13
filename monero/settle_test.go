@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/satbooth/satbooth/ledger"
+	"github.com/satbooth/satbooth/lnpay"
 	"github.com/satbooth/satbooth/rail"
 	"github.com/satbooth/satbooth/store"
 )
@@ -167,6 +168,86 @@ func TestZeroConfPaidFromThePool(t *testing.T) {
 }
 
 // --- reorgs ---
+
+// A Lightning payment whose record starts inside a settle that read Lightning unpaid waits for the settle: the reversal
+// and its order.reverted come first, the Lightning transfer after them, and the order then gets order.paid_again.
+func TestLightningRecordWaitsForAReversalMonero(t *testing.T) {
+	e, ln, hub := newWatchEnvRealLN(t)
+	o := e.mixed(50_000_000, 0, xmr)
+	inv := mustInvoice(t, ln, o)
+	txid := e.payOrder(o, xmr)
+	e.w.Mine(1)
+	e.mustPass()
+	if !e.view(o).Paid {
+		t.Fatalf("setup: %+v", e.view(o))
+	}
+	e.clk.Advance(inv.ExpiresAt.Sub(e.clk.Now()) + 30*time.Second)
+	hub.settle(inv.PaymentHash)
+	e.w.Pop(1)
+	payDone := make(chan error, 1)
+	e.svc.hook = func(p string) error {
+		switch p {
+		case "settle:after-status":
+			go func() { _, err := ln.Pay(context.Background(), o.Token); payDone <- err }()
+			select {
+			case <-hub.looked:
+			case <-time.After(5 * time.Second):
+				return errors.New("the hub was never asked about the invoice")
+			}
+			time.Sleep(200 * time.Millisecond)
+		case "settle:after-transfers":
+			if lnTransferExists(e, inv) {
+				t.Error("Lightning committed inside the settle")
+			}
+		}
+		return nil
+	}
+	e.mustPass()
+	e.svc.hook = nil
+	if err := <-payDone; !errors.Is(err, lnpay.ErrPaid) {
+		t.Fatal(err)
+	}
+	r, ok := e.rev(o, txid, 0)
+	if !ok || r.UserData64 != 1 || !e.hasEvent(o, store.EventReverted, 1) {
+		t.Fatalf("%+v %+v", r, e.events(o))
+	}
+	if lnTransfer(e, inv).Timestamp <= r.Timestamp {
+		t.Fatal("the ledger's order disagrees with the events")
+	}
+	e.mustPass()
+	if !e.hasEvent(o, store.EventPaidAgain, 1) || e.count(rail.LogPaidAgainLightning) != 1 ||
+		e.eventCount(o, store.EventPaid) != 1 {
+		t.Fatalf("%+v", e.events(o))
+	}
+	e.safety(o)
+}
+
+// A Lightning payment recorded before the settle reads it makes the reversal a plain reorg: no order.reverted, no
+// order.paid_again.
+func TestLightningRecordedBeforeAReversalMonero(t *testing.T) {
+	e, ln, hub := newWatchEnvRealLN(t)
+	o := e.mixed(50_000_000, 0, xmr)
+	inv := mustInvoice(t, ln, o)
+	txid := e.payOrder(o, xmr)
+	e.w.Mine(1)
+	e.mustPass()
+	e.clk.Advance(inv.ExpiresAt.Sub(e.clk.Now()) + 30*time.Second)
+	hub.settle(inv.PaymentHash)
+	e.w.Pop(1)
+	if _, err := ln.Pay(context.Background(), o.Token); !errors.Is(err, lnpay.ErrPaid) {
+		t.Fatal(err)
+	}
+	e.mustPass()
+	r, _ := e.rev(o, txid, 0)
+	if r.UserData64 != 0 || e.eventCount(o, store.EventReverted) != 0 {
+		t.Fatalf("%+v %+v", r, e.events(o))
+	}
+	e.mustPasses(2)
+	if e.eventCount(o, store.EventPaidAgain) != 0 || e.count(logReorg) != 1 {
+		t.Fatalf("%+v", e.events(o))
+	}
+	e.safety(o)
+}
 
 // A reorg after paid: the block popped, the payment back in the pool: a reversal and order.reverted 1; mined again:
 // order.paid_again 1.

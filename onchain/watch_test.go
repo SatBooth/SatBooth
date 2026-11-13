@@ -2916,7 +2916,7 @@ func TestStopDuringTrackLogsNoTrackFailed(t *testing.T) {
 
 // The record of step 3's first read names its site with `at`, and carries no other attribute. mark-read and
 // mark-write are pinned by TestStopDuringTrackLogsNoTrackFailed. The addresses and order sites cannot fail on their
-// own through the store (WatchedTXOs joins both tables, so it fails first), and views is unwatched's, which a
+// own through the store (WatchedTXOs joins both tables, so it fails first), and views is work's, which a
 // failing store reaches only past a window's end: their words are read from the code.
 func TestTrackFailedNamesItsSite(t *testing.T) {
 	for _, c := range []struct{ name, table string }{

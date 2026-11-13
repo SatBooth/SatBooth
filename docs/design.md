@@ -497,8 +497,8 @@ constants in the code; the constant is named where it helps.
   that the operator must set (`limits.Config`). The minimum is 1 sat. None is per IP; plan 6.1 adds
   `max_open_per_account`, the one per-account limit (§3, "On-chain follow-ups, as built (plan 6.1)").
 - **A fixed global polling rate**: the reconciler looks up open invoices at 5 lookups a second in total
-  (`lnpay.DefaultPollRate`), so load on the hub does not follow traffic. Notifications only move an invoice to the
-  front of the queue.
+  (`lnpay.DefaultPollRate`), the lookups a press makes before a second invoice included, so load on the hub does not
+  follow traffic. Notifications only move an invoice to the front of the queue.
 
 **Rules of the payment path.**
 
@@ -535,7 +535,9 @@ constants in the code; the constant is named where it helps.
     rate with the open invoices, at most max(open invoices, 50) per round. The deadline is max(ExpiresAt, the
     service's start) + 24 hours, so a restart inside it extends the watch to 24 hours after the start, up to about
     48 hours after the expiry. The cost is about 144 lookups per watched invoice per day; past about 600 × PollRate
-    watched invoices (3,000 at the default 5 a second) every round carries the cap, and each gets fewer. A
+    watched invoices (3,000 at the default 5 a second, or about 1,500 while presses take their share and a reconciler
+    step is shorter than about two slots, 400 ms at the default rate) every round carries the cap, and each gets
+    fewer. A
     settlement for the full amount is recorded through the normal paid
     path (the transfer, `order.paid`, the `account_paid` fact) with an `ALERT` line, and the order reads `paid`,
     because `Status` reads the ledger before the closures. A short settlement or a bad row alerts as for an open
@@ -549,8 +551,11 @@ constants in the code; the constant is named where it helps.
     long, is recorded on the first pass after the restart.
 - **Pressing "pay"** writes the attempt row, then launches the MakeInvoice call on a flight detached from the
   customer's request, so closing the page does not abandon a call that was counted. Before a second invoice is made
-  for an order, "pay" looks up that order's expired but unclosed invoices (bound 15 s each): if one settled, it is
-  recorded and the order reads `paid`; if a lookup fails, "pay" is refused as outcome unknown. What remains is a
+  for an order, "pay" looks up that order's expired but unclosed invoices (bound 15 s each). Each lookup takes a slot of the same pace
+  as the reconciler's, one press at a time at the single preflight place. A
+  press never takes two slots in a row: the slot between is left for the reconciler, and lost if it is not ready for
+  it. If one settled, it is recorded and the order reads `paid`; if a lookup fails, or no slot comes within 15 s,
+  "pay" is refused as outcome unknown (no second invoice). What remains is a
   payment that settles after the lookup said "not settled" (for example one in flight at the invoice's expiry) and
   after a second invoice was made: both settle, both are in the ledger, and the `ALERT` above says so.
 - **Limits are checked under one short mutex** with the counts, so two requests cannot both pass the open-invoice cap.
@@ -652,7 +657,8 @@ are marked as in §2.1: *source* or *observed*
   name was inferred, not read.
 - K. **`order.reverted` and `order.paid_again` follow the order's combined state**: they go out only when
   the order, both rails together, stops or starts reading paid. A reorg under an order paid by Lightning sends no
-  event; the reorg `ALERT` is still logged.
+  event; the reorg `ALERT` is still logged. Lightning's payment record takes the same lock as the watched rails'
+  settles, so a payment is recorded either before a settle reads it or after that settle's reversals and events.
 - L. **An on-time payment first seen after an outage reads late.** First-seen is SatBooth's clock, so an
   outage of bitcoind or SatBooth that spans the expiry makes it `late`, and it waits for a person (threat model §3).
 - M. **Events can arrive out of order**; `docs/webhooks.md` tells the merchant to re-read the order on every event.
@@ -749,9 +755,15 @@ are marked as in §2.1: *source* or *observed*
   a restart, `loaded` false, no output is marked dead in that pass: an unconfirmed output missing from the mempool is
   skipped with one line, `src/rpc/mempool.cpp:1113`, `src/init.cpp:2130-2136` in Core 32.1); `listsinceblock` from the
   cursor with `target_confirmations` = `SettledDepth` + 1, keeping receives to issued addresses and dropping odd entries
-  one by one; `gettransaction` for every tracked output, paced at `poll_rate` (the sign of the confirmations first, then
-  the mempool conflicts, then `getmempoolentry`, because 0 confirmations also means evicted or replaced). Since plan 6.1
-  an output found in neither is read again before it is marked dead: `getmempoolinfo` (bitcoind may have restarted
+  one by one; `gettransaction` for the tracked transactions, shared by their
+  outputs and paced at `poll_rate`, an order whole at a time, in turn from where the last pass stopped, with no new order
+  started after `poll_seconds` of real time. An order not reached is not settled and reads stale after 3 ×
+  `poll_seconds`; it is held (no final event is written or reported for it, and the other rail of a mixed order holds
+  its own as it does for an output it cannot judge), and, if the scan touched it, it is touched again in the next pass.
+  One with more due transactions than one pass reads, `poll_seconds` × `poll_rate` and at least 8, is not read and has
+  an `ALERT` (the sign
+  of the confirmations first, then the mempool conflicts, then `getmempoolentry`, because 0 confirmations also means evicted or
+  replaced). Since plan 6.1 an output found in neither is read again before it is marked dead: `getmempoolinfo` (bitcoind may have restarted
   inside the pass; loading means wait, *source*: Core 32.1 `src/rpc/mempool.cpp:1113`, `:1143`), `getmempoolentry`, then
   a second `gettransaction` (a block between the reads took it out of the mempool and mined it: `ConnectTip` removes a
   block's transactions and moves the tip under the mempool's lock, `src/validation.cpp:3019-3020`, `:3082`, `:3086`,
@@ -956,11 +968,14 @@ the merchant are in `docs/bitcoind.md`, the `limits` and `onchain` tables of `do
   transaction, when the scan lists that output with a confirmation (the sender rebroadcast it and it was mined); the
   output is then tracked and recorded by the usual rules. Updates and replaces stay refused, and the marks keep the
   history.
-- **The stuck set's bound and cost.** Bounded to on-time outputs not settled: each costs one `gettransaction` plus one
-  `getmempoolentry` a pass, paced at `poll_rate`, until it is mined `SettledDepth` deep with its record, or dead and
-  settled (6.1-O); the pass that marks it dead costs one more `getmempoolinfo`, `getmempoolentry` and
+- **The stuck set's bound and cost.** Bounded to on-time outputs not settled: each transaction costs one `gettransaction` plus one
+  `getmempoolentry` a pass, shared by its outputs and paced at `poll_rate`, until it is mined `SettledDepth` deep with
+  its record, or dead and settled (6.1-O); the pass that marks it dead costs one more `getmempoolinfo`, `getmempoolentry` and
   `gettransaction`, and a `gettxspendingprevout` (six calls in that pass; the same each pass while the wallet is
-  behind); an output already dead costs what a live one costs (two calls). A late
+  behind); an output already dead costs what a live one costs (two calls) until its order has its final event, and then
+  it is read with a backoff (starting at 2 × `poll_seconds`, doubling, to about every 10 minutes; at its window's end; and at
+  once when a scan lists it mined), not counted toward the order's payment cap (a pass reads at most that number of an
+  order's resting transactions), and its dead mark is never the ground of an event. A late
   output of a touched past-window order, in the mempool or mined and not recorded, costs the same while that order is
   settled (plan 14: it is read again before it is recorded). A mined output whose ledger record is foreign
   never settles and is polled until it is put right by hand. How long bitcoind keeps a stuck transaction: 6.1-3.
@@ -1395,12 +1410,14 @@ reading of the source). Every decision below is built.
 
 **Rulings 8-A1 to 8-A5 (plan 8).** Each fixes a defect that a failing test showed first.
 
-- **8-A1: one settle lock for the watched rails.** Both rails hold one `sync.Mutex`, installed with `SetPeer`, for
-  the whole of each settle (a rail without a peer holds its own). The peer's paid state changes only in its settle, so
-  it cannot change between a settle's read of it and its event writes: no `order.paid_again` without money, and no
-  lost `order.reverted` when both rails revert together. Under it settle takes only leaf locks and makes no RPC call.
-  `LightningPaid` writes no event and lnpay's `order.paid` never reverts, so neither takes it. The cost: settles of
-  different orders on the two rails no longer overlap (milliseconds per order).
+- **8-A1: one settle lock for the watched rails.** The watched rails and lnpay share one `sync.Mutex`, installed with
+  `SetPeer` and `SetSettleLock`, whenever at least one watched rail is configured (a single rail has no peer, but still
+  shares the lock with lnpay). Each rail holds it for the whole of each settle. The peer's paid state changes only in
+  its settle, so it cannot change between a settle's read of it and its event writes: no `order.paid_again` without
+  money, and no lost `order.reverted` when both rails revert together. lnpay holds it only while it writes a payment's
+  ledger transfer, which is what its status reads as paid; its `order.paid` event write and `LightningPaid` do not take
+  it. Under it settle takes only leaf locks and makes no RPC call. The cost: settles of different orders on the two
+  rails no longer overlap (milliseconds per order).
 - **8-A2: the cursor is only where the next scan starts;** confirmations come from the wallet's height (8-T7b above).
 - **8-A3: the press checks the base address after `create_address` too** (8-T7a above).
 - **8-A4: the cursor still advances when entries drop** (holding it would let one bad entry grow every listing without
@@ -1421,7 +1438,7 @@ reading of the source). Every decision below is built.
   settle mutex while it reads, so it never sees a settle half done: settle records a new payment before it reverses an
   old one, and a read between them summed both (an order whose 0.6 of 1 XMR was reorged out while another 0.6 was
   mined read `paid`). `View`, the peer path that the other rail's settle calls while it holds the mutex, reads
-  without it. A rail without a peer holds its own mutex. A press (`Address`) still reads the peer's `View` without the
+  without it. With a single watched rail the mutex is shared with lnpay alone. A press (`Address`) still reads the peer's `View` without the
   lock: a half-done settle there can only over-count, which refuses the press (`ErrPaid`), the safe side. (Since S1
   below a settle's ledger records are one batch, so not even an interrupted settle is half done in the ledger.)
 - **R5: an early plan 8 store is refused,** as above; no migration (no release exists).
@@ -2260,7 +2277,7 @@ From these follow the rules below, as built.
   The watched outputs are read every pass, as before. A late output (first seen at or after its order's expiry) of an
   order past its watch window is not watched. A pass settles such an order only when it was touched (a new payment to
   its address, or an on-time output still followed), and before it settles, `trackAll` reads again each late output of
-  that order whose current mark is in the mempool or mined, that is not recorded and not foreign (`unwatched`,
+  that order whose current mark is in the mempool or mined, that is not recorded and not foreign (`work`,
   `onchain/watch.go`). It is then recorded late from that reading, or not at all when the transaction is gone: its mark
   becomes dead and no `order.late` is sent. A late payment still in the mempool when its window closes, and mined later,
   is recorded late (`order.late` and its `ALERT`) when its order is next touched and it has its tier's confirmations; a
