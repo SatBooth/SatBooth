@@ -14,7 +14,7 @@ notes=$(scripts/release-notes.sh "$tag")
 
 shown=$(scripts/release-pins.sh show)
 n=0
-while read -r name ref; do
+while read -r name ref || [ -n "$name" ]; do
   n=$((n + 1))
   grep -qF -- "\`$ref\`" <<< "$notes" || fail "$name: the ref is not listed: $ref"
   grep -qF -- "gh attestation verify oci://${ref/:$tag@/@} -R SatBooth/SatBooth" <<< "$notes" ||
@@ -30,7 +30,7 @@ done
 
 # The whole text is fixed: besides the tag and the three refs, nothing in it varies, so it names no person.
 refs=()
-while read -r _ ref; do refs+=("$ref"); done <<< "$shown"
+while read -r name ref || [ -n "$name" ]; do refs+=("$ref"); done <<< "$shown"
 expected=$(
   printf 'Changes: (to be written before publishing)\n\n## Images\n\n'
   for ref in "${refs[@]}"; do printf -- '- `%s`\n' "$ref"; done

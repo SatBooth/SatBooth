@@ -52,7 +52,7 @@ release_pins_read() {
   local shown name ref
   PIN_NAMES=() PIN_REFS=() PIN_REPOS=() PIN_DIGESTS=()
   shown=$("$1" show) || return 1
-  while read -r name ref; do
+  while read -r name ref || [ -n "$name" ]; do
     PIN_NAMES+=("$name")
     PIN_REFS+=("$ref")
     PIN_REPOS+=("${ref%%:*}")
@@ -68,20 +68,30 @@ release_sha256_of() {
   printf 'sha256:%s' "${sum%% *}"
 }
 
+# release_tag_absent: reads an error text on standard input; succeeds iff it is a registry's answer for a missing tag. A
+# line ending in ": not found" is the resolver's own; "executable file not found" and "command not found" are not.
+release_tag_absent() {
+  local text
+  text=$(cat)
+  if grep -qiE 'executable file not found|command not found' <<< "$text"; then return 1; fi
+  grep -qiE ': not found$|manifest unknown|name unknown' <<< "$text"
+}
+
 # release_tag_digest <repo> <tag> <scratch dir>: prints the digest of the top-level manifest <repo>:<tag> serves (the
 # digest of the exact bytes `imagetools inspect --raw` returns), or nothing when the registry has no such tag. The
 # caller defines `fail <message>`, which it must make exit.
-# The tag is taken as absent only when the command fails and its stderr, whatever its case, says "not found" or
-# "manifest unknown": that is how a registry answers a tag that is not there (HTTP 404, MANIFEST_UNKNOWN), and the
-# exact wording belongs to the buildx of the runner, which is not pinned. The command fetches only this one manifest,
-# so such a message is about this ref. Any other failure (a network error, a refusal, a server error) and an empty
-# manifest stop the caller.
+# The tag is taken as absent only when the command fails and its stderr has a line that ends in ": not found" or holds
+# "manifest unknown" or "name unknown", whatever the case (release_tag_absent): that is how a registry answers a tag that
+# is not there (HTTP 404, MANIFEST_UNKNOWN), and the exact wording belongs to the buildx of the runner, which is not
+# pinned. The command fetches only this one manifest, so such a message is about this ref. Any other failure (a network
+# error, a refusal, a server error, "executable file not found", "command not found") and an empty manifest stop the
+# caller.
 release_tag_digest() {
   local ref=$1:$2 raw=$3/raw err=$3/err
   if docker buildx imagetools inspect --raw "$ref" > "$raw" 2> "$err"; then
     [ -s "$raw" ] || fail "$ref: the registry served an empty manifest"
     release_sha256_of "$raw"
-  elif grep -qiE 'not found|manifest unknown' "$err"; then
+  elif release_tag_absent < "$err"; then
     return 0
   else
     fail "$ref: cannot read the tag: $(head -c 300 "$err")"

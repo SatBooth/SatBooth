@@ -4,11 +4,31 @@
 # that does not exist, and a registry that cannot be reached. The registry runs in Docker: it needs the pinned
 # registry image already local (it pulls nothing, unless RELEASE_PUSH_TEST_PULL=1); otherwise it says so and skips.
 # Usage: scripts/release-push_test.sh
+# shellcheck disable=SC2016,SC2329
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 fail() { echo "release-push_test: FAIL: $*" >&2; exit 1; }
+
+# shellcheck source=scripts/release-lib.sh
+. scripts/release-lib.sh
+
+# The matcher of an absent tag, on fixed error texts (no registry needed).
+absent() { printf '%s\n' "$1" | release_tag_absent; }
+for text in 'ERROR: ghcr.io/x/y:v1: not found' 'ghcr.io/x/y:v1: not found' 'ERROR: ghcr.io/x/y:v1: NOT FOUND' \
+  'unexpected status from HEAD request: 404 Not Found: MANIFEST_UNKNOWN: manifest unknown' \
+  'ERROR: failed to resolve: name unknown: repository name not known to registry'; do
+  absent "$text" || fail "the matcher refused an absent-tag text: $text"
+done
+for text in 'exec: "docker-credential-x": executable file not found in $PATH' 'sh: docker: command not found' \
+  'ERROR: error getting credentials - err: exec: "docker-credential-desktop": executable file not found in $PATH' \
+  'ERROR: ghcr.io/x/y:v1: not found
+error getting credentials - err: exec: "docker-credential-x": executable file not found in $PATH' \
+  'ERROR: dial tcp: lookup ghcr.io: no such host' 'ERROR: unauthorized: authentication required' \
+  'ERROR: 500 Internal Server Error' 'ERROR: docker: command not found: buildx' ''; do
+  if absent "$text"; then fail "the matcher took a failure for an absent tag: $text"; fi
+done
 
 REGISTRY_IMAGE=registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
 
@@ -21,9 +41,6 @@ if ! docker image inspect "$REGISTRY_IMAGE" > /dev/null 2>&1; then
     exit 0
   fi
 fi
-
-# shellcheck source=scripts/release-lib.sh
-. scripts/release-lib.sh
 
 tmp=$(mktemp -d)
 name=satbooth-release-push-test-$$
@@ -63,7 +80,6 @@ served() {
     "http://$host/v2/test/manifests/$1" | tr -d '\r' | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }'
 }
 
-fail() { echo "release-push_test: FAIL: $*" >&2; exit 1; }
 # release_tag_digest calls fail, which must exit; run it in a subshell so a refusal is a status.
 digest_of_tag() { (release_tag_digest "$1" "$2" "$tmp") 2> "$tmp/stderr"; }
 

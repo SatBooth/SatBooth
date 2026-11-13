@@ -9,12 +9,13 @@
 # The model's variables are set and read through eval (bash 3 has no namerefs).
 # shellcheck disable=SC2034,SC2154
 set -euo pipefail
+export LC_ALL=C
 
 cd "$(dirname "$0")/.."
 pins=$PWD/scripts/release-pins.sh
 
 seed=${RELEASE_PINS_SEED:-20261113}
-cases=${RELEASE_PINS_CASES:-100}
+cases=${RELEASE_PINS_CASES:-80}
 echo "release-pins_prop_test: seed $seed, $cases cases"
 
 tmp=$(mktemp -d)
@@ -80,7 +81,14 @@ write_file() {
     out+=${cur[k]}
     if [ "$k" -lt $((n - 1)) ] || [ "${final[i]}" = 1 ]; then out+=${eol[i]}; fi
   done
-  printf '%s' "$out" > "$2"
+  # A NUL is written as \001 in the model; the oracle learns from nul<i> whether the file holds one.
+  if [[ $out == *$'\001'* ]]; then
+    printf '%s' "$out" | tr '\001' '\000' > "$2"
+    eval "nul$i=1"
+  else
+    printf '%s' "$out" > "$2"
+    eval "nul$i=0"
+  fi
 }
 
 # Mutations. Each takes the file index; it changes the model and appends to the log. A mutation that does not apply
@@ -204,12 +212,14 @@ mut_extra_name() {
 }
 mut_rename() {
   get_lines "$1"; ! has_pin "$1" || return 0
+  [ "${#cur[@]}" -ge 3 ] || return 0
   roll 3
   cur[RND]=${cur[RND]/satbooth/satbooth-x}
   put_lines "$1"
 }
 mut_reorder() {
   get_lines "$1"; ! has_pin "$1" || return 0
+  [ "${#cur[@]}" -ge 3 ] || return 0
   cur=("${cur[2]}" "${cur[0]}" "${cur[1]}")
   put_lines "$1"
 }
@@ -234,39 +244,98 @@ mut_version() {
   put_lines "$1"
 }
 
-site_mutations=(crlf no_final_newline trailing_blank tab_separator extra_spaces quote comment needle_elsewhere uppercase
-  digest_length namespace drop_line duplicate_line other_digest version)
-digests_mutations=(crlf no_final_newline trailing_blank tab_separator extra_spaces comment uppercase digest_length
-  drop_line duplicate_line extra_name rename reorder other_digest)
+# Odd bytes, put at a random place of the pin line (of a random line of digests.txt, and sometimes of a random line of a
+# site). A NUL is written as \001 and turned into a NUL when the file is written, as a bash string cannot hold it.
+insert_bytes() { # <file index> <bytes>
+  get_lines "$1"
+  local i l at
+  if has_pin "$1"; then
+    i=$pin
+    roll 4; if [ "$RND" = 0 ]; then roll ${#cur[@]}; i=$RND; fi
+  else roll ${#cur[@]}; i=$RND; fi
+  [ "${#cur[@]}" -gt 0 ] || return 0
+  l=${cur[i]}
+  roll $((${#l} + 1)); at=$RND
+  cur[i]=${l:0:at}$2${l:at}
+  put_lines "$1"
+}
+mut_nul() { insert_bytes "$1" $'\001'; }
+mut_vt() { insert_bytes "$1" $'\v'; }
+mut_ff() { insert_bytes "$1" $'\f'; }
+mut_nbsp() { insert_bytes "$1" $'\xc2\xa0'; }
+mut_extra_line() { # a line of no interest, or a stray blank
+  get_lines "$1"
+  roll 2
+  if [ "$RND" = 0 ]; then cur+=('# note'); else cur=('# note' "${cur[@]}"); fi
+  if has_pin "$1" && [ "${cur[0]}" = '# note' ]; then eval "pin$1=$((pin + 1))"; fi
+  put_lines "$1"
+}
 
-# The oracle: a separate, short reading of the format. oracle_site <file> <kind> <name>: sets REF_VER and REF_DIG when
-# the file holds exactly one line with the site's needle and that line is `[indent]image: <ref>` (or
-# `[indent]tools_image=<ref>`, no space after the =) with trailing blanks and CRs ignored and <ref> exactly
+site_mutations=(crlf no_final_newline trailing_blank tab_separator extra_spaces quote comment needle_elsewhere uppercase
+  digest_length namespace drop_line duplicate_line other_digest version nul vt ff nbsp extra_line)
+digests_mutations=(crlf no_final_newline trailing_blank tab_separator extra_spaces comment uppercase digest_length
+  drop_line duplicate_line extra_name rename reorder other_digest nul vt ff nbsp extra_line)
+
+# The oracle: a separate, short reading of the format, sharing no code with the script.
+# no_nul <file>: the file holds no NUL byte, as write_file recorded it for the file of the case.
+no_nul() {
+  case $1 in
+    */deploy/public/compose.yml) [ "$nul0" = 0 ] ;;
+    */deploy/hub/compose.yml) [ "$nul1" = 0 ] ;;
+    */deploy/setup.sh) [ "$nul2" = 0 ] ;;
+    *) [ "$nul3" = 0 ] ;;
+  esac
+}
+
+# oracle_find <file> <kind>: succeeds iff the file has no NUL and exactly one line holding the site's needle
+# (`tools_image=` for the tools site, `ghcr.io/satbooth/` for a compose file). Sets HIT to that line.
+oracle_find() {
+  local file=$1 needle count=0 line
+  HIT=
+  if [ "$2" = tools ]; then needle='tools_image='; else needle='ghcr.io/satbooth/'; fi
+  no_nul "$file" || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in *"$needle"*) count=$((count + 1)); HIT=$line ;; esac
+  done < "$file"
+  [ "$count" -eq 1 ]
+}
+
+# oracle_site <file> <kind> <name>: sets REF_VER and REF_DIG when the file's one needle line is `[indent]image: <ref>`
+# (or `[indent]tools_image=<ref>`, no space after the =), the indent and the blanks around the key being spaces and tabs
+# only, trailing spaces, tabs and CRs ignored, and <ref> exactly
 # ghcr.io/satbooth/<name>:v<n>.<n>.<n>[-rc.<n>]@sha256:<64 lowercase hex>.
 oracle_site() {
-  local file=$1 kind=$2 name=$3 needle count=0 hit='' line ref
-  if [ "$kind" = tools ]; then needle='tools_image='; else needle='ghcr.io/satbooth/'; fi
-  while IFS= read -r line || [ -n "$line" ]; do
-    case $line in *"$needle"*) count=$((count + 1)); hit=$line ;; esac
-  done < "$file"
-  [ "$count" -eq 1 ] || return 1
+  local hit ref
+  oracle_find "$1" "$2" || return 1
+  hit=$HIT
   while [[ $hit == *[$' \t\r'] ]]; do hit=${hit%?}; done
-  if [ "$kind" = tools ]; then
+  if [ "$2" = tools ]; then
     [[ $hit =~ ^[\ $'\t']*tools_image=(.*)$ ]] || return 1
   else
     [[ $hit =~ ^[\ $'\t']*image:[\ $'\t']*(.*)$ ]] || return 1
   fi
   ref=${BASH_REMATCH[1]}
-  [[ $ref =~ ^ghcr\.io/satbooth/$name:(v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)@sha256:([0-9a-f]{64})$ ]] || return 1
+  [[ $ref =~ ^ghcr\.io/satbooth/$3:(v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)@sha256:([0-9a-f]{64})$ ]] || return 1
   REF_VER=${BASH_REMATCH[1]}
   REF_DIG=sha256:${BASH_REMATCH[3]}
 }
 
-# oracle_digests <file>: sets DIG_satbooth, DIG_satbooth-relay (as DIG_relay) and DIG_tools when the file is exactly
-# three lines "<name> sha256:<64 lowercase hex>", one per name, in any order.
+# oracle_replaceable <file> <kind>: `set` can rewrite the file: one needle line, no NUL, and the white space that leads
+# that line (which set keeps) holds only spaces and tabs.
+oracle_replaceable() {
+  local lead=''
+  oracle_find "$1" "$2" || return 1
+  local rest=$HIT
+  while [[ $rest == [$' \t\r\v\f']* ]]; do lead+=${rest:0:1}; rest=${rest:1}; done
+  [[ $lead != *[$'\r\v\f']* ]]
+}
+
+# oracle_digests <file>: sets DIG_satbooth, DIG_relay and DIG_tools when the file has no NUL and is exactly three lines
+# "<name> sha256:<64 lowercase hex>", one per name, in any order.
 oracle_digests() {
   local line count=0 name
   DIG_satbooth='' DIG_relay='' DIG_tools=''
+  no_nul "$1" || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     [[ $line =~ ^(satbooth|satbooth-relay|satbooth-tools)\ (sha256:[0-9a-f]{64})$ ]] || return 1
     name=${BASH_REMATCH[1]}
@@ -282,21 +351,27 @@ oracle_digests() {
 
 d=$tmp/root
 digests=$tmp/digests.txt
-accepted_format=0 accepted_check=0
-c=0
-while [ "$c" -lt "$cases" ]; do
+accepted_format=0 accepted_check=0 accepted_set=0 refused_set=0 c=0
+
+report() {
+  echo "seed $seed, case $c, mutations:$log" >&2
+  for f in deploy/public/compose.yml deploy/hub/compose.yml deploy/setup.sh; do echo "--- $f" >&2; sed -n l < "$d/$f" >&2; done
+  echo "--- digests.txt" >&2
+  sed -n l < "$digests" >&2
+}
+
+# run_case <file:mutation>...: builds the files, applies the mutations in order, and compares the script with the oracle
+# for check-format, version, check (with a tag) and set.
+run_case() {
+  local spec f mut set_ m
   c=$((c + 1))
   reset_model
-  # One to three mutations, each on a random file.
-  roll 3; nmut=$((RND + 1))
-  for ((m = 0; m < nmut; m++)); do
-    roll 4; f=$RND
-    if [ "$f" = 3 ]; then set_=("${digests_mutations[@]}"); else set_=("${site_mutations[@]}"); fi
-    roll ${#set_[@]}; mut=${set_[RND]}
+  for spec in "$@"; do
+    f=${spec%%:*} mut=${spec#*:}
     log+=" f$f:$mut"
     "mut_$mut" "$f"
   done
-  rm -rf "$d"
+  rm -rf "$d" "$tmp/before"
   mkdir -p "$d/deploy/public" "$d/deploy/hub"
   write_file 0 "$d/deploy/public/compose.yml"
   write_file 1 "$d/deploy/hub/compose.yml"
@@ -304,7 +379,7 @@ while [ "$c" -lt "$cases" ]; do
   write_file 3 "$digests"
 
   # The oracle's verdict.
-  want_format=0 want_check=0 want_ver=
+  local want_format=0 want_check=0 want_ver='' want_set=0 v0 v1 v2 g0 g1 g2
   if oracle_site "$d/deploy/public/compose.yml" compose satbooth && v0=$REF_VER g0=$REF_DIG &&
     oracle_site "$d/deploy/hub/compose.yml" compose satbooth-relay && v1=$REF_VER g1=$REF_DIG &&
     oracle_site "$d/deploy/setup.sh" tools satbooth-tools && v2=$REF_VER g2=$REF_DIG &&
@@ -314,26 +389,70 @@ while [ "$c" -lt "$cases" ]; do
       want_check=1
     fi
   fi
+  if oracle_digests "$digests" && oracle_replaceable "$d/deploy/public/compose.yml" compose &&
+    oracle_replaceable "$d/deploy/hub/compose.yml" compose && oracle_replaceable "$d/deploy/setup.sh" tools; then
+    want_set=1
+  fi
 
-  report() { echo "seed $seed, case $c, mutations:$log" >&2; for f in deploy/public/compose.yml deploy/hub/compose.yml deploy/setup.sh; do echo "--- $f" >&2; sed -n l <"$d/$f" >&2; done; echo "--- digests.txt" >&2; sed -n l < "$digests" >&2; }
-
-  got_format=0
+  local got_format=0 got_check=0 ver_out
   if RELEASE_PINS_ROOT=$d "$pins" check-format > /dev/null 2>&1; then got_format=1; fi
   [ "$got_format" = "$want_format" ] || { report; fail "check-format: got $got_format, the oracle says $want_format"; }
   if [ "$want_format" = 1 ]; then
     accepted_format=$((accepted_format + 1))
-    ver_out=$(RELEASE_PINS_ROOT=$d "$pins" version) || { report; fail "version failed on an accepted set"; }
-    [ "$ver_out" = "$want_ver" ] || { report; fail "version: got $ver_out, want $want_ver"; }
   fi
-  got_check=0
-  if RELEASE_PINS_ROOT=$d "$pins" check "$digests" > /dev/null 2>&1; then got_check=1; fi
+  # check runs with the pinned version as its tag when the oracle reads one, so the tag passes too.
+  if RELEASE_PINS_ROOT=$d "$pins" check "$digests" ${want_ver:+"$want_ver"} > /dev/null 2>&1; then got_check=1; fi
   [ "$got_check" = "$want_check" ] || { report; fail "check: got $got_check, the oracle says $want_check"; }
   if [ "$want_check" = 1 ]; then
     accepted_check=$((accepted_check + 1))
-    # With a tag: the same version passes, another one does not.
-    RELEASE_PINS_ROOT=$d "$pins" check "$digests" "$want_ver" > /dev/null 2>&1 || { report; fail "check with the right tag refused"; }
+    # Another tag does not pass.
     if RELEASE_PINS_ROOT=$d "$pins" check "$digests" "${want_ver}x" > /dev/null 2>&1; then report; fail "check with another tag accepted"; fi
   fi
+
+  # set: when the oracle accepts the digests file and the sites, set then show yields exactly those digests and
+  # check-format passes; otherwise set fails and the tree is byte for byte what it was.
+  local setver shown expect got_set=0
+  roll ${#versions_ok[@]}; setver=${versions_ok[RND]}
+  cp -R "$d" "$tmp/before"
+  if RELEASE_PINS_ROOT=$d "$pins" set "$setver" "$digests" > /dev/null 2>&1; then got_set=1; fi
+  [ "$got_set" = "$want_set" ] || { report; fail "set $setver: got $got_set, the oracle says $want_set"; }
+  if [ "$want_set" = 1 ]; then
+    accepted_set=$((accepted_set + 1))
+    expect="satbooth $ns/satbooth:$setver@$DIG_satbooth
+satbooth-relay $ns/satbooth-relay:$setver@$DIG_relay
+satbooth-tools $ns/satbooth-tools:$setver@$DIG_tools"
+    shown=$(RELEASE_PINS_ROOT=$d "$pins" show) || { report; fail "show failed after set"; }
+    [ "$shown" = "$expect" ] || { report; fail "show after set: got
+$shown
+want
+$expect"; }
+    ver_out=$(RELEASE_PINS_ROOT=$d "$pins" version) || { report; fail "version (that is check-format) refused the result of set"; }
+    [ "$ver_out" = "$setver" ] || { report; fail "version after set: got $ver_out, want $setver"; }
+    RELEASE_PINS_ROOT=$d "$pins" check "$digests" "$setver" > /dev/null 2>&1 || { report; fail "check refused the result of set"; }
+  else
+    refused_set=$((refused_set + 1))
+    diff -r "$d" "$tmp/before" > /dev/null 2>&1 || { report; fail "a refused set changed the tree or left a file"; }
+  fi
+}
+
+# The fixed cases come first, in every run: each odd input that once mattered, on the digests file, on a compose site and
+# on the tools site, before any random one. A mutation that does not apply to a file leaves it valid.
+fixed=(no_final_newline crlf tab_separator nul vt ff nbsp trailing_blank duplicate_line extra_line drop_line extra_name)
+for mut in "${fixed[@]}"; do
+  for f in 3 0 2; do run_case "$f:$mut"; done
+done
+fixed_cases=$c
+
+# Then the random ones: one to three mutations, each on a random file.
+while [ "$c" -lt $((fixed_cases + cases)) ]; do
+  roll 3; nmut=$((RND + 1))
+  specs=()
+  for ((m = 0; m < nmut; m++)); do
+    roll 4; f=$RND
+    if [ "$f" = 3 ]; then set_=("${digests_mutations[@]}"); else set_=("${site_mutations[@]}"); fi
+    roll ${#set_[@]}; specs+=("$f:${set_[RND]}")
+  done
+  run_case "${specs[@]}"
 done
 
 # check-tag: random strings built from the pieces of a tag, in random order and number, against the oracle's reading:
@@ -360,5 +479,6 @@ done
 
 # Every case must have been able to go either way: some were accepted, and most were refused.
 [ "$accepted_format" -gt 0 ] && [ "$accepted_check" -gt 0 ] || fail "no case was accepted: the mutations are too strong"
-[ "$accepted_check" -lt "$cases" ] || fail "every case was accepted: the mutations change nothing"
-echo "release-pins_prop_test: $cases cases, $accepted_format accepted by check-format, $accepted_check by check: ok"
+[ "$accepted_check" -lt "$c" ] || fail "every case was accepted: the mutations change nothing"
+[ "$accepted_set" -gt 0 ] && [ "$refused_set" -gt 0 ] || fail "set went one way only: accepted $accepted_set, refused $refused_set"
+echo "release-pins_prop_test: $c cases ($fixed_cases fixed), accepted by check-format $accepted_format, by check $accepted_check, by set $accepted_set: ok"

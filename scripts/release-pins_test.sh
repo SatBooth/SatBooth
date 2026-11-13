@@ -204,6 +204,41 @@ if [ "$(id -u)" -ne 0 ]; then
     fail "a failed set changed a site or left a file: $(diff -r "$d" "$tmp/atomic-before")"
 fi
 
+# A digests.txt without a final newline: check matches, and set writes the full last digest and round-trips through show.
+d=$tmp/nonl
+fresh "$d"
+printf 'satbooth sha256:%s\nsatbooth-relay sha256:%s\nsatbooth-tools sha256:%s' "$(hex a 64)" "$(hex b 64)" "$(hex c 64)" > "$tmp/nonl.txt"
+run "$d" set v0.8.0 "$tmp/nonl.txt" || fail "set refused a digests file without a final newline"
+run "$d" check "$tmp/nonl.txt" v0.8.0 > "$tmp/out" || fail "check refused a digests file without a final newline: $(cat "$tmp/out")"
+[ "$(grep -c ' match$' "$tmp/out")" = 3 ] || fail "check output without a final newline: $(cat "$tmp/out")"
+want=$(printf 'satbooth %s/satbooth:v0.8.0@sha256:%s\nsatbooth-relay %s/satbooth-relay:v0.8.0@sha256:%s\nsatbooth-tools %s/satbooth-tools:v0.8.0@sha256:%s' \
+  "$ns" "$(hex a 64)" "$ns" "$(hex b 64)" "$ns" "$(hex c 64)")
+[ "$(run "$d" show)" = "$want" ] || fail "show after set without a final newline: $(run "$d" show)"
+run "$d" check-format || fail "check-format refused the result of set without a final newline"
+
+# A NUL byte, a vertical tab, a form feed or a no-break space after the ref is refused by check-format. In the site, a NUL
+# anywhere in the file, or a vertical tab or form feed in the indent, makes set refuse and leave the sites as they were.
+for bytes in '\000' '\013' '\014' '\302\240'; do
+  d=$tmp/ctl
+  rm -rf "$d" "$d.before"
+  fresh "$d"
+  printf '%s' "    image: $ns/satbooth:v0.1.0-rc.1@sha256:$d_sat" > "$tmp/pin"
+  { printf 'services:\n  satbooth:\n'; cat "$tmp/pin"; printf '%b\n' "$bytes"; } > "$d/deploy/public/compose.yml"
+  if run "$d" check-format > /dev/null 2>&1; then fail "check-format accepted a pin line ending in $bytes"; fi
+done
+for bytes in '\000' '\013' '\014'; do
+  d=$tmp/ctl
+  rm -rf "$d" "$d.before"
+  fresh "$d"
+  case $bytes in
+    '\000') { printf 'services:\n  satbooth:\n'; printf '%b' "$bytes"; printf '    image: %s/satbooth:v0.1.0-rc.1@sha256:%s\n' "$ns" "$d_sat"; } > "$d/deploy/public/compose.yml" ;;
+    *) { printf 'services:\n  satbooth:\n  '; printf '%b' "$bytes"; printf '  image: %s/satbooth:v0.1.0-rc.1@sha256:%s\n' "$ns" "$d_sat"; } > "$d/deploy/public/compose.yml" ;;
+  esac
+  cp -R "$d" "$d.before"
+  if run "$d" set v0.9.0 "$digests" > /dev/null 2>&1; then fail "set accepted a site with $bytes"; fi
+  diff -r "$d" "$d.before" > /dev/null || fail "a refused set changed a site or left a file ($bytes)"
+done
+
 # check-tag: exits 0 exactly for a release tag, and reads no site.
 for t in v0.1.0 v1.2.3 v10.20.30 v0.1.0-rc.1 v1.2.3-rc.12; do
   "$pins" check-tag "$t" || fail "check-tag refused $t"
