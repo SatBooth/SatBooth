@@ -55,6 +55,51 @@ type trackedOutput struct {
 	x     store.TXO
 	o     store.Order
 	extra bool // a late output of an order past its watch window, read only because its order is about to be settled
+	// dead is a dead output of an order with its final event, with no standing record and not foreign: the outputs that
+	// rest between reads (resting). A read of one that leaves it dead steps its backoff (polledDead).
+	dead bool
+}
+
+// deadPollMax is the longest a resting output waits between two reads: the period lnpay watches a closed invoice at.
+const deadPollMax = 10 * time.Minute
+
+// deadPoll is the backoff of one resting output: the number of reads since its order's final event (at most 6), when
+// the next is due and when the last was made.
+type deadPoll struct {
+	step         int
+	next, readAt time.Time
+}
+
+// resting reports whether an output is not due work in this pass: its current mark is dead, it has no standing record
+// and is not foreign, its order has its final event (final) and this pass's scan did not list it mined. It keeps its
+// dead mark, which counts zero, and nothing of it is reversed. The final event is always written before an output
+// rests, so nothing is decided from a resting mark.
+func (s *Service) resting(v outView, cur store.Mark, marked, listedMined, final bool) bool {
+	return final && marked && cur.Kind == store.MarkDead && !listedMined && !v.Recorded && !v.Foreign
+}
+
+// due reports whether a resting output is read in this pass: it has not been read since its order's final event, or
+// its next read is due, or its order's watch window has ended and it was last read before that.
+func (s *Service) due(o store.Order, k store.TXOKey, now time.Time) bool {
+	p, ok := s.deadPolls[k]
+	if !ok || !p.next.After(now) {
+		return true
+	}
+	end := o.ExpiresAt.Add(store.WatchWindow)
+	return !end.After(now) && p.readAt.Before(end)
+}
+
+// polledDead records a read of an output that rested or could have: one that leaves it dead steps its backoff (20, 40,
+// 80, 160 and 320 seconds at 10-second passes, then deadPollMax); one that leaves it alive forgets it.
+func (s *Service) polledDead(k store.TXOKey, dead bool, now time.Time) {
+	if !dead {
+		delete(s.deadPolls, k)
+		return
+	}
+	p := s.deadPolls[k]
+	p.step = min(p.step+1, 6)
+	p.next, p.readAt = now.Add(min(s.cfg.PollInterval<<p.step, deadPollMax)), now
+	s.deadPolls[k] = p
 }
 
 // crashError is a test hook's abort: it ends the pass at once, as a crash would.
@@ -787,9 +832,6 @@ type orderWork struct {
 	txids [][]trackedOutput
 }
 
-// resting reports whether a watched output is not due in this pass.
-func (s *Service) resting(store.TXO) bool { return false }
-
 // work is the start of step 3: the orders with something to read, in a stable order (the position of each order's
 // oldest watched output in the store's list, then the orders of touched that have only extras), each with its due
 // outputs grouped by transaction. The extras are the outputs that settle could record in this pass and no watched read
@@ -819,7 +861,8 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 	var list []orderWork
 	at := map[string]int{} // order id -> index in list
 	group := map[string]map[string]int{}
-	add := func(o store.Order, x store.TXO, extra bool) {
+	add := func(t trackedOutput) {
+		o, x := t.o, t.x
 		i, ok := at[o.ID]
 		if !ok {
 			i = len(list)
@@ -833,19 +876,64 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 			group[o.ID][x.TxID] = g
 			list[i].txids = append(list[i].txids, nil)
 		}
-		list[i].txids[g] = append(list[i].txids[g], trackedOutput{x: x, o: o, extra: extra})
+		list[i].txids[g] = append(list[i].txids[g], t)
 	}
 	listed := make(map[store.TXOKey]bool, len(watched))
 	hasWatched := map[string]bool{}
-	for _, x := range watched {
+	keys := make([]store.TXOKey, len(watched))
+	for i, x := range watched {
+		keys[i] = store.TXOKey{TxID: x.TxID, Vout: x.Vout}
+	}
+	marks, err := s.st.CurrentMarks(ctx, keys)
+	if err != nil {
+		return nil, s.trackFailed(ctx, "marks", err)
+	}
+	finals := map[string]bool{} // order id -> its final event exists; read once, for the orders with a dead output
+	var late []trackedOutput    // the resting outputs that are due: read after the order's other transactions
+	for i, x := range watched {
 		o, err := s.order(ctx, orders, addrs[x.Address].OrderID)
 		if err != nil {
 			return nil, s.trackFailed(ctx, "order", err)
 		}
-		listed[store.TXOKey{TxID: x.TxID, Vout: x.Vout}] = true
+		k := keys[i]
+		listed[k] = true
 		hasWatched[o.ID] = true
-		if !s.resting(x) {
-			add(o, x, false)
+		t := trackedOutput{x: x, o: o}
+		if cur, marked := marks[k]; marked && cur.Kind == store.MarkDead {
+			final, ok := finals[o.ID]
+			if !ok {
+				// A failed read leaves the output due: it is read as before, and settle reports the failure.
+				ev, err := s.readEvents(ctx, o.ID)
+				if err != nil && ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				final = err == nil && ev.Final
+				finals[o.ID] = final
+			}
+			if final {
+				v, err := s.outputView(ctx, o, x, false)
+				if err != nil && ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				if err == nil {
+					t.dead = !v.Recorded && !v.Foreign
+					if s.resting(v, cur, marked, listedMined[k], final) {
+						if s.due(o, k, now) {
+							late = append(late, t)
+						}
+						continue
+					}
+				}
+			}
+		}
+		add(t)
+	}
+	for _, t := range late {
+		add(t)
+	}
+	for k := range s.deadPolls { // only the watched outputs keep a backoff
+		if !listed[k] {
+			delete(s.deadPolls, k)
 		}
 	}
 	// The order of the list: the orders with watched outputs, then the orders of touched without.
@@ -882,7 +970,7 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 		for _, v := range views {
 			if k := (store.TXOKey{TxID: v.x.TxID, Vout: v.x.Vout}); !listed[k] && v.Marked && v.Kind != store.MarkDead &&
 				!v.Recorded && !v.Foreign {
-				add(o, v.x, true)
+				add(trackedOutput{x: v.x, o: o, extra: true})
 			}
 		}
 	}
@@ -958,6 +1046,17 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 				touched.add(t.o.ID)
 			}
 			refreshed = append(refreshed, t)
+			if t.dead {
+				k := store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}
+				cur, have, err := s.st.CurrentMark(ctx, k)
+				if err != nil { // the output stays due: it is read again in the next pass
+					if err := s.trackFailed(ctx, "mark-read", err); ctx.Err() != nil {
+						return err
+					}
+				} else {
+					s.polledDead(k, have && cur.Kind == store.MarkDead, now)
+				}
+			}
 			if observedOK {
 				seen[store.TXOKey{TxID: t.x.TxID, Vout: t.x.Vout}] = obs
 			}

@@ -358,7 +358,9 @@ while the backlog lasts, and read "Checking payment…" after waiting more than 
 is one `gettransaction` and one `getmempoolentry` a pass per stuck payment, one more `getmempoolinfo`,
 `getmempoolentry` and `gettransaction`, and a `gettxspendingprevout`, in the pass that marks it gone (six calls then; a
 payment the wallet is behind on costs the same each pass until the wallet has caught up), the same two calls a pass for
-one already marked gone, and one scan of the stored payments a pass. There is no calendar cap on the tracking (Ruling
+one already marked gone until its order has its final event, then a read with a backoff (2 × `poll_seconds`, doubling up
+to 10 minutes, at the window's end, and at once when a scan lists it mined; those payments do not count toward the order's
+payment cap), and one scan of the stored payments a pass. There is no calendar cap on the tracking (Ruling
 6.1-3); a fee bump of it inherits its first-seen only inside the window (decision 9). Read in Core 32.1
 (*source*; `docs/rules-onchain.md`, "The watch window",
 has the lines): the watch-only wallet itself resubmits a received unconfirmed transaction to the mempool every 12 to

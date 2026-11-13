@@ -967,7 +967,9 @@ the merchant are in `docs/bitcoind.md`, the `limits` and `onchain` tables of `do
   `getmempoolentry` a pass, shared by its outputs and paced at `poll_rate`, until it is mined `SettledDepth` deep with
   its record, or dead and settled (6.1-O); the pass that marks it dead costs one more `getmempoolinfo`, `getmempoolentry` and
   `gettransaction`, and a `gettxspendingprevout` (six calls in that pass; the same each pass while the wallet is
-  behind); an output already dead costs what a live one costs (two calls). A late
+  behind); an output already dead costs what a live one costs (two calls) until its order has its final event, and then
+  it is read with a backoff (every 20 s at first, doubling, then every 10 minutes; at its window's end; and at once when a
+  scan lists it mined), not counted toward the order's payment cap, and its dead mark is never the ground of an event. A late
   output of a touched past-window order, in the mempool or mined and not recorded, costs the same while that order is
   settled (plan 14: it is read again before it is recorded). A mined output whose ledger record is foreign
   never settles and is polled until it is put right by hand. How long bitcoind keeps a stuck transaction: 6.1-3.
