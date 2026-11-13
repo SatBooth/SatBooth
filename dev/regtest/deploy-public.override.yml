@@ -1,6 +1,7 @@
 # Dev-only override for TestDeployPublic (scripts/qualify.sh): deploy/public/compose.yml runs with its
 # compose.build.yml, this file and deploy-public.env. This file's only change: SatBooth also joins the regtest network
-# (internal), where the hub's relay, the webhook receiver and the qualify-deploy container are, as 172.30.78.41 (its private listener in the phase's
+# (internal), where the hub's relay, the webhook receiver and the qualify-deploy container are, as 172.30.78.41 (its
+# private listener in the phase's
 # satbooth.json). The bundle's own network, its public listener and its one published port stay as shipped.
 services:
   satbooth:

@@ -915,11 +915,12 @@ amd64 and arm64, must produce identical digests, and those must equal the pins o
 after the `release` environment is approved, does the publish job push the images to the three GHCR packages, attest
 them and (in a later job) create a draft release. The workflow checks that the tag is annotated, named like a release
 and at the run's commit; it does not verify the tag's signature, because a check written in the tagged tree would stop
-no one who controls that tree. The controls that decide who can make the workflow publish are two repository
+no one who controls that tree. The controls that decide who can make the workflow publish are repository
 settings, which `docs/releasing.md` ("Before the first release") sets up and reads back. They are required
-configuration, not something the workflow enforces: the `release` environment needs the maintainer's approval, accepts
-deployments from `v*` tags only and cannot be bypassed by administrators; a ruleset on `refs/tags/v*` forbids update
-and deletion without bypass and restricts creation to the repository-admin role. A workflow that names an environment
+configuration, not something the workflow enforces. The `release` environment needs the maintainer's approval, accepts
+deployments from `v*` tags only and cannot be bypassed by administrators. Two rulesets cover `refs/tags/v*`: one
+forbids update and deletion, with no bypass, so a tag can be neither moved nor removed; the other restricts creation to
+the repository-admin role. A workflow that names an environment
 that does not exist gets one created without protection, so the settings must exist before the first release. The
 publish job pushes the pinned digests and tags them with the version; it fails when a registry tag already holds
 another digest.
@@ -940,12 +941,12 @@ without the release signing key cannot make one that verifies. Anyone with write
 releases through a workflow, so the text of a release (its image refs and commands) is not authoritative. The signed
 tag's tree is.
 
-What is trusted. A rebuild checks the hosted runners and the release environment: a runner that built something else
-produces digests that differ from the operator's. It does not check the builder images. The pinned `moby/buildkit` and
-`golang` images are trusted alike by the release build and by every rebuild, which run the same pinned builders; a
-compromise of either, at the pinned digest, would give the same wrong digests in both. The pins are by digest and are
-reviewed when they change. The draft release is published by the maintainer by hand, only after the `smoke` job (both
-architectures) and an anonymous pull of the three packages have passed (`docs/releasing.md`).
+What is trusted. A rebuild checks the hosted runners and the build environment of the release run: a runner that built
+something else produces digests that differ from the operator's. It does not check the builder images. The pinned
+`moby/buildkit` and `golang` images are trusted alike by the release build and by every rebuild, which run the same
+pinned builders; a compromise of either, at the pinned digest, would give the same wrong digests in both. The pins are
+by digest and are reviewed when they change. The draft release is published by the maintainer by hand, only after the
+`smoke` job (both architectures) and an anonymous pull of the three packages have passed (`docs/releasing.md`).
 
 ## 7. Public DDoS
 

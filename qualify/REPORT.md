@@ -850,7 +850,8 @@ and 3 (first start). Both compose files run with their `compose.build.yml`, whic
   19101, and the bundle's network on `192.0.2.0/24` with SatBooth at `192.0.2.40`, because the regtest network already
   holds `172.30.78.0/24` (the generated file's default network). `SATBOOTH_ETC` and `SATBOOTH_BACKUPS` are the
   directories of stage 1, passed from `qualify.sh`'s environment. The generated `compose.env` is checked instead: it
-  exists, is mode 0600, and `docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file <it> config -q` passes.
+  exists, is mode 0600, and `docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file
+  <it> config -q` passes.
 - `deploy/public/compose.build.yml`, which builds the `satbooth` image from this tree (`satbooth:local`) instead of
   pulling the pinned release image: the bundle's first change.
 - `dev/regtest/deploy-public.override.yml`, the second change: SatBooth also joins the regtest network (internal) as

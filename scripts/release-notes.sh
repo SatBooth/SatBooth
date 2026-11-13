@@ -53,8 +53,10 @@ done <<< "$shown"
 
 cat <<'TEXT'
 
-By rebuild, which needs Docker with buildx. The digests it prints must equal the pinned ones:
+By rebuild, which needs Docker with buildx. The digests it prints must equal the pinned ones.
+It writes large files, so the output directory is outside the checkout:
 
-    scripts/release-build.sh out
-    scripts/release-pins.sh check out/digests.txt
+    out=$(mktemp -d)
+    scripts/release-build.sh "$out"
+    scripts/release-pins.sh check "$out/digests.txt"
 TEXT

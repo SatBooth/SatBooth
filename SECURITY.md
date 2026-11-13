@@ -31,7 +31,7 @@ fingerprint with the one above, and verify the tag:
 
 ```sh
 curl -fsSL https://github.com/fishcakeday.gpg | gpg --import
-gpg --fingerprint 5BEB DE79 EDDE D015 7398 1D4F 70C6 001B 0A49 776E
+gpg --fingerprint '5BEB DE79 EDDE D015 7398 1D4F 70C6 001B 0A49 776E'
 git tag -v <tag>
 ```
 

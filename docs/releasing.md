@@ -109,9 +109,10 @@ organisation owner does this once.
    the packages are public, a later release needs this check only to confirm it.
 
 6. **Publish.** Publishing is the maintainer's step and comes last: only after the `smoke` job is green on both
-   architectures and after the anonymous check of step 5. Edit the draft's prose (the placeholder under "Changes"), then
-   publish it. The release notes already hold the three pinned refs and the verification commands. A release is
-   immutable once published, so what the draft says must be right before it is.
+   architectures and after the anonymous check of step 5. Edit the draft's prose (the line "Changes: (to be written
+   before publishing)"), then publish it. The release notes already hold the three pinned refs and the verification
+   commands. Once the release is published, GitHub locks its tag and assets; the title and notes stay editable, so they
+   are not authoritative: the signed tag's tree is.
 
 7. **The next release.** After an rc, the next rc or the final release is another prep pull request that changes the
    version only. When no build input changed (the Go sources, `go.mod`, `vendor/`, the files `checkout` embeds,
@@ -124,7 +125,7 @@ organisation owner does this once.
 If `agree` fails, the pins and the build disagree: nothing is pushed. If `publish` fails before the push, nothing is
 pushed. If the run is refused or fails after some images were pushed, the digests in the registry are the pinned ones
 and `release-push.sh` leaves a tag that holds another digest as a failure. In every case the answer is the next version:
-fix the cause in a pull request and tag the next version. Never move or delete a tag: the ruleset forbids it, and an
+fix the cause in a pull request, then tag that version. Never move or delete a tag: the tag rulesets forbid it, and an
 operator who verified the old tag must keep seeing the same commit under it. A tag that was pushed and did not publish
 stays, unreleased.
 
