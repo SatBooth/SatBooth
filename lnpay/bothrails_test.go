@@ -3,6 +3,7 @@ package lnpay
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -329,5 +330,120 @@ func TestSettleOrderHealCallsTheHookForMonero(t *testing.T) {
 	}
 	if h.count() != 1 || !h.allFor(o) || e.eventCount(store.EventPaid, o.ID) != 1 || e.eventCount(store.EventExpired, o.ID) != 0 {
 		t.Fatalf("hook calls %d, order.paid %d", h.count(), e.eventCount(store.EventPaid, o.ID))
+	}
+}
+
+// A payment is recorded only while the shared settle lock is free: the record waits for a settle in progress.
+func TestRecordWaitsForTheSettleLock(t *testing.T) {
+	e := newEnv(t)
+	mu := &sync.Mutex{}
+	e.svc.SetSettleLock(mu)
+	o := e.order("a", 3_000_000)
+	inv := e.mustPay(o)
+	e.w.settle(inv.PaymentHash, inv.AmountMsat)
+	mu.Lock()
+	done := make(chan error, 1)
+	go func() { done <- e.svc.reconcile(context.Background(), inv) }()
+	time.Sleep(100 * time.Millisecond)
+	if e.transfers(o) != 0 {
+		t.Fatal("recorded under a held settle lock")
+	}
+	mu.Unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if e.transfers(o) != 1 || e.eventCount(store.EventPaid, o.ID) != 1 {
+		t.Fatal("not recorded once")
+	}
+}
+
+// Status and MarkKnown read lnpay's own lock while a holder of the settle lock calls them, as a rail's settle does,
+// and reconcile records under the settle lock: no lock-order cycle, and every order is recorded once.
+func TestRecordUnderSettleLockWithConcurrentReads(t *testing.T) {
+	e := newEnv(t)
+	mu := &sync.Mutex{}
+	e.svc.SetSettleLock(mu)
+	const n = 20
+	orders := make([]store.Order, n)
+	invs := make([]store.Invoice, n)
+	for i := range orders {
+		orders[i] = e.order(fmt.Sprintf("acct-%d", i), 3_000_000)
+		invs[i] = e.mustPay(orders[i])
+		e.w.settle(invs[i].PaymentHash, invs[i].AmountMsat)
+	}
+	ctx := context.Background()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	fail := make(chan error, 64)
+	for g := 0; g < 3; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				for _, o := range orders {
+					if _, err := e.svc.Status(ctx, o.ID); err != nil {
+						fail <- err
+						return
+					}
+				}
+			}
+		}()
+	}
+	for g := 0; g < 3; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				mu.Lock()
+				for _, o := range orders {
+					if _, err := e.svc.Status(ctx, o.ID); err != nil {
+						mu.Unlock()
+						fail <- err
+						return
+					}
+				}
+				e.svc.MarkKnown("acct-0")
+				mu.Unlock()
+			}
+		}()
+	}
+	for g := 0; g < 2; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, inv := range invs {
+				if err := e.svc.reconcile(ctx, inv); err != nil {
+					fail <- err
+					return
+				}
+			}
+		}()
+	}
+	finished := make(chan struct{})
+	go func() { time.Sleep(2 * time.Second); close(stop); wg.Wait(); close(finished) }()
+	select {
+	case <-finished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("deadlock between the settle lock and lnpay's lock")
+	}
+	select {
+	case err := <-fail:
+		t.Fatal(err)
+	default:
+	}
+	for _, o := range orders {
+		if e.transfers(o) != 1 {
+			t.Fatalf("order %s: %d transfers", o.ID, e.transfers(o))
+		}
 	}
 }

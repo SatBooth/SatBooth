@@ -44,7 +44,8 @@ window's end for an on-time payment of the whole amount still unconfirmed then; 
 (so an order that got `order.expired` and whose on-time payment came back into the mempool reads `underpaid` past the
 window with no second final event). `order.reverted` and `order.paid_again` follow the order's combined state: a reorg under
 an order that is still paid by Lightning, by its other payments or by its other watched rail sends no event (it logs
-an `ALERT`). There is never a second `order.paid`.
+an `ALERT`). A Lightning payment recorded while another rail's payment of the order is being reversed comes after that
+reversal, and the order then gets `order.paid_again`. There is never a second `order.paid`.
 
 **`order.paid` can follow `order.expired`** by up to 24 hours on Lightning (about 48 hours if SatBooth restarted in
 between): Lightning nodes accept a payment for a while after an invoice's expiry, so a customer can pay an invoice

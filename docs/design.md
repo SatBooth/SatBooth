@@ -652,7 +652,8 @@ are marked as in §2.1: *source* or *observed*
   name was inferred, not read.
 - K. **`order.reverted` and `order.paid_again` follow the order's combined state**: they go out only when
   the order, both rails together, stops or starts reading paid. A reorg under an order paid by Lightning sends no
-  event; the reorg `ALERT` is still logged.
+  event; the reorg `ALERT` is still logged. Lightning's payment record takes the same lock as the watched rails'
+  settles, so a payment is recorded either before a settle reads it or after that settle's reversals and events.
 - L. **An on-time payment first seen after an outage reads late.** First-seen is SatBooth's clock, so an
   outage of bitcoind or SatBooth that spans the expiry makes it `late`, and it waits for a person (threat model §3).
 - M. **Events can arrive out of order**; `docs/webhooks.md` tells the merchant to re-read the order on every event.

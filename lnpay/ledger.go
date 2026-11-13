@@ -87,7 +87,10 @@ func (s *Service) recordPaid(ctx context.Context, inv store.Invoice, amountMsat 
 	if err != nil {
 		return false, err
 	}
-	r, err := s.lg.CreateTransfer(ctx, ledger.Transfer{
+	// The settle lock is held for the write only: Status reads "paid" from this transfer, so a watched rail's settle,
+	// which holds the same lock, either reads it before it exists or ends before it is written. No other lock is held
+	// here, and nothing under the settle lock calls recordPaid.
+	r, err := s.createPaidTransfer(ctx, ledger.Transfer{
 		ID: PaidTransferID(inv.PaymentHash), DebitAccountID: LightningHub, CreditAccountID: MerchantLightning,
 		Amount: ledger.U128From64(uint64(amountMsat)), UserData128: ud, Ledger: LedgerMsat, Code: codePaid,
 	})
@@ -107,6 +110,15 @@ func (s *Service) recordPaid(ctx context.Context, inv store.Invoice, amountMsat 
 		return false, nil
 	}
 	return false, fmt.Errorf("lnpay: ledger refused the payment record: %s", r)
+}
+
+// createPaidTransfer writes the paid transfer under the settle lock, when one is set.
+func (s *Service) createPaidTransfer(ctx context.Context, t ledger.Transfer) (ledger.CreateTransferResult, error) {
+	if s.settleMu != nil {
+		s.settleMu.Lock()
+		defer s.settleMu.Unlock()
+	}
+	return s.lg.CreateTransfer(ctx, t)
 }
 
 // paidTransfer returns the transfer recording the invoice's payment, if there is one. Only Lightning

@@ -769,15 +769,10 @@ func Run(ctx context.Context, cfg *Config, opts ...Option) (err error) {
 			return fail("monero", "cannot start the Monero rail")
 		}
 	}
-	// Each rail reads the other beside Lightning. Set only when both exist: a nil *Service in the interface would not
-	// be == nil.
-	// They share one settle mutex (ruling 8-A1), so neither settles an order while the other's settle changes its paid
+	// Each rail reads the other beside Lightning, and every watched rail and lnpay share one settle mutex (ruling
+	// 8-A1): no rail settles an order while the other's settle, or Lightning's record of a payment, changes its paid
 	// state.
-	if oc != nil && xm != nil {
-		settleMu := &sync.Mutex{}
-		xm.SetPeer(oc, settleMu)
-		oc.SetPeer(xm, settleMu)
-	}
+	shareSettleLock(svc, oc, xm)
 	// Lightning paying second: lnpay's completion tells every watched rail, each of which logs the both-rails ALERT for
 	// an order it has a payment of. Every rail is told even when one fails; the first error goes back to lnpay, which
 	// completes the payment again (each ALERT is logged once per order per process). Set before svc.Run and the servers
@@ -1121,4 +1116,28 @@ func dialReason(err error) string {
 		return "wallet_closed"
 	}
 	return "wallet_other"
+}
+
+// shareSettleLock gives one settle mutex to every watched rail present and to lnpay, and makes each rail the other's
+// peer when both exist. It returns the mutex, or nil, giving nothing to anyone, when there is no watched rail. It runs
+// before lnpay's reconciler and the rails' passes start.
+func shareSettleLock(ln *lnpay.Service, oc *onchain.Service, xm *monero.Service) *sync.Mutex {
+	if oc == nil && xm == nil {
+		return nil
+	}
+	mu := &sync.Mutex{}
+	// A nil *Service in the interface would not be == nil, so the peer is passed only when it exists.
+	switch {
+	case oc != nil && xm != nil:
+		xm.SetPeer(oc, mu)
+		oc.SetPeer(xm, mu)
+	case oc != nil:
+		oc.SetPeer(nil, mu)
+	default:
+		xm.SetPeer(nil, mu)
+	}
+	if ln != nil {
+		ln.SetSettleLock(mu)
+	}
+	return mu
 }

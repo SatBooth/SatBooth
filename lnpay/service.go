@@ -180,9 +180,10 @@ type Service struct {
 	now func() time.Time
 	log *slog.Logger
 
-	hook    func(point string) error // tests only
-	onPaid  OnLightningPaid          // SetOnLightningPaid; set before Run and Pay, read without the lock
-	running atomic.Bool
+	hook     func(point string) error // tests only
+	onPaid   OnLightningPaid          // SetOnLightningPaid; set before Run and Pay, read without the lock
+	settleMu sync.Locker              // SetSettleLock; set before Run and Pay, read without the lock
+	running  atomic.Bool
 	// startedAt is when New ran: the 24 h deadline of an invoice is measured from the later of its
 	// expiry and this, so a long downtime never counts against an invoice.
 	startedAt time.Time
@@ -221,6 +222,10 @@ type OnLightningPaid func(ctx context.Context, o store.Order) error
 // SetOnLightningPaid sets the hook completePaid calls for an order with a watched rail (nil clears it). Call it before Run and before
 // the first Pay: it is read without a lock.
 func (s *Service) SetOnLightningPaid(f OnLightningPaid) { s.onPaid = f }
+
+// SetSettleLock sets the mutex the watched rails hold for each settle; recordPaid holds it while it writes the paid
+// transfer. Call it before Run and Pay: it is read without a lock (nil: none).
+func (s *Service) SetSettleLock(mu sync.Locker) { s.settleMu = mu }
 
 // New checks cfg, creates the two fixed ledger accounts and rebuilds the open-invoice counts from
 // the store and the ledger. It starts nothing: call Run for the reconciler.

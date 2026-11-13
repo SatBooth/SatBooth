@@ -464,8 +464,10 @@ access to wallet-rpc's private link.
 then writes `order.paid_again` or `order.reverted` from it; both rails hold one shared lock for the whole of each
 settle, so the other rail's state cannot change in between (its own settle is the only writer). Without it, a
 reversal on one rail landing inside the other's settle gave an `order.paid_again` that no payment backed, or, when
-both rails' payments reverted together, no `order.reverted` at all. Lightning needs no such lock: it writes only
-`order.paid`, the same idempotent event, and a Lightning payment never reverts. A status read (the API, the checkout
+both rails' payments reverted together, no `order.reverted` at all. A Lightning payment is written under the same
+lock: a settle that read Lightning unpaid writes its reversal and events first, and one that starts
+later reads it paid. A recording waits for at most one settle in progress, and the hub lookup is made before the lock.
+A status read (the API, the checkout
 page) takes the same lock (ruling R1): a settle used to record a new payment before it reversed an old one, and a read
 between the two summed both, so an order whose reorged-out payment was replaced by another could read `paid` for a
 moment with no `order.paid` behind it. Since ruling S1 a settle writes all its ledger records (the new payments'

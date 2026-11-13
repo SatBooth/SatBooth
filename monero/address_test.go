@@ -224,6 +224,10 @@ type env struct {
 	svc *Service
 	dir string
 	mod func(*Config) // changes the configuration of the services made after it is set
+	// lnReal, when set, is the Lightning the services are built over instead of the stub; wire, when set, runs on each
+	// new service (a test wires the shared settle lock there).
+	lnReal rail.Lightning
+	wire   func(*Service)
 }
 
 func newEnv(t *testing.T) *env {
@@ -260,9 +264,16 @@ func (e *env) config() Config {
 
 func (e *env) newService() *Service {
 	e.t.Helper()
-	s, err := New(e.config(), e.st, e.lg, e.rpc, e.ln, e.clk.Now, slog.New(slog.NewTextHandler(e.log, nil)))
+	var ln rail.Lightning = e.ln
+	if e.lnReal != nil {
+		ln = e.lnReal
+	}
+	s, err := New(e.config(), e.st, e.lg, e.rpc, ln, e.clk.Now, slog.New(slog.NewTextHandler(e.log, nil)))
 	if err != nil {
 		e.t.Fatal(err)
+	}
+	if e.wire != nil {
+		e.wire(s)
 	}
 	return s
 }

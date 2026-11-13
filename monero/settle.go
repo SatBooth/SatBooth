@@ -183,10 +183,13 @@ func (s *Service) peerSeqs(ctx context.Context, o store.Order) ([]int, error) {
 //
 // The whole call holds the settle mutex (ruling 8-A1), which the two watched rails share: the peer's paid state, read
 // below, changes only in the peer's own settle, so it cannot change between that read and this call's events (a false
-// order.paid_again, or two reversals each stamped 0 and no order.reverted). Lock order: the settle mutex is taken
-// first, here and in Rail (ruling R1: a status read waits for the settle's end); under it settle takes only leaf
-// locks (mu, bothMu, the peer's mu and staleMu in its View, lnpay's mu in Status), none of which is held while the
-// settle mutex is taken, and it makes no RPC call. The peer is read through View and RevertedSeqs, which do not take
+// order.paid_again, or two reversals each stamped 0 and no order.reverted). lnpay takes the same mutex to write its
+// paid transfer, which is what its Status reads as paid: a Lightning payment is recorded either before a settle reads
+// it or after that settle's reversals and events, never between. Lock order: the settle mutex is taken first, here, in
+// Rail (ruling R1: a status read waits for the settle's end) and in lnpay's record of a payment, which holds no other
+// lock when it takes it, and which no holder of the settle mutex calls (lnpay's hook into the rails, LightningPaid,
+// takes no settle mutex); under it settle takes only leaf locks (mu, bothMu, the peer's mu and staleMu in its View,
+// lnpay's mu in Status and MarkKnown), none of which is held while the settle mutex is taken, and it makes no RPC call. The peer is read through View and RevertedSeqs, which do not take
 // the settle mutex (this call holds it) and make no RPC call.
 func (s *Service) settle(ctx context.Context, o store.Order, unknown map[store.PaymentKey]bool) error {
 	mu := s.settleLock()
@@ -222,6 +225,9 @@ func (s *Service) settleLocked(ctx context.Context, o store.Order, unknown map[s
 		if ln, err = s.ln.Status(ctx, o.ID); err != nil {
 			return err
 		}
+	}
+	if err := s.at("settle:after-status"); err != nil {
+		return err
 	}
 	lnPaid := ln.State == lnpay.StatePaid
 	peer, err := s.peerState(ctx, o)
