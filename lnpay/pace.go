@@ -8,20 +8,26 @@ import (
 	"time"
 )
 
-// lookupPace spaces the wallet lookups of the reconciler and of a press's preflight: PollRate a second in total. One
-// preflight at a time holds the preflight place, so the reconciler keeps at least every other slot.
+// lookupPace spaces the wallet lookups of the reconciler and of a press's preflight: PollRate a second in total, and
+// no slot is saved up while it is idle. One preflight at a time holds the preflight place, and a preflight never takes
+// two slots in a row: when the previous slot was a preflight's, the slot after it is left for the reconciler. So the
+// reconciler keeps at least every other slot, however long its steps take; a slot it is too late to claim is lost, not
+// given to a preflight.
 //
 // Its mutex is a leaf: nothing is called and no other lock is taken while it is held, and it is never held while the
 // settle mutex or the service mutex is taken.
 type lookupPace struct {
-	mu    sync.Mutex
-	every time.Duration
-	next  time.Time
-	busy  bool
-	queue []chan struct{}
-	now   func() time.Time                                 // time.Now (test seam)
-	sleep func(ctx context.Context, d time.Duration) error // a timer that ends with ctx (test seam)
-	after func(d time.Duration) <-chan time.Time           // time.After (test seam)
+	mu      sync.Mutex
+	every   time.Duration
+	next    time.Time // the first slot not yet handed out
+	lastP   time.Time // the latest slot a preflight took
+	hole    time.Time // the slot left for the reconciler after a preflight's (zero: none)
+	busy    bool
+	queue   []chan struct{}
+	now     func() time.Time                                 // time.Now (test seam)
+	sleep   func(ctx context.Context, d time.Duration) error // a timer that ends with ctx (test seam)
+	after   func(d time.Duration) <-chan time.Time           // time.After (test seam)
+	granted func(preflight bool, at time.Time)               // called with each slot handed out (test seam)
 }
 
 // errPaceBusy: a preflight found no lookup slot within its bound.
@@ -45,21 +51,57 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// slot hands out the next slot: the later of now and the end of the previous one. The caller sleeps until it. With
-// limit > 0 it hands out none (ok false) when the slot lies more than limit after from.
-func (p *lookupPace) slot(from time.Time, limit time.Duration) (now, at time.Time, ok bool) {
+// slotReconciler hands out the reconciler's slot: the slot left for it, if it is not yet past, else the next one.
+func (p *lookupPace) slotReconciler() (now, at time.Time) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	now = p.now()
+	if h := p.hole; !h.IsZero() && !h.Before(now) {
+		p.hole = time.Time{}
+		at = h
+	} else {
+		p.hole = time.Time{}
+		at = now
+		if p.next.After(at) {
+			at = p.next
+		}
+		p.next = at.Add(p.every)
+	}
+	p.mu.Unlock()
+	p.report(false, at)
+	return now, at
+}
+
+// slotPreflight hands out a preflight's slot: the next one, or the one after it when the previous went to a preflight
+// too. It hands out none (ok false) when that slot lies more than limit after from.
+func (p *lookupPace) slotPreflight(from time.Time, limit time.Duration) (now, at time.Time, ok bool) {
+	p.mu.Lock()
 	now = p.now()
 	at = now
 	if p.next.After(at) {
 		at = p.next
 	}
-	if limit > 0 && at.Sub(from) > limit {
+	free := at
+	if !p.lastP.IsZero() && at.Equal(p.lastP.Add(p.every)) {
+		at = at.Add(p.every)
+	}
+	if at.Sub(from) > limit {
+		p.mu.Unlock()
 		return now, at, false
 	}
+	if at.After(free) {
+		p.hole = free
+	}
+	p.lastP = at
 	p.next = at.Add(p.every)
+	p.mu.Unlock()
+	p.report(true, at)
 	return now, at, true
+}
+
+func (p *lookupPace) report(preflight bool, at time.Time) {
+	if p.granted != nil {
+		p.granted(preflight, at)
+	}
 }
 
 func (p *lookupPace) sleepTo(ctx context.Context, now, at time.Time) error {
@@ -71,7 +113,7 @@ func (p *lookupPace) sleepTo(ctx context.Context, now, at time.Time) error {
 
 // wait returns when the reconciler's next slot comes, or with ctx's error.
 func (p *lookupPace) wait(ctx context.Context) error {
-	now, at, _ := p.slot(time.Time{}, 0)
+	now, at := p.slotReconciler()
 	return p.sleepTo(ctx, now, at)
 }
 
@@ -86,7 +128,7 @@ func (p *lookupPace) preflight(ctx context.Context, bound time.Duration) error {
 		return err
 	}
 	defer p.release()
-	now, at, ok := p.slot(start, bound)
+	now, at, ok := p.slotPreflight(start, bound)
 	if !ok {
 		return errPaceBusy
 	}

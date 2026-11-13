@@ -86,8 +86,9 @@ const (
 	watchFloor  = 50               // watched invoices a round may carry when fewer invoices are open
 	lookupBound = 15 * time.Second // bound of one lookup in the reconciler and in Pay
 	// flightBound bounds a whole Pay flight, from the first press: the lookups of the order's expired
-	// invoices (a lookup slot and the lookup, lookupBound each), the attempt, MakeInvoice (also bounded by the nwc client's own
-	// timeout) and the store writes.
+	// invoices (each costs up to lookupBound of waiting for a slot and up to lookupBound for the lookup itself), the
+	// attempt, MakeInvoice (also bounded by the nwc client's own timeout) and the store writes. A flight that
+	// reaches flightBound fails safe: no second invoice is made.
 	flightBound = 3 * time.Minute
 )
 
