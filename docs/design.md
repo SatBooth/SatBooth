@@ -2104,9 +2104,10 @@ the threat model's §9 ("The setup command (plan 12)") carries the security rule
       through".
 13. **The tools image and the wrapper.** The `satbooth-tools` target of `deploy/image/Dockerfile` holds
     `/satbooth-setup` and `/satbooth-pair` and nothing else (no entrypoint, no CA bundle). `deploy/setup.sh <dir> <host>
-    <stage> [options]` pulls it by the `tag@digest` it pins (with `SATBOOTH_BUILD=1` it builds `satbooth-tools:local`
-    from this repository instead, on every run: the Go build is offline, the modules being vendored, but the first build
-    needs Docker to pull the pinned base image) and runs the one stage
+    <stage> [options]` pulls it by the `tag@digest` it pins, when that image is not already local (with
+    `SATBOOTH_BUILD=1` it builds `satbooth-tools:local` from this repository instead, on every run: the Go build is
+    offline, the modules being vendored, but the first build needs Docker to pull the pinned base image) and runs
+    the one stage
     in a container with `--network none`, `--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges` and the
     calling user's numeric id, mounting only `<dir>` (read-write, as `/work`) and each file named by `-answers`,
     `-handoff` or `-wallet-rpc-pass` (read-only, at a fixed path). It creates `<dir>` with mode 0700 when it is missing,

@@ -137,10 +137,10 @@ If `agree` fails, the pins and the build disagree: nothing is pushed. If the app
 reject the waiting deployment, so that it cannot be approved later.
 
 A failure that is not a disagreement (a network error, a runner that stopped, a failed call to the registry or to the
-attestation service) is retried on the same run with "Re-run failed jobs"; `publish` asks for the approval again. It is
-safe to repeat: it pushes the same digests, leaves a registry tag that already holds the pinned digest, and fails on one
-that holds another. `draft` runs only after `smoke` passed on both architectures, and leaves an existing release as it
-is.
+attestation service) is retried on the same run with "Re-run failed jobs"; `publish`, when it is one of them, asks for
+the approval again. It is safe to repeat: it pushes the same digests, leaves a registry tag that already holds the
+pinned digest, and fails on one that holds another. `draft` runs only after `smoke` passed on both architectures, and
+leaves an existing release as it is.
 
 When the cause is in the tagged tree (a wrong pin, an error in a script or in the workflow, an image that fails
 `smoke`), the answer is the next version: fix the cause in a pull request, then tag that version. Never move or delete

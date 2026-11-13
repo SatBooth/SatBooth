@@ -17,14 +17,16 @@ The other scripts:
 | `scripts/fuzz.sh [seconds]` | runs every `Fuzz*` target in turn (default 30 s each) | no |
 | `scripts/image-check.sh <image> <allowed file>...` | lists every entry in every layer of a built release image and fails on any file not named | no |
 | `scripts/image-run-test.sh <satbooth image> <relay image> <tools image>` | runs each release image as it ships (read-only root, no capabilities, user 65532) with a missing configuration (the tools image: `/satbooth-setup` with no arguments), and checks the refusal, the user and the environment | no |
-| `scripts/release-*` | the release pipeline: `release-build.sh` builds the three images reproducibly, `release-pins.sh` reads and rewrites their pins in the bundles, `release-push.sh`, `release-notes.sh` and `release-smoke.sh` publish, describe and check a release (`docs/releasing.md`); `check.sh` runs `release-pins_test.sh`, `release-notes_test.sh` and `setup-image_test.sh` | the build and the push: yes |
+| `scripts/release-*` | the release pipeline: `release-build.sh` builds the three images reproducibly, `release-pins.sh` reads and rewrites their pins in the bundles, `release-push.sh`, `release-notes.sh` and `release-smoke.sh` publish, describe and check a release (`docs/releasing.md`); `check.sh` runs `release-pins_test.sh`, `release-pins_prop_test.sh` (seeded), `release-notes_test.sh`, `release-push_test.sh` (a throwaway registry in Docker) and `setup-image_test.sh` | the build and the push: yes |
 | `scripts/volume-init-test.sh` | runs each bundle's `volume-init` twice on directories laid out like an operator's and checks the owners and modes (Docker; on Linux, where a bind mount keeps the host's owner) | to pull the pinned images |
 
 CI (`.github/workflows/check.yml`) runs the first four; `.github/workflows/image.yml` builds all three release images
-(`deploy/README.md`, "Build and check") and runs the last three. `scripts/check.sh` also checks both Compose bundles
-with `docker compose config` when Compose is installed (CI has it). `check.sh` also runs the three release tests, and a
-pull request that touches the build inputs gets a `release` run, whose pin comparison is advisory unless the pull
-request changes the pins.
+(`deploy/README.md`, "Build and check") and runs `scripts/image-check.sh`, `scripts/image-run-test.sh` and
+`scripts/volume-init-test.sh`. `scripts/check.sh` also checks both Compose bundles with `docker compose config` when
+Compose is installed (CI has it). `check.sh` also runs the release tests (`release-pins_test.sh`,
+`release-pins_prop_test.sh`, `release-notes_test.sh` and `release-push_test.sh`) and `setup-image_test.sh`, and a pull
+request that touches the build inputs gets a `release` run, whose pin comparison is advisory unless the pull request
+changes the pins.
 
 **The rate providers.** The offline tests parse recorded answers of Kraken (BTC and XMR), Coinbase, Yadio and
 Bitfinex in `rates/testdata/` (Kraken's trimmed to its seven BTC pairs and its two XMR pairs, Coinbase's to those seven

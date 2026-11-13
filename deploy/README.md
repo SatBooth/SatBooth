@@ -19,9 +19,10 @@ overwrites a file, and it never prints a secret, a descriptor or a Monero addres
 by hand, as the tables below describe. `qualify/REPORT.md` ("Deployment bundles") records the bundles started from the
 setup command's output.
 
-`deploy/setup.sh` pulls the pinned release tools image and runs one stage of the command in it. With `SATBOOTH_BUILD=1`
-in the environment it builds that image from this repository on every run instead (the Go build is offline, since the
-modules are vendored, but the first build needs Docker to pull the pinned base image).
+`deploy/setup.sh` runs one stage of the command in the pinned release tools image, which it pulls only when that digest
+is not already on the machine. With `SATBOOTH_BUILD=1` in the environment it builds that image from this repository on
+every run instead (the Go build is offline, since the modules are vendored, but the first build needs Docker to pull the
+pinned base image), and the start commands the stages print then name each host's `compose.build.yml`.
 The container the stage runs in has no network, a read-only root, no capabilities and only the setup directory (and the
 files you name) visible. Stages run in a fixed order, two on each host, and each refuses to run out of turn.
 
@@ -516,7 +517,8 @@ print these commands with the refs filled in, but the signed tag's tree is autho
 
 To run images you built yourself, not the release images, build them from this checkout. For the setup command, set
 `SATBOOTH_BUILD=1` in the environment of `deploy/setup.sh`: it builds the tools image on every run instead of pulling
-it. For each bundle, add that host's `compose.build.yml` after `compose.yml`:
+it, and the start commands the stages print include `compose.build.yml`. For each bundle, add that host's
+`compose.build.yml` after `compose.yml`:
 
 ```sh
 docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file <your env file> up -d --build
