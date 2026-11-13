@@ -11,7 +11,7 @@
 name: satbooth-public
 
 x-satbooth: &satbooth
-  image: ghcr.io/satbooth/satbooth:v0.1.0-rc.1@sha256:71570c4f5efa27eb27601478e666a12d971d1a1ea1b5e724ac972e80c2e5f8a2
+  image: ghcr.io/satbooth/satbooth:v0.1.0-rc.1@sha256:91ea5e6988a5ca597407069cd137b03f017a4fcde4e223fd499bf2323361e535
   user: "65532:65532"
   read_only: true
   cap_drop: [ALL]
