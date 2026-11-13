@@ -517,8 +517,9 @@ print these commands with the refs filled in, but the signed tag's tree is autho
 
 To run images you built yourself, not the release images, build them from this checkout. For the setup command, set
 `SATBOOTH_BUILD=1` in the environment of `deploy/setup.sh`: it builds the tools image on every run instead of pulling
-it, and the start commands the stages print include `compose.build.yml`. For each bundle, add that host's
-`compose.build.yml` after `compose.yml`:
+it, and the start commands the stages print include `compose.build.yml`. Each run prints the start commands for its own
+mode and the setup directory does not remember it, so use the same `SATBOOTH_BUILD` setting for every stage of a host.
+For each bundle, add that host's `compose.build.yml` after `compose.yml`:
 
 ```sh
 docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file <your env file> up -d --build

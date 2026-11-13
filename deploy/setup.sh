@@ -6,7 +6,8 @@
 # <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass, read-only) visible. <dir> is created with mode
 # 0700 if it is missing; an existing directory is left as it is. A symbolic link as <dir> is refused.
 # -dir and -host-dir are set here, never taken from the caller. With SATBOOTH_BUILD=1 the wrapper also adds
-# -source-build, so the start commands the report prints name the compose.build.yml of the host. Options are passed through unchanged, in order.
+# -source-build, so the start commands the report prints name the compose.build.yml of the host. Options are passed
+# through unchanged, in order.
 # The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit
 # code is the command's (0 done, 1 refused or failed, 2 usage).
 set -euo pipefail
