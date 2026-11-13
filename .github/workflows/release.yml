@@ -1,6 +1,6 @@
 name: release
 
-# A signed tag v<major>.<minor>.<patch>[-rc.<n>] builds the three release images on an amd64 and an arm64 runner,
+# A tag v<major>.<minor>.<patch>[-rc.<n>] (the maintainer signs it; operators verify it with `git tag -v`) builds the three release images on an amd64 and an arm64 runner,
 # requires both runners and the pins of the deploy bundles to agree on every digest, and, after the `release`
 # environment is approved, pushes the images to GHCR, attests them and drafts a release. A run by hand (workflow
 # dispatch) and a pull request that touches the build do everything up to the agreement and push nothing.
@@ -20,13 +20,20 @@ on:
       - .dockerignore
       - deploy/**
       - scripts/release-*
+      - scripts/image-check.sh
+      - scripts/image-run-test.sh
       - .github/workflows/release.yml
 
 permissions:
   contents: read
 
+# Every run block runs with -e and pipefail.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 # These jobs always run on GitHub's hosted runners.
@@ -132,8 +139,13 @@ jobs:
               exit 1
               ;;
           esac
+          # The pins must be well formed and the comparison must produce a line for each image, whatever the event;
+          # only a difference between a digest and its pin is advisory.
+          scripts/release-pins.sh check-format
           status=0
           result=$(scripts/release-pins.sh check "$digests" ${tag:+"$tag"}) || status=$?
+          lines=$(grep -cE '^satbooth(-relay|-tools)? (match|pinned )' <<< "$result" || true)
+          [ "$lines" -eq 3 ] || { echo "the comparison failed: $result" >&2; exit 1; }
           {
             echo '### Built digests and pins'
             echo
@@ -156,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
@@ -164,22 +176,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Require the signed tag object, not a lightweight tag
+      - name: Require an annotated tag at this run's commit
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
           [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] ||
             { echo "not a release tag like v1.2.3 or v1.2.3-rc.1" >&2; exit 1; }
           if [ "$(git cat-file -t "refs/tags/$TAG" 2> /dev/null || true)" != tag ]; then
-            # The checkout keeps the commit only. Fetch the tag object, with the token in the environment of this
-            # one command: it is neither stored in the repository nor in an argument.
-            header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
-            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0=$header \
-              git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            # The checkout keeps the commit only; the repository is public, so the tag object needs no token.
+            git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
           fi
           [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || { echo "$TAG is not an annotated tag" >&2; exit 1; }
+          [ "$(git for-each-ref --format='%(tag)' "refs/tags/$TAG")" = "$TAG" ] ||
+            { echo "the tag object is not named $TAG" >&2; exit 1; }
           [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$SHA" ] ||
             { echo "$TAG does not point at the commit of this run" >&2; exit 1; }
       - name: Rebuild the images and check them against the pins
@@ -191,10 +201,11 @@ jobs:
       - name: Read the pinned images
         id: pins
         run: |
+          shown=$(scripts/release-pins.sh show)
           while read -r name ref; do
             echo "${name//-/_}_name=${ref%%:*}" >> "$GITHUB_OUTPUT"
             echo "${name//-/_}_digest=${ref##*@}" >> "$GITHUB_OUTPUT"
-          done < <(scripts/release-pins.sh show)
+          done <<< "$shown"
       - name: Log in to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -221,14 +232,28 @@ jobs:
       - name: Log out of GHCR
         if: always()
         run: docker logout ghcr.io
+
+  draft:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Draft the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
-          # A release that exists, draft or not, is left as it is.
-          if gh release list --limit 1000 --json tagName --jq '.[].tagName' | grep -qFx -- "$TAG"; then
+          [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] ||
+            { echo "not a release tag like v1.2.3 or v1.2.3-rc.1" >&2; exit 1; }
+          # A release that exists, draft or not, is left as it is. A failed listing stops the step.
+          list=$(gh release list --limit 1000 --json tagName --jq '.[].tagName')
+          if grep -qFx -- "$TAG" <<< "$list"; then
             echo "A release for $TAG exists already; it is not changed."
             exit 0
           fi

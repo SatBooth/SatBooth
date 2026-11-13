@@ -41,11 +41,14 @@ Deploy from this tag: \`git checkout $tag\` (verify it with \`git tag -v $tag\`)
 
 ## Verify the images
 
-By attestation, for each image:
+By attestation, which accepts only the release workflow of this repository, run from this tag on a GitHub-hosted
+runner, for each image:
 
 TEXT
 while read -r _ ref; do
-  printf -- '    gh attestation verify oci://%s -R SatBooth/SatBooth\n' "${ref/:$tag@/@}"
+  printf -- '    gh attestation verify oci://%s -R SatBooth/SatBooth \\\n' "${ref/:$tag@/@}"
+  printf -- '      --signer-workflow SatBooth/SatBooth/.github/workflows/release.yml \\\n'
+  printf -- '      --source-ref refs/tags/%s --deny-self-hosted-runners\n' "$tag"
 done <<< "$shown"
 
 cat <<'TEXT'

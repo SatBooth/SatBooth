@@ -22,6 +22,7 @@ pins=scripts/release-pins.sh
 version=$("$pins" version)
 [ "$version" = "$tag" ] || fail "the pins are at $version, not $tag"
 
+shown=$("$pins" show)
 refs=()
 while read -r name ref; do
   digest=${ref##*@}
@@ -30,7 +31,7 @@ while read -r name ref; do
   docker pull --quiet "$ref" > /dev/null
   echo "release-smoke: $name $digest pulled"
   refs+=("$ref")
-done < <("$pins" show)
+done <<< "$shown"
 [ "${#refs[@]}" -eq 3 ] || fail "expected three images, have ${#refs[@]}"
 
 scripts/image-run-test.sh "${refs[@]}"

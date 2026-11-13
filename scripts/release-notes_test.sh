@@ -12,13 +12,14 @@ fail() { echo "release-notes_test: FAIL: $*" >&2; exit 1; }
 tag=$(scripts/release-pins.sh version)
 notes=$(scripts/release-notes.sh "$tag")
 
+shown=$(scripts/release-pins.sh show)
 n=0
 while read -r name ref; do
   n=$((n + 1))
   grep -qF -- "\`$ref\`" <<< "$notes" || fail "$name: the ref is not listed: $ref"
   grep -qF -- "gh attestation verify oci://${ref/:$tag@/@} -R SatBooth/SatBooth" <<< "$notes" ||
     fail "$name: no attestation command"
-done < <(scripts/release-pins.sh show)
+done <<< "$shown"
 [ "$n" -eq 3 ] || fail "show printed $n refs, want 3"
 
 for want in 'Changes: (to be written before publishing)' "git checkout $tag" "git tag -v $tag" \
@@ -28,13 +29,18 @@ done
 
 # The whole text is fixed: besides the tag and the three refs, nothing in it varies, so it names no person.
 refs=()
-while read -r _ ref; do refs+=("$ref"); done < <(scripts/release-pins.sh show)
+while read -r _ ref; do refs+=("$ref"); done <<< "$shown"
 expected=$(
   printf 'Changes: (to be written before publishing)\n\n## Images\n\n'
   for ref in "${refs[@]}"; do printf -- '- `%s`\n' "$ref"; done
   printf '\n## Deploy\n\nDeploy from this tag: `git checkout %s` (verify it with `git tag -v %s`). The Compose files and\n' "$tag" "$tag"
-  printf '`deploy/setup.sh` of the tag pin the images above by digest.\n\n## Verify the images\n\nBy attestation, for each image:\n\n'
-  for ref in "${refs[@]}"; do printf '    gh attestation verify oci://%s -R SatBooth/SatBooth\n' "${ref/:$tag@/@}"; done
+  printf '`deploy/setup.sh` of the tag pin the images above by digest.\n\n## Verify the images\n\n'
+  printf 'By attestation, which accepts only the release workflow of this repository, run from this tag on a GitHub-hosted\nrunner, for each image:\n\n'
+  for ref in "${refs[@]}"; do
+    printf '    gh attestation verify oci://%s -R SatBooth/SatBooth \\\n' "${ref/:$tag@/@}"
+    printf '      --signer-workflow SatBooth/SatBooth/.github/workflows/release.yml \\\n'
+    printf '      --source-ref refs/tags/%s --deny-self-hosted-runners\n' "$tag"
+  done
   printf '\nBy rebuild, which needs Docker with buildx. The digests it prints must equal the pinned ones:\n\n'
   printf '    scripts/release-build.sh out\n    scripts/release-pins.sh check out/digests.txt\n'
 )

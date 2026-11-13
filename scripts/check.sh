@@ -78,6 +78,7 @@ go test ./... || fail "go test"
 echo "== release pins"
 scripts/release-pins.sh check-format || fail "release pins: the three pin sites do not hold well-formed refs of one version"
 scripts/release-pins_test.sh || fail "release pins: scripts/release-pins_test.sh"
+scripts/release-notes_test.sh || fail "release notes: scripts/release-notes_test.sh"
 scripts/setup-image_test.sh || fail "setup wrapper: scripts/setup-image_test.sh"
 
 echo "== compose bundles"
