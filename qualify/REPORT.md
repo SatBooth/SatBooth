@@ -837,9 +837,10 @@ one-off runs between them (the bundle's whole step, under a minute).
 `scripts/qualify.sh --only deploy` runs the setup (the build, `TestBuildFlags`, the hubs and `TestBootstrap`, the relays
 and the hub restart) and then this group alone, for a targeted run; it is not the qualification, which runs the group
 inside the full suite. The group starts both bundles from what `deploy/setup.sh` (the tools image with
-`satbooth-setup`, run with no network) writes, not from files the test writes: the public host's bundle,
+`satbooth-setup`, built from this tree under `SATBOOTH_BUILD=1` and run with no network) writes, not from files the test
+writes: the public host's bundle,
 `deploy/public/compose.yml`, from stages 1 and 4, then the hub host's bundle, `deploy/hub/compose.yml`, from stages 2
-and 3 (first start). Both compose files run unmodified.
+and 3 (first start). Both compose files run with their `compose.build.yml`, which builds the images from this tree.
 
 ### The public bundle, from stages 1 and 4
 
@@ -849,8 +850,11 @@ and 3 (first start). Both compose files run unmodified.
   19101, and the bundle's network on `192.0.2.0/24` with SatBooth at `192.0.2.40`, because the regtest network already
   holds `172.30.78.0/24` (the generated file's default network). `SATBOOTH_ETC` and `SATBOOTH_BACKUPS` are the
   directories of stage 1, passed from `qualify.sh`'s environment. The generated `compose.env` is checked instead: it
-  exists, is mode 0600, and `docker compose -f deploy/public/compose.yml --env-file <it> config -q` passes.
-- `dev/regtest/deploy-public.override.yml`, the one change: SatBooth also joins the regtest network (internal) as
+  exists, is mode 0600, and `docker compose -f deploy/public/compose.yml -f deploy/public/compose.build.yml --env-file
+  <it> config -q` passes.
+- `deploy/public/compose.build.yml`, which builds the `satbooth` image from this tree (`satbooth:local`) instead of
+  pulling the pinned release image: the bundle's first change.
+- `dev/regtest/deploy-public.override.yml`, the second change: SatBooth also joins the regtest network (internal) as
   `172.30.78.41`, where the relay, the webhook receiver and the phases are. The bundle's own network, the public
   listener on it and the one published port stay as shipped.
 

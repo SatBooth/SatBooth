@@ -308,6 +308,20 @@ type Lock struct {
 	root   *os.Root // unexported: a caller gets the stages and Close, not the os.Root API
 	lock   *os.File
 	closed bool
+
+	// SourceBuild is set when the images are built from this repository (deploy/setup.sh with SATBOOTH_BUILD=1): the
+	// start commands a stage prints then add the host's compose.build.yml.
+	SourceBuild bool
+}
+
+// composeCmd is the start of a printed Compose command for a host ("public" or "hub"): the host's compose.yml and,
+// for a source build, its compose.build.yml.
+func (l *Lock) composeCmd(host string) string {
+	c := "docker compose -f deploy/" + host + "/compose.yml"
+	if l.SourceBuild {
+		c += " -f deploy/" + host + "/compose.build.yml"
+	}
+	return c
 }
 
 // ErrClosed is returned by a method of a Lock that was closed; nothing is touched.

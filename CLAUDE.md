@@ -29,7 +29,9 @@ the deliverers' wake-up by the store (`store`, `webhook`), the restore procedure
 unconfirmed payment is not marked gone while bitcoind's wallet is behind its node, for at most 60 seconds (`onchain`,
 `btcrpc`, with the twelfth method of SatBooth's bitcoind user); and the items carried out of it: the webhook give-up
 line kept across a crash and a 2xx that could not be recorded (`store`, `webhook`), and the on-chain rail's held orders
-shown to the Monero rail of a mixed order (`rail`, `onchain`, `monero`). The design questions in `docs/design.md` §5 are
+shown to the Monero rail of a mixed order (`rail`, `onchain`, `monero`); and the release pipeline: reproducible
+multi-arch images (`scripts/release-*`, `deploy/image`), their pins in the bundles and the release workflow
+(`.github/workflows/release.yml`). The design questions in `docs/design.md` §5 are
 settled. New design questions are decided by the maintainer: don't pick them yourself, put the options and a
 recommendation in front of the maintainer.
 

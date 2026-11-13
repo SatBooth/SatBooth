@@ -1,6 +1,8 @@
 # The private hub host (deploy/README.md, "The hub host"): Alby Hub, SatBooth's NWC relay, bitcoind, the hub's Electrum
 # server (Fulcrum), monerod and SatBooth's view-only monero-wallet-rpc. Never the host of the public SatBooth service.
 #   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile monero] up -d --build
+#   The relay is the pinned release image. To build it from source instead, add -f deploy/hub/compose.build.yml after
+#   -f deploy/hub/compose.yml.
 # Every value the operator gives comes from the env file (deploy/hub/example.env: addresses and paths, no secrets).
 # Secrets are files in HUB_CONFIG_DIR, bind-mounted read-only; none is in an environment: value or in argv.
 # Published ports: the hub's admin UI on HUB_ADMIN_ADDR (loopback: reached through an SSH tunnel, never from the public
@@ -117,11 +119,7 @@ services:
 
   relay:
     <<: *hardening
-    build:
-      context: ../..
-      dockerfile: deploy/image/Dockerfile
-      target: satbooth-relay
-    image: satbooth-relay:local
+    image: ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
     network_mode: service:netns
     command: ["-config", "/etc/satbooth-relay/relay.json"]
     volumes:

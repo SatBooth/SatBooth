@@ -75,6 +75,15 @@ go build -trimpath ./... || fail "go build"
 echo "== go test"
 go test ./... || fail "go test"
 
+echo "== release pins"
+scripts/release-pins.sh check-format || fail "release pins: the three pin sites do not hold well-formed refs of one version"
+scripts/release-pins_test.sh || fail "release pins: scripts/release-pins_test.sh"
+scripts/release-pins_prop_test.sh || fail "release pins: scripts/release-pins_prop_test.sh"
+scripts/release-notes_test.sh || fail "release notes: scripts/release-notes_test.sh"
+scripts/setup-image_test.sh || fail "setup wrapper: scripts/setup-image_test.sh"
+# Reads tags from a throwaway registry in Docker; skips without Docker, and without the registry image unless CI.
+RELEASE_PUSH_TEST_PULL=${CI:+1} scripts/release-push_test.sh || fail "release push: scripts/release-push_test.sh"
+
 echo "== compose bundles"
 # Each per-host bundle must parse with its example.env, and must refuse an empty published address (Compose would read
 # an empty host as every interface). The variables of example.env are unset first: the shell's environment would
@@ -118,7 +127,25 @@ if docker compose version > /dev/null 2>&1; then
       grep -q "required variable $addr is missing a value" "$tmp/$host-empty.err" \
         || fail "compose: $dir/compose.yml refused an empty $addr for another reason"
     done
+    # The bundle alone runs SatBooth's images only by their pinned refs; with compose.build.yml no service, the one-off
+    # ones included, names a release image from the registry.
+    base_images=$(env "${vars[@]}" docker compose --profile "*" -f "$dir/compose.yml" --env-file "$dir/example.env" \
+      config --images) || fail "compose: $dir/compose.yml: config --images"
+    if grep -E '^ghcr\.io/satbooth/' <<< "$base_images" | grep -vE '@sha256:[0-9a-f]{64}$'; then
+      fail "compose: $dir/compose.yml names a SatBooth image without its digest"
+    fi
+    grep -q '^ghcr\.io/satbooth/' <<< "$base_images" || fail "compose: $dir/compose.yml pins no SatBooth image"
+    build_images=$(env "${vars[@]}" docker compose --profile "*" -f "$dir/compose.yml" -f "$dir/compose.build.yml" \
+      --env-file "$dir/example.env" config --images) \
+      || fail "compose: $dir/compose.yml with $dir/compose.build.yml does not parse with its example.env"
+    if grep '^ghcr\.io/satbooth/' <<< "$build_images"; then
+      fail "compose: $dir/compose.build.yml leaves a service on a release image from the registry"
+    fi
   done
+  # Both bundles, as Compose resolves them, run the pinned refs and no other image of SatBooth's namespace; a text
+  # search for the pin would not see an `image:` that overrides it.
+  scripts/release-pins.sh check-bundles || fail "compose: a base bundle runs an image other than the pinned one"
+  scripts/release-bundles_test.sh || fail "compose: scripts/release-bundles_test.sh"
 elif [ -n "${CI-}" ]; then
   fail "compose: docker compose is not available, and CI must check the bundles"
 else

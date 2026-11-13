@@ -1,0 +1,291 @@
+name: release
+
+# A tag v<major>.<minor>.<patch>[-rc.<n>] (the maintainer signs it; operators verify it with `git tag -v`) builds the
+# three release images on an amd64 and an arm64 runner, requires both runners and the pins of the deploy bundles to
+# agree on every digest, and, after the `release` environment is approved, pushes the images to GHCR, attests them and
+# drafts a release. A run by hand (workflow dispatch) and a pull request that touches the build do everything up to the
+# agreement and push nothing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - vendor/**
+      - checkout/page.html
+      - checkout/style.css
+      - checkout/logo.svg
+      - .dockerignore
+      - deploy/**
+      - scripts/release-*
+      - scripts/image-check.sh
+      - scripts/image-run-test.sh
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+# Every run block runs with -e and pipefail.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# These jobs always run on GitHub's hosted runners.
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the images for both platforms and load this runner's platform
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: scripts/release-build.sh out "$PLATFORM"
+      - name: Check the contents of the loaded images
+        run: |
+          scripts/image-check.sh satbooth:release-test /satbooth /etc/ssl/certs/ca-certificates.crt
+          scripts/image-check.sh satbooth-relay:release-test /satbooth-relay
+          scripts/image-check.sh satbooth-tools:release-test /satbooth-setup /satbooth-pair
+      - name: Run the loaded images
+        run: scripts/image-run-test.sh satbooth:release-test satbooth-relay:release-test satbooth-tools:release-test
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ matrix.arch }}
+          path: out/digests.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  agree:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A pull request needs its base commit to compare the pins.
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digests-amd64
+          path: digests/amd64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digests-arm64
+          path: digests/arm64
+      - name: Require both runners to build the same digests
+        run: |
+          cmp digests/amd64/digests.txt digests/arm64/digests.txt
+          echo "The amd64 and arm64 runners built the same digests:"
+          cat digests/amd64/digests.txt
+      - name: Require the deploy bundles to run the pinned images
+        run: scripts/release-pins.sh check-bundles
+      - name: Compare the digests with the pins
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          digests=digests/amd64/digests.txt
+          enforce=yes
+          tag=
+          note=
+          case "$EVENT_NAME" in
+            push)
+              [ "$REF_TYPE" = tag ] || { echo "a push run is for a tag, not a $REF_TYPE" >&2; exit 1; }
+              scripts/release-pins.sh check-tag "$REF_NAME"
+              tag=$REF_NAME
+              ;;
+            workflow_dispatch) ;;
+            pull_request)
+              [[ $BASE_SHA =~ ^[0-9a-f]{40}$ ]] || { echo "no base commit for the pull request" >&2; exit 1; }
+              git cat-file -e "$BASE_SHA^{commit}"
+              # The pins are enforced when the pull request changes them. A base without the pins script (the
+              # change that introduces it) or with pins the script cannot read counts as changed.
+              base=$(mktemp -d)
+              if git cat-file -e "$BASE_SHA:scripts/release-pins.sh" 2> /dev/null &&
+                git archive "$BASE_SHA" deploy | tar -x -C "$base" &&
+                base_pins=$(RELEASE_PINS_ROOT=$base scripts/release-pins.sh show 2> /dev/null); then
+                if [ "$base_pins" = "$(scripts/release-pins.sh show)" ]; then
+                  enforce=no
+                  note="The pull request leaves the pins as they are, so a difference does not fail it."
+                else
+                  note="The pull request changes the pins."
+                fi
+              else
+                note="The base has no readable pins: they count as changed."
+              fi
+              ;;
+            *)
+              echo "unexpected event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          # The pins must be well formed and the comparison must produce a line for each image, whatever the event;
+          # only a difference between a digest and its pin is advisory.
+          scripts/release-pins.sh check-format
+          status=0
+          result=$(scripts/release-pins.sh check "$digests" ${tag:+"$tag"}) || status=$?
+          lines=$(grep -cE '^satbooth(-relay|-tools)? (match|pinned )' <<< "$result" || true)
+          [ "$lines" -eq 3 ] || { echo "the comparison failed: $result" >&2; exit 1; }
+          {
+            echo '### Built digests and pins'
+            echo
+            echo '```'
+            echo "$result"
+            echo '```'
+            [ -z "$note" ] || { echo; echo "$note"; }
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$result"
+          [ -z "$note" ] || echo "$note"
+          if [ "$status" -ne 0 ] && [ "$enforce" = yes ]; then
+            echo "the pins do not match this build or this tag" >&2
+            exit 1
+          fi
+
+  publish:
+    needs: agree
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require an annotated tag at this run's commit
+        env:
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          scripts/release-pins.sh check-tag "$TAG"
+          # The checkout keeps the tag object of an annotated tag; a lightweight tag is a bare commit reference.
+          [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || { echo "$TAG is not an annotated tag" >&2; exit 1; }
+          [ "$(git for-each-ref --format='%(tag)' "refs/tags/$TAG")" = "$TAG" ] ||
+            { echo "the tag object is not named $TAG" >&2; exit 1; }
+          [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$SHA" ] ||
+            { echo "$TAG does not point at the commit of this run" >&2; exit 1; }
+      - name: Rebuild the images and check them against the pins
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          scripts/release-build.sh out
+          scripts/release-pins.sh check out/digests.txt "$TAG"
+      - name: Read the pinned images
+        id: pins
+        run: |
+          shown=$(scripts/release-pins.sh show)
+          while read -r name ref; do
+            echo "${name//-/_}_name=${ref%%:*}" >> "$GITHUB_OUTPUT"
+            echo "${name//-/_}_digest=${ref##*@}" >> "$GITHUB_OUTPUT"
+          done <<< "$shown"
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printenv GITHUB_TOKEN | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Push the images and tag them
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release-push.sh out "$TAG"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.pins.outputs.satbooth_name }}
+          subject-digest: ${{ steps.pins.outputs.satbooth_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.pins.outputs.satbooth_relay_name }}
+          subject-digest: ${{ steps.pins.outputs.satbooth_relay_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.pins.outputs.satbooth_tools_name }}
+          subject-digest: ${{ steps.pins.outputs.satbooth_tools_digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
+
+  draft:
+    needs: [publish, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          scripts/release-pins.sh check-tag "$TAG"
+          # A release that exists, draft or not, is left as it is. A failed listing stops the step.
+          list=$(gh release list --limit 1000 --json tagName --jq '.[].tagName')
+          if grep -qFx -- "$TAG" <<< "$list"; then
+            echo "A release for $TAG exists already; it is not changed."
+            exit 0
+          fi
+          notes=$(mktemp)
+          scripts/release-notes.sh "$TAG" > "$notes"
+          flags=()
+          case "$TAG" in *-rc.*) flags+=(--prerelease) ;; esac
+          gh release create "$TAG" --draft --verify-tag --title "SatBooth $TAG" --notes-file "$notes" "${flags[@]}"
+
+  smoke:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printenv GITHUB_TOKEN | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Pull the published images and run them
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release-smoke.sh "$TAG"
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io

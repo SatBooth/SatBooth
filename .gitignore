@@ -15,5 +15,8 @@ CLAUDE.local.md
 *.sqlite
 .tools/
 
+# Output of scripts/release-build.sh out
+/out/
+
 # Regtest environment logs (dev/regtest)
 dev/regtest/logs/
