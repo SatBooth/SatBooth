@@ -1,0 +1,90 @@
+# The public host (deploy/README.md, "The public host"): the SatBooth service, from the release image
+# (deploy/image/Dockerfile, target satbooth), run as it ships. Never the host of the hub, its relay or the nodes.
+#   docker compose -f deploy/public/compose.yml --env-file <your copy of example.env> up -d --build
+# Every value the operator gives comes from the env file (deploy/public/example.env: addresses and paths, no secrets).
+# The configuration and the secret files are in SATBOOTH_ETC, bind-mounted read-only; none is in an environment: value
+# or in argv. Published ports: exactly one, the checkout page (the public listener) on PUBLIC_ADDR. The merchant API
+# (the private listener) is not published: it is reached on the bundle's network (deploy/README.md). The ${VAR:?} form
+# makes an empty or missing address an error: an empty host would publish on every interface.
+name: satbooth-public
+
+x-satbooth: &satbooth
+  build:
+    context: ../..
+    dockerfile: deploy/image/Dockerfile
+    target: satbooth
+  image: satbooth:local
+  user: "65532:65532"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  # SatBooth locks its memory (mlockall) and refuses to start without the rlimit; no capability is needed for it.
+  ulimits:
+    memlock: -1
+  depends_on:
+    volume-init:
+      condition: service_completed_successfully
+
+services:
+  # One-shot, as root with only CHOWN, FOWNER and DAC_READ_SEARCH, no network: the data volume, the backups directory
+  # and the configuration directory go to the image's user 65532, directories 0700 (SatBooth refuses a looser data
+  # directory). Docker creates named volumes owned by root, and a bind mount keeps the host's owner. DAC_READ_SEARCH
+  # lets it list a directory it no longer owns (its own 0700 from the last run, or the operator's), so a second
+  # up works; it grants no write. Modes of files are left alone, so SatBooth's loaders still refuse a secret file that
+  # is not 0600.
+  volume-init:
+    image: golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9
+    network_mode: none
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_READ_SEARCH]
+    security_opt: [no-new-privileges:true]
+    command: ["sh", "-euc", "chown 65532:65532 /data /backups && chown -R 65532:65532 /etc/satbooth && chmod 0700 /data /backups /etc/satbooth"]
+    volumes:
+      - satbooth-data:/data
+      - ${SATBOOTH_BACKUPS:?set SATBOOTH_BACKUPS}:/backups
+      - ${SATBOOTH_ETC:?set SATBOOTH_ETC}:/etc/satbooth
+
+  satbooth:
+    <<: *satbooth
+    command: ["-config", "/etc/satbooth/satbooth.json"]
+    # Restarted on a failure, so a start refused while the hub is down is tried again, and after the daemon or the
+    # host restarts; not after a manual stop. Compose has no restart delay outside Swarm: the loop is as slow as each
+    # refused start (deploy/README.md, "Restarts").
+    restart: unless-stopped
+    # Compose's default 10 s ends in SIGKILL. The worst case with an alerts block is 40 s: the shutdown grace (10 s,
+    # service.ShutdownGrace), the alert drain's last flush (10 s, alert.flushTimeout), then the store's and the ledger's
+    # Close (up to 10 s each, closeWait): 10 + 10 + 10 + 10 = 40 s. 60 s leaves 20 s for the workers to stop.
+    stop_grace_period: 60s
+    volumes:
+      - ${SATBOOTH_ETC:?set SATBOOTH_ETC}:/etc/satbooth:ro
+      - satbooth-data:/data
+    networks:
+      satbooth:
+        ipv4_address: ${SATBOOTH_IP:?set SATBOOTH_IP}
+    ports:
+      # The checkout page: public_listen in satbooth.json must be SATBOOTH_IP:8080.
+      - "${PUBLIC_ADDR:?set PUBLIC_ADDR}:${PUBLIC_PORT:?set PUBLIC_PORT}:8080"
+
+  # satbooth backup, and any other one-off run of the image, with the service stopped (deploy/README.md, "Backups"):
+  #   docker compose ... --profile oneoff run --rm satbooth-oneoff \
+  #     backup -config /etc/satbooth/satbooth.json -to /backups/<name>
+  # No network: the backup needs none.
+  satbooth-oneoff:
+    <<: *satbooth
+    profiles: [oneoff]
+    network_mode: none
+    volumes:
+      - ${SATBOOTH_ETC:?set SATBOOTH_ETC}:/etc/satbooth:ro
+      - satbooth-data:/data
+      - ${SATBOOTH_BACKUPS:?set SATBOOTH_BACKUPS}:/backups
+
+networks:
+  satbooth:
+    ipam:
+      config:
+        - subnet: ${SATBOOTH_SUBNET:?set SATBOOTH_SUBNET}
+
+volumes:
+  satbooth-data:

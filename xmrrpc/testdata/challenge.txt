@@ -1,0 +1,8 @@
+HTTP/1.1 401 Unauthorized
+Server: Epee-based
+Content-Length: 98
+Content-Type: text/html
+Last-Modified: Fri, 06 Nov 2026 22:25:49 GMT
+Accept-Ranges: bytes
+WWW-authenticate: Digest qop="auth",algorithm=MD5,realm="monero-rpc",nonce="P6gXuAKqtriF9PYr2t4wCw==",stale=false
+WWW-authenticate: Digest qop="auth",algorithm=MD5-sess,realm="monero-rpc",nonce="P6gXuAKqtriF9PYr2t4wCw==",stale=false

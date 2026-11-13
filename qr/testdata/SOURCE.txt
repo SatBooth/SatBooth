@@ -1,0 +1,22 @@
+Independent QR test vectors: the matrices in this directory were copied by a script from
+ZXing's own unit test, not produced by the code under test.
+
+Source:  https://github.com/zxing/zxing at commit 56b8a9a7b53392097891463023a26c406b422225
+         (2026-10-28, the last commit that touched the file; it was also master when fetched, 2026-11-03)
+File:    core/src/test/java/com/google/zxing/qrcode/encoder/EncoderTestCase.java
+Raw:     https://raw.githubusercontent.com/zxing/zxing/56b8a9a7b53392097891463023a26c406b422225/core/src/test/java/com/google/zxing/qrcode/encoder/EncoderTestCase.java
+License: Apache-2.0 (credited in ACKNOWLEDGEMENTS.md)
+
+zxing_alpha_ABCDEF_v1_H_mask0.txt       lines 106-126, testEncode(): "ABCDEF", level H, alphanumeric, version 1, mask 0
+zxing_num_0123_v1_M_mask0.txt           lines 230-250, testEncodeShiftjisNumeric(): "0123", level M, numeric, version 1, mask 0
+zxing_byte_hello_eci26_v1_H_mask3.txt   lines 157-177, testSimpleUTF8ECI(): "hello", level H, byte mode behind an ECI
+                                        header for UTF-8 (assignment number 26), version 1, mask 3
+
+The files were re-extracted from the file at that commit (byte-identical to the one first fetched) and match.
+ZXing's NOTICE file at that commit lists only Barcode4J and JCommander notices, which concern other parts of
+the project; it names nothing in EncoderTestCase.java, so no NOTICE text is carried here. The Apache-2.0
+credit is in ACKNOWLEDGEMENTS.md.
+
+Each file is the 21 rows of the expected matrix, 21 values per row, 1 = dark module, 0 = light.
+The ISO/IEC 18004 Annex I symbol could not be transcribed reliably (the standard is paywalled
+and no trustworthy plain-text copy of its matrix was found), so ZXing's golden matrices stand in.

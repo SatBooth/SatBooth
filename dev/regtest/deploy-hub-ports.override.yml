@@ -1,0 +1,11 @@
+# Dev-only, used by scripts/qualify.sh only when a port that deploy/hub/compose.yml publishes on 127.0.0.1 (7448, 8332 or
+# 8080) is already taken on the host: the three published ports move to the free ones qualify.sh chose. Nothing else of the
+# hub bundle changes.
+services:
+  netns:
+    ports: !override
+      - "127.0.0.1:${TEST_HUB_ADMIN_PORT}:8080"
+      - "127.0.0.1:${TEST_HUB_RELAY_PORT}:7448"
+  bitcoind:
+    ports: !override
+      - "127.0.0.1:${TEST_HUB_RPC_PORT}:8332"

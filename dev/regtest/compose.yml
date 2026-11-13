@@ -1,0 +1,249 @@
+# Dev-only regtest environment for the qualification (plans 4 and 6 to 10) (scripts/qualify.sh). Never a deployment.
+# The network is internal: no container can reach the internet. All passwords are fixed test strings.
+# Hub facts: getAlby/hub 921003b config/models.go, service/service.go, service/start.go.
+name: satbooth-regtest
+
+x-hub-env: &hub-env
+  WORK_DIR: /data
+  PORT: "8080"
+  NETWORK: regtest
+  LOG_LEVEL: "4"
+  LDK_BITCOIND_RPC_HOST: 172.30.78.2
+  LDK_BITCOIND_RPC_PORT: "18443"
+  # The hub's own whitelisted RPC user (dev/regtest/bitcoind/bitcoin.conf), as the hub bundle runs it.
+  LDK_BITCOIND_RPC_USER: hub
+  LDK_BITCOIND_RPC_PASSWORD: regtest-only-hub
+  LDK_GOSSIP_SOURCE: ""
+  SEND_EVENTS_TO_ALBY: "false"
+  AUTO_LINK_ALBY_ACCOUNT: "false"
+  # Unreachable on purpose: the hub must not need a block explorer.
+  MEMPOOL_API: http://127.0.0.1:9/api
+  RELAY: ws://127.0.0.1:7447
+  # A restarted hub unlocks by itself once it has started once (service/service.go:105-115, 158-166).
+  AUTO_UNLOCK_PASSWORD: regtest-only-unlock
+
+# The relays are the release image (deploy/image/Dockerfile, target satbooth-relay), run as it ships: read-only root,
+# no capabilities, no new privileges (deploy/README.md). Its ENTRYPOINT is the bare binary; each service names its config.
+x-relay: &relay
+  build:
+    context: ../..
+    dockerfile: deploy/image/Dockerfile
+    target: satbooth-relay
+  image: satbooth-regtest-relay:dev
+  restart: on-failure
+  profiles: [manual]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  volumes:
+    - state:/state:ro
+
+# The satbooth release image (deploy/image/Dockerfile, target satbooth), run as it ships: the reasons for each option are
+# in qualify/REPORT.md, "The release images". No restart policy: qualify.sh reads its exit codes.
+x-satbooth: &satbooth
+  build:
+    context: ../..
+    dockerfile: deploy/image/Dockerfile
+    target: satbooth
+  image: satbooth-regtest-satbooth:dev
+  profiles: [image]
+  user: "65532:65532"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  ulimits:
+    memlock: -1
+  depends_on:
+    volume-init:
+      condition: service_completed_successfully
+
+services:
+  bitcoind:
+    build:
+      context: ./bitcoind
+    image: satbooth-regtest-bitcoind:dev
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.2
+
+  # Monero (plan 8): monerod, the customer's wallet-rpc (the full wallets customer and merchant, made by TestMoneroSetup)
+  # and SatBooth's view-only wallet-rpc with a Digest login. The login is a fixed test string and guards nothing.
+  monerod:
+    build:
+      context: ./monero
+    image: satbooth-regtest-monero:dev
+    command: ["monerod", "--config-file", "/etc/monero/monerod.conf", "--non-interactive"]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.3
+
+  wallet-customer:
+    image: satbooth-regtest-monero:dev
+    command: ["monero-wallet-rpc", "--wallet-dir", "/data", "--daemon-address", "172.30.78.3:18081", "--trusted-daemon",
+      "--disable-rpc-login", "--rpc-bind-ip", "172.30.78.4", "--rpc-bind-port", "18084", "--confirm-external-bind",
+      "--allow-mismatched-daemon-version", "--non-interactive", "--log-file", "/tmp/monero-wallet-rpc.log"]
+    volumes:
+      - wallet-customer-data:/data
+    depends_on: [monerod]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.4
+
+  wallet-satbooth:
+    image: satbooth-regtest-monero:dev
+    entrypoint: ["/usr/local/bin/wallet-satbooth.sh"]
+    environment:
+      # monero-wallet-rpc reads its --rpc-login from here (src/rpc/rpc_args.cpp:226-228); never in argv.
+      RPC_LOGIN: satbooth:regtest-only-monero
+    volumes:
+      - wallet-satbooth-data:/data
+      - state:/state:ro
+    depends_on: [monerod]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.5
+
+  hub-satbooth:
+    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    environment: *hub-env
+    volumes:
+      - hub-satbooth-data:/data
+    depends_on: [bitcoind]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.10
+
+  hub-merchant:
+    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    environment: *hub-env
+    volumes:
+      - hub-merchant-data:/data
+    depends_on: [bitcoind]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.20
+
+  # The relays share their hub's network namespace: the hub reaches its relay on 127.0.0.1.
+  relay-satbooth:
+    <<: *relay
+    network_mode: "service:hub-satbooth"
+    command: ["-config", "/state/relay-satbooth.json"]
+    depends_on: [hub-satbooth]
+
+  relay-merchant:
+    <<: *relay
+    network_mode: "service:hub-merchant"
+    command: ["-config", "/state/relay-merchant.json"]
+    depends_on: [hub-merchant]
+
+  # The release image's phases (qualify.sh, after the in-process phases): one-shot ownership of the volumes, the service,
+  # and one-off runs of the same image without a network (the second process on the lock, satbooth backup).
+  volume-init:
+    image: golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9
+    profiles: [image]
+    network_mode: none
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: [no-new-privileges:true]
+    # Docker creates named volumes owned by root and scratch has no chown: the data volume, the backups volume and the
+    # secrets directory on the state volume go to the image's user 65532, mode 0700 (prepareDataDir refuses more).
+    command: ["sh", "-c", "mkdir -p /state/image && chown 65532:65532 /data /backups /state/image && chmod 0700 /data /backups /state/image"]
+    volumes:
+      - state:/state
+      - satbooth-data:/data
+      - satbooth-backups:/backups
+
+  satbooth:
+    <<: *satbooth
+    command: ["-config", "/state/image/satbooth-image.json"]
+    # Compose's default 10 s ends in SIGKILL. The worst case with an alerts block is 40 s: the shutdown grace (10 s,
+    # service.ShutdownGrace), the alert drain's last flush (10 s, alert.flushTimeout), then the store's and the ledger's
+    # Close (up to 10 s each, closeWait): 10 + 10 + 10 + 10 = 40 s. 60 s leaves 20 s for the workers to stop.
+    stop_grace_period: 60s
+    volumes:
+      - state:/state:ro
+      - satbooth-data:/data
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.40
+
+  satbooth-oneoff:
+    <<: *satbooth
+    # No network: the lock and the backup come before any connection, and neither needs one.
+    network_mode: none
+    volumes:
+      - state:/state:ro
+      - satbooth-data:/data
+      - satbooth-backups:/backups
+
+  qualify:
+    image: golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9
+    profiles: [manual]
+    working_dir: /src
+    # The Lightning phases start the whole service in-process, which locks its memory (mlockall) as production does.
+    ulimits:
+      memlock: -1
+    environment:
+      # The release image's build flags (deploy/image/Dockerfile), checked by TestBuildFlags. -ldflags=-buildid= is left
+      # out: it changes only the build id, not the code.
+      GOFLAGS: -mod=vendor -trimpath
+      GOPROXY: "off"
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "0"
+      GOCACHE: /gocache
+      SATBOOTH_QUALIFY_STATE: /state
+      BITCOIND_RPC_URL: http://172.30.78.2:18443
+      BITCOIND_RPC_USER: regtest
+      BITCOIND_RPC_PASSWORD: regtest-only-rpc
+      # SatBooth's whitelisted RPC user (dev/regtest/bitcoind/bitcoin.conf) for the on-chain phases.
+      SATBOOTH_RPC_USER: satbooth
+      SATBOOTH_RPC_PASSWORD: regtest-only-satbooth
+      # The hubs' whitelisted RPC user, for scripts/qualify.sh's check that a call outside its list is refused.
+      HUB_RPC_USER: hub
+      HUB_RPC_PASSWORD: regtest-only-hub
+      # SatBooth's Digest login to wallet-satbooth (RPC_LOGIN above) for the Monero phases.
+      SATBOOTH_XMR_RPC_USER: satbooth
+      SATBOOTH_XMR_RPC_PASSWORD: regtest-only-monero
+      PHASE: ""
+    command:
+      - sh
+      - -c
+      - go test -tags qualify -count=1 -timeout 40m -v ./qualify/ -run "$$PHASE"
+    volumes:
+      - ../..:/src:ro
+      - state:/state
+      - gocache:/gocache
+    depends_on: [bitcoind, hub-satbooth, hub-merchant]
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.30
+
+  # TestDeployPublic's phases (scripts/qualify.sh): the qualify container, also on the network of the public bundle's
+  # project satbooth-regtest-deploy (deploy/public/compose.yml with deploy-public.override.yml), where the bundle's public
+  # listener is. That project creates the network; this service is run only while it is up.
+  qualify-deploy:
+    extends: qualify
+    networks:
+      deploy:
+        ipv4_address: 192.0.2.30
+
+networks:
+  regtest:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.78.0/24
+  deploy:
+    name: satbooth-regtest-deploy_satbooth
+    external: true
+
+volumes:
+  state:
+  gocache:
+  hub-satbooth-data:
+  hub-merchant-data:
+  wallet-customer-data:
+  wallet-satbooth-data:
+  satbooth-data:
+  satbooth-backups:

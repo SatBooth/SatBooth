@@ -1,0 +1,41 @@
+{
+ "command": "python3 -I webhook/testdata/make_vectors.py > webhook/testdata/vectors.json",
+ "vectors": [
+  {
+   "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "t": 1800000000,
+   "body": "{\"id\":\"0123456789abcdef0123456789abcdef\",\"type\":\"order.paid\",\"order_id\":\"fedcba9876543210fedcba9876543210\",\"created_at\":1800000000}",
+   "header": "t=1800000000,v1=476d0dda923e5577b060e3f13ecce1f8c7749f2efe0b59466953d848e4c3ea23"
+  },
+  {
+   "secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "t": 1800000123,
+   "body": "{\"id\":\"00000000000000000000000000000001\",\"type\":\"order.expired\",\"order_id\":\"00000000000000000000000000000002\",\"created_at\":1800000100}",
+   "header": "t=1800000123,v1=7a9b3e417ebee5a9e5c1b63b40f7efd990873f724c560320662f826131de9e7c"
+  },
+  {
+   "secret_hex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c",
+   "t": 0,
+   "body": "{}",
+   "header": "t=0,v1=49d44b004f0e2d8ad972024a18f47be11bcb4033ff43e92c1475576b17870bd3"
+  },
+  {
+   "secret_hex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c",
+   "t": 1799999999,
+   "body": "",
+   "header": "t=1799999999,v1=906db22235c2f75859c83b5fb02cdb7ec2a6f8c9cf0866e50c5e2ee622e808d6"
+  },
+  {
+   "secret_hex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0",
+   "t": 4102444800,
+   "body": "{\"id\":\"ffffffffffffffffffffffffffffffff\",\"type\":\"order.paid\",\"order_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":4102444800}",
+   "header": "t=4102444800,v1=da1c83887978595f5ea34eb43b69714cd62af343297ae86c50fce13d5adff846"
+  },
+  {
+   "secret_hex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0",
+   "t": 1800000042,
+   "body": "{\"note\":\"caf\u00e9 \u2603 \\\"quoted\\\" \\n\"}",
+   "header": "t=1800000042,v1=1b326d0e397f1c82cc10f52f32ce27d6bc33eb1a67fb7b436601f06e6312a9ac"
+  }
+ ]
+}

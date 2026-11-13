@@ -1,0 +1,39 @@
+name: image
+
+# A branch is checked through its pull request; a push runs this only on main, so one commit is not checked twice.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Several runners of one machine can share a Docker daemon, and this workflow uses fixed image tags and Compose
+# project names: on a runner named by the variable RUNNER its runs take turns (a waiting run is replaced by a
+# newer one). On GitHub's hosted runners every run has a machine of its own and a group of its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ vars.RUNNER || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    # The repository variable RUNNER, when set, names the label of another runner (a self-hosted one); unset, the
+    # job runs on GitHub's hosted runner. Leave it unset in a public repository: there a pull request from a fork
+    # would run its code on that runner.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Images are built and tested here only: no registry login, no push.
+      - run: docker build -f deploy/image/Dockerfile --target satbooth -t satbooth:ci .
+      - run: docker build -f deploy/image/Dockerfile --target satbooth-relay -t satbooth-relay:ci .
+      - run: docker build -f deploy/image/Dockerfile --target satbooth-tools -t satbooth-tools:ci .
+      - run: scripts/image-check.sh satbooth:ci /satbooth /etc/ssl/certs/ca-certificates.crt
+      - run: scripts/image-check.sh satbooth-relay:ci /satbooth-relay
+      - run: scripts/image-check.sh satbooth-tools:ci /satbooth-setup /satbooth-pair
+      - run: scripts/image-run-test.sh satbooth:ci satbooth-relay:ci satbooth-tools:ci
+      # Each bundle's volume-init twice on operator-like directories: Linux keeps real owners, Docker Desktop does not.
+      - run: scripts/volume-init-test.sh

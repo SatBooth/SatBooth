@@ -1,0 +1,19 @@
+# Personal agent notes for this machine
+CLAUDE.local.md
+
+# Local git worktrees and agent scratch
+.worktrees/
+.superpowers/
+
+# Secrets and local state
+.env
+.env.*
+*.pem
+*.key
+*.token
+*.db
+*.sqlite
+.tools/
+
+# Regtest environment logs (dev/regtest)
+dev/regtest/logs/

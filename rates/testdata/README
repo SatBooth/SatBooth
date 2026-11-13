@@ -1,0 +1,11 @@
+The files in this directory are test data for the rates package's parser tests.
+
+kraken.json, kraken-xmr.json, coinbase.json, yadio.json and bitfinex.json are recorded answers of the providers'
+public APIs (Kraken's Ticker for BTC and for XMR, Coinbase's exchange rates and Yadio's exchange rates for BTC, and
+Bitfinex's tickers for XMR/USD and its BTC pairs), with their response headers in the matching *.meta.json. They are
+public market data of one instant, used only as parser fixtures. Kraken's and Coinbase's answers are trimmed to what
+the tests read: Kraken's seven BTC fiat pairs (kraken.json) and its two XMR pairs (kraken-xmr.json), and Coinbase's
+rates for those seven codes plus the code with the longest fraction when that is longer; Yadio's and Bitfinex's are
+whole. TestLiveRecord (rates/live_test.go, build tag live) re-records and trims them; TestFixturesAreTrimmed checks
+the committed files are trimmed. custom.json is written by hand in SatBooth's own format. ACKNOWLEDGEMENTS.md
+credits the providers.

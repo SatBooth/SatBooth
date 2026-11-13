@@ -1,0 +1,20 @@
+# Build context for the release images (deploy/image), which the regtest setup also runs: an allowlist.
+# Only go.mod, go.sum, vendor/, the Go sources and the three files checkout embeds are sent.
+*
+!go.mod
+!go.sum
+!vendor
+!**/*.go
+!checkout/page.html
+!checkout/style.css
+!checkout/logo.svg
+# Re-excluded after the allowlist: tests, and directories whose Go files no image build needs.
+**/*_test.go
+**/testdata
+.git
+.worktrees
+.tools
+.superpowers
+internal
+dev
+qualify

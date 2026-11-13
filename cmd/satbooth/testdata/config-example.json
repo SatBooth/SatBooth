@@ -1,0 +1,92 @@
+{
+  "public_listen": "192.0.2.10:8080",
+  "private_listen": "127.0.0.1:8081",
+  "checkout_base_url": "https://pay.example.com",
+  "data_dir": "/var/lib/satbooth",
+  "nwc": {
+    "relay_url": "ws://127.0.0.1:7777",
+    "wallet_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "client_key_file": "/etc/satbooth/client.key",
+    "timeout_seconds": 70,
+    "network": "testnet"
+  },
+  "api_keys_file": "/etc/satbooth/api-keys.json",
+  "webhooks": [
+    {
+      "name": "main",
+      "url": "https://merchant.example.com/hooks/satbooth",
+      "secret_file": "/etc/satbooth/webhook.secret"
+    }
+  ],
+  "alerts": {
+    "url": "https://monitor.example.com/satbooth-alert",
+    "secret_file": "/etc/satbooth/alerts.secret"
+  },
+  "limits": {
+    "rate_per_sec": 1,
+    "burst": 10,
+    "max_open": 1000,
+    "new_share": 0.2,
+    "daily_count": 5000,
+    "daily_msat": 100000000000,
+    "min_msat": 1000,
+    "max_msat": 10000000000
+  },
+  "invoice_expiry_minutes": 20,
+  "allow_swap": false,
+  "onchain": {
+    "rpc_url": "http://127.0.0.1:18332",
+    "rpc_user": "satbooth",
+    "rpc_password_file": "/etc/satbooth/bitcoind.pass",
+    "wallet": "satbooth",
+    "descriptor": "wpkh(tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)",
+    "network": "testnet",
+    "confirmations": [
+      {"up_to_sat": 1000000, "confirmations": 1},
+      {"up_to_sat": 10000000, "confirmations": 3},
+      {"up_to_sat": 0, "confirmations": 6}
+    ],
+    "gap_alert": 1000,
+    "poll_seconds": 10,
+    "poll_rate": 5,
+    "timeout_seconds": 30
+  },
+  "monero": {
+    "wallet_rpc_url": "http://127.0.0.1:18083",
+    "rpc_user": "satbooth",
+    "rpc_password_file": "/etc/satbooth/wallet-rpc.pass",
+    "address": "4kcfbiPsJFptZtA4KDH26YKnA9APQpr28aLUWg4PJ5Q9a7KN35LsHRRQ7MVDS1gXyYNVo8PqLy639jeTZQN6urMNCVRUWMc",
+    "network": "mainnet",
+    "account_index": 0,
+    "confirmations": [
+      {"up_to_piconero": 1000000000000, "confirmations": 1},
+      {"up_to_piconero": 10000000000000, "confirmations": 3},
+      {"up_to_piconero": 0, "confirmations": 10}
+    ],
+    "unused_alert": 100,
+    "poll_seconds": 10,
+    "poll_rate": 5,
+    "timeout_seconds": 30
+  },
+  "payout": {
+    "relay_url": "ws://127.0.0.1:7778",
+    "wallet_pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+    "client_key_file": "/etc/satbooth/payout.key",
+    "timeout_seconds": 70,
+    "network": "testnet",
+    "approval_keys": ["17a51b772fb3161b469ec4ec170385184e1655a279a7bd16dfff09276406f61c"],
+    "max_msat": 10000000,
+    "daily_msat": 100000000,
+    "budget_alert_msat": 5000000
+  },
+  "rates": {
+    "providers": ["kraken", "coinbase", "yadio", "bitfinex"],
+    "custom_url_file": "/etc/satbooth/rates.url",
+    "currencies": ["USD", "EUR"],
+    "margin_percent": "1",
+    "min_sources": 2,
+    "max_spread_percent": "2",
+    "max_age_seconds": 300,
+    "fetch_seconds": 60
+  }
+}

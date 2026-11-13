@@ -1,0 +1,262 @@
+# The private hub host (deploy/README.md, "The hub host"): Alby Hub, SatBooth's NWC relay, bitcoind, the hub's Electrum
+# server (Fulcrum), monerod and SatBooth's view-only monero-wallet-rpc. Never the host of the public SatBooth service.
+#   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile monero] up -d --build
+# Every value the operator gives comes from the env file (deploy/hub/example.env: addresses and paths, no secrets).
+# Secrets are files in HUB_CONFIG_DIR, bind-mounted read-only; none is in an environment: value or in argv.
+# Published ports: the hub's admin UI on HUB_ADMIN_ADDR (loopback: reached through an SSH tunnel, never from the public
+# host), and on HUB_PRIVATE_ADDR (the private link to the public host) only what SatBooth calls: the relay, bitcoind's
+# RPC and, with the monero profile, wallet-rpc. The ${VAR:?} form makes an empty or missing address an error: an empty
+# host would publish on every interface.
+name: satbooth-hub
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  # Restarted on a failure and after the daemon or the host restarts; not after a manual stop. on-failure would not come
+  # back after a reboot (deploy/README.md, "Restarts").
+  restart: unless-stopped
+  stop_grace_period: 30s
+
+services:
+  # One-shot, as root with only CHOWN, FOWNER and DAC_READ_SEARCH (to list a directory it no longer owns on the next
+  # up; no write), no network: each container's files go to its own user, directories 0700. Named volumes start owned
+  # by root; bind-mounted files keep the host's owner. Modes of files are left alone, so a loose secret file is still
+  # refused by whatever reads it. relay.json is given to 65532 only if it exists (the relay service itself does not
+  # start without it). The Monero files are optional (the monero profile, or monerod and wallet-rpc on a third host):
+  # only those present are given to 10002.
+  volume-init:
+    image: debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    network_mode: none
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_READ_SEARCH]
+    security_opt: [no-new-privileges:true]
+    command:
+      - sh
+      - -euc
+      - |
+        chown 10003:10003 /vol/hub /config/hub.env
+        chown 10001:10001 /vol/bitcoind /config/bitcoin.conf
+        chown 10004:10004 /vol/fulcrum /config/fulcrum.conf
+        chown 10002:10002 /vol/monerod
+        chown -R 10002:10002 /wallet
+        chmod 0700 /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /wallet
+        if [ -e /config/relay.json ]; then chown 65532:65532 /config/relay.json; fi
+        if [ -e /config/monerod.conf ]; then chown 10002:10002 /config/monerod.conf; fi
+        if [ -e /config/wallet-rpc ]; then chown -R 10002:10002 /config/wallet-rpc; chmod 0700 /config/wallet-rpc; fi
+    volumes:
+      - hub-data:/vol/hub
+      - bitcoind-data:/vol/bitcoind
+      - fulcrum-data:/vol/fulcrum
+      - monerod-data:/vol/monerod
+      - ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}:/config
+      - ${MONERO_WALLET_DIR:?set MONERO_WALLET_DIR}:/wallet
+
+  # Holds the network namespace that the hub and the relay share: the relay's hub listener is on loopback (it needs no
+  # login, so it must not be reachable from outside), and the hub reaches it at ws://127.0.0.1:7447. A container that
+  # joins another's namespace loses its network when that container restarts, and gets it back when it restarts
+  # itself; this one only sleeps, so the hub and the relay can each restart on their own (deploy/README.md).
+  netns:
+    <<: *hardening
+    image: debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    user: "65534:65534"
+    # docker-init as PID 1, so that the stop signal ends the sleep at once.
+    init: true
+    command: ["sleep", "infinity"]
+    networks:
+      hub:
+        ipv4_address: ${HUB_IP:?set HUB_IP}
+      electrum: {}
+    ports:
+      # The hub's web UI and API: the operator's admin access (setup, unlock, channels, pairing, backups). Never on
+      # HUB_PRIVATE_ADDR: the public host reaches that address, and the UI controls the node's funds.
+      - "${HUB_ADMIN_ADDR:?set HUB_ADMIN_ADDR}:8080:8080"
+      # The relay's client listener: SatBooth's NWC connections (NIP-42 AUTH).
+      - "${HUB_PRIVATE_ADDR:?set HUB_PRIVATE_ADDR}:7448:7448"
+
+  hub:
+    <<: *hardening
+    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    user: "10003:10003"
+    network_mode: service:netns
+    # The hub loads .env from its working directory (getAlby/hub v1.24.6 service/service.go:56, godotenv.Load(".env"),
+    # which never overrides a variable already set): hub.env holds LDK_BITCOIND_RPC_PASSWORD and nothing set below.
+    working_dir: /etc/albyhub
+    environment:
+      WORK_DIR: /data
+      PORT: "8080"
+      NETWORK: ${HUB_NETWORK:?set HUB_NETWORK}
+      LOG_LEVEL: "4"
+      LDK_BITCOIND_RPC_HOST: bitcoind
+      LDK_BITCOIND_RPC_PORT: "8332"
+      LDK_BITCOIND_RPC_USER: hub
+      SEND_EVENTS_TO_ALBY: "false"
+      AUTO_LINK_ALBY_ACCOUNT: "false"
+      RELAY: ws://127.0.0.1:7447
+      # With bitcoind as LDK's chain source, the hub still looks up on-chain addresses (its address-lookup API and
+      # swaps) on an Electrum server, Alby's by default (getAlby/hub v1.24.6 chain/address_lookup.go:20-26,
+      # lnclient/ldk/ldk.go:217-232): here the bundle's own Fulcrum, on the internal electrum network.
+      LDK_ELECTRUM_SERVER: tcp://fulcrum:50001
+    volumes:
+      - hub-data:/data
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/hub.env
+        target: /etc/albyhub/.env
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      netns:
+        condition: service_started
+      bitcoind:
+        condition: service_started
+
+  relay:
+    <<: *hardening
+    build:
+      context: ../..
+      dockerfile: deploy/image/Dockerfile
+      target: satbooth-relay
+    image: satbooth-relay:local
+    network_mode: service:netns
+    command: ["-config", "/etc/satbooth-relay/relay.json"]
+    volumes:
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/relay.json
+        target: /etc/satbooth-relay/relay.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      netns:
+        condition: service_started
+
+  bitcoind:
+    <<: *hardening
+    build: ./bitcoind
+    image: satbooth-hub-bitcoind:local
+    volumes:
+      - bitcoind-data:/data
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/bitcoin.conf
+        target: /etc/bitcoin/bitcoin.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [hub, electrum]
+    ports:
+      # bitcoind's RPC: SatBooth's on-chain rail, as its whitelisted RPC user.
+      - "${HUB_PRIVATE_ADDR:?set HUB_PRIVATE_ADDR}:8332:8332"
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+
+  # Fulcrum, the hub's Electrum server: it indexes the bundle's bitcoind (which needs txindex=1) and serves the hub
+  # only.
+  # It is on the internal electrum network alone: it can reach bitcoind and the hub can reach it, and it has no route
+  # out, so it can neither peer with other servers nor be reached from anywhere else. Not published. Its configuration
+  # (fulcrum.conf, 0600: the RPC user's password) is the operator's; the paths and listeners are fixed here.
+  fulcrum:
+    <<: *hardening
+    build: ./fulcrum
+    image: satbooth-hub-fulcrum:local
+    command: ["--datadir", "/data", "--bitcoind", "bitcoind:8332", "--tcp", "0.0.0.0:50001",
+      "/etc/fulcrum/fulcrum.conf"]
+    # Fulcrum flushes its database on SIGTERM; a large index takes a while.
+    stop_grace_period: 180s
+    tmpfs: [/tmp]
+    volumes:
+      - fulcrum-data:/data
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/fulcrum.conf
+        target: /etc/fulcrum/fulcrum.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [electrum]
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      bitcoind:
+        condition: service_started
+
+  # Monero (optional): docker compose --profile monero …, once the files of "The hub host" exist.
+  monerod:
+    <<: *hardening
+    profiles: [monero]
+    build: ./monero
+    image: satbooth-hub-monero:local
+    # monerod refuses non-interactive in its config file; it goes here. --restricted-rpc is here too, where the
+    # operator's file cannot drop it: it removes set_bootstrap_daemon, pop_blocks, flush_txpool, out_peers, stop_daemon
+    # and the others (monero v0.18.5.4 src/rpc/core_rpc_server.h:113-189), and keeps every call wallet2 makes, with
+    # per-call limits that wallet2 handles (wallet2.cpp:3177); pool transactions still in their Dandelion++ stem stay
+    # hidden until they are fluffed (core_rpc_server.cpp:651-654).
+    command: ["monerod", "--config-file", "/etc/monero/monerod.conf", "--data-dir", "/data", "--non-interactive",
+      "--restricted-rpc"]
+    tmpfs: [/tmp]
+    volumes:
+      - monerod-data:/data
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/monerod.conf
+        target: /etc/monero/monerod.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    # Only on the monero network: no other container of the bundle can call monerod's RPC.
+    networks: [monero]
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+
+  wallet-rpc:
+    <<: *hardening
+    profiles: [monero]
+    build: ./monero
+    image: satbooth-hub-monero:local
+    entrypoint: ["/usr/local/bin/wallet-rpc.sh"]
+    tmpfs: ["/tmp:size=32m"]
+    volumes:
+      - ${MONERO_WALLET_DIR:?set MONERO_WALLET_DIR}:/wallet
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/wallet-rpc
+        target: /etc/wallet-rpc
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [monero]
+    ports:
+      # wallet-rpc's JSON-RPC: SatBooth's Monero rail, with the Digest login.
+      - "${HUB_PRIVATE_ADDR:?set HUB_PRIVATE_ADDR}:18083:18083"
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      monerod:
+        condition: service_started
+
+networks:
+  hub:
+    ipam:
+      config:
+        - subnet: ${HUB_SUBNET:?set HUB_SUBNET}
+  # netns (the hub), bitcoind and Fulcrum, with no route out: Fulcrum's only network.
+  electrum:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${ELECTRUM_SUBNET:?set ELECTRUM_SUBNET}
+  # monerod and wallet-rpc only. Not internal: wallet-rpc publishes 18083 and monerod connects out to its peers. A
+  # container on the hub network (the hub, the relay, bitcoind) cannot reach monerod's RPC, so it cannot point monerod
+  # at a chain of its own making.
+  monero: {}
+
+volumes:
+  hub-data:
+  bitcoind-data:
+  fulcrum-data:
+  monerod-data:

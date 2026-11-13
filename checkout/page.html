@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="referrer" content="no-referrer" />
+{{if .Refresh}}<meta http-equiv="refresh" content="5; url=/c/{{.Token}}" />
+{{end}}<title>{{.Name}} checkout</title>
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<main>
+<p class="brand"><img src="/static/logo.svg" alt="" width="32" height="32" /> SatBooth</p>
+<h1>{{.Name}}</h1>
+{{if .Price}}<p class="amount">{{.Price}}</p>
+{{end}}{{if .Amounts}}<p class="amount">{{.Amounts}}</p>
+{{end}}{{if eq .State "paid"}}<p class="state paid">Paid</p>
+<p>Thank you. The payment has been received.</p>
+{{if .Refund}}<p class="note">More than the amount was received. The merchant will refund the extra.</p>
+{{end}}{{else if eq .State "expired"}}<p class="state expired">Expired</p>
+<p>This order has expired. Nothing was charged.</p>
+{{else if eq .State "underpaid"}}<p class="state expired">Underpaid</p>
+{{if .Unconfirmed}}<p>Your payment is not yet confirmed enough. The merchant will contact you.</p>
+{{else if .Unseen}}<p>Your payment did not confirm. The merchant will contact you.</p>
+{{else}}<p>Payment received is below the amount. The merchant will contact you.</p>
+{{end}}{{else if eq .State "late"}}<p class="state expired">Late</p>
+<p>Your payment arrived after the quote expired. The merchant will contact you.</p>
+{{else if .Issued}}<p class="state open">{{.Heading}}</p>
+{{if .Busy}}<p class="busy">Busy, try again.</p>
+{{end}}{{if .QR}}<img class="qr" src="/c/{{.Token}}/qr.svg" width="264" height="264" alt="Payment QR code" />
+{{end}}{{if .Address}}<p><label for="address">Bitcoin address</label></p>
+<input id="address" type="text" readonly="readonly" value="{{.Address}}" />
+{{if .BTC}}<p class="note">Send exactly {{.BTC}} BTC.</p>
+{{end}}
+{{end}}{{if .Invoice}}<p><label for="invoice">Lightning invoice</label></p>
+<input id="invoice" type="text" readonly="readonly" value="{{.Invoice}}" />
+<p class="note">About {{.Minutes}} min left.</p>
+{{end}}{{if .URI}}<p><a href="{{.URI}}">Open in wallet</a></p>
+{{end}}{{if .Seen}}<p class="state open">Seen{{if .Required}}, {{.Confs}} of {{.Required}} confirmations{{end}}</p>
+{{if .SeenSat}}<p class="note">{{.SeenSat}} sats seen so far.</p>
+{{end}}{{end}}{{if .MoneroAddress}}{{if .MoneroQR}}<img class="qr" src="/c/{{.Token}}/qr.svg?rail=monero" width="264" height="264" alt="Monero payment QR code" />
+{{end}}<p><label for="monero">Monero address</label></p>
+<input id="monero" type="text" readonly="readonly" value="{{.MoneroAddress}}" />
+{{if .XMR}}<p class="note">Send exactly {{.XMR}} XMR.</p>
+{{end}}{{if .MoneroURI}}<p><a href="{{.MoneroURI}}">Open in wallet</a></p>
+{{end}}{{end}}{{template "moneroSeen" .}}{{if .Checking}}<p class="state open">Checking payment…</p>
+{{end}}{{if .NewInvoice}}<form method="post" action="/c/{{.Token}}/pay">
+<button type="submit">New Lightning invoice</button>
+</form>
+{{end}}{{template "picker" .}}<p class="note">This page refreshes by itself.</p>
+{{else if .Checking}}<p class="state open">Checking payment…</p>
+{{if .SeenSat}}<p class="note">{{.SeenSat}} sats seen so far.</p>
+{{end}}{{if .SeenXMR}}<p class="note">{{.SeenXMR}} XMR seen so far.</p>
+{{end}}<p class="note">This page refreshes by itself.</p>
+{{else if or .Seen .MoneroSeen}}{{if .Seen}}<p class="state open">Seen{{if .Required}}, {{.Confs}} of {{.Required}} confirmations{{end}}</p>
+{{if .SeenSat}}<p class="note">{{.SeenSat}} sats seen so far.</p>
+{{end}}{{end}}{{template "moneroSeen" .}}<p class="note">This page refreshes by itself.</p>
+{{else}}<p class="state open">Ready to pay</p>
+{{if .Busy}}<p class="busy">Busy, try again.</p>
+{{end}}{{template "picker" .}}{{end}}{{if .Yadio}}<p class="note">Rates: <a href="https://yadio.io">yadio.io</a></p>
+{{end}}</main>
+</body>
+</html>
+{{define "moneroSeen"}}{{if .MoneroSeen}}<p class="state open">Seen{{if .MoneroRequired}}, {{.MoneroConfs}} of {{.MoneroRequired}} confirmations{{end}}</p>
+{{if .SeenXMR}}<p class="note">{{.SeenXMR}} XMR seen so far.</p>
+{{end}}{{end}}{{end}}{{define "picker"}}{{if .OfferBitcoin}}<form method="post" action="/c/{{.Token}}/pay">
+{{if .Monero}}<input type="hidden" name="rail" value="bitcoin" />
+{{end}}<button type="submit">{{.ButtonLabel}}</button>
+</form>
+{{end}}{{if .OfferMonero}}<form method="post" action="/c/{{.Token}}/pay">
+<input type="hidden" name="rail" value="monero" />
+<button type="submit">Pay with Monero</button>
+</form>
+{{end}}{{end}}

@@ -1,0 +1,253 @@
+{
+ "source": "Keys: the xpub and xprv of BIP32 test vector 1, chain m, and the refused keys of BIP32 test vector 5 (https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki, BSD-2-Clause). BIP32 has no testnet vectors: the tpub and tprv are the vector 1 payload re-encoded with the testnet versions 0x043587CF and 0x04358394 and a recomputed checksum, and the WIFs are vector 1's chain-m private key (checked in TestTestnetVectorsDerived and TestWIFDerived). All are public test data, used only to test the refusal. Regtest vectors: the external wpkh and tr descriptors (with checksum, as listdescriptors prints them) of a throwaway Bitcoin Core 32.1 regtest wallet created by qualify TestOnchainSetup; a snapshot of one run, public data only (no private key leaves bitcoind).",
+ "accept": [
+  {
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "func": "wpkh",
+   "origin": "",
+   "testnet": false,
+   "canonical": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)"
+  },
+  {
+   "input": "tr(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "func": "tr",
+   "origin": "",
+   "testnet": false,
+   "canonical": "tr(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)"
+  },
+  {
+   "input": "wpkh(tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)",
+   "func": "wpkh",
+   "origin": "",
+   "testnet": true,
+   "canonical": "wpkh(tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)"
+  },
+  {
+   "input": "tr(tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)",
+   "func": "tr",
+   "origin": "",
+   "testnet": true,
+   "canonical": "tr(tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)"
+  },
+  {
+   "input": "wpkh([d34db33f/84'/0h/0'/2147483647]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "func": "wpkh",
+   "origin": "[d34db33f/84h/0h/0h/2147483647]",
+   "testnet": false,
+   "canonical": "wpkh([d34db33f/84h/0h/0h/2147483647]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)"
+  },
+  {
+   "input": "tr([00000000]tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)#qpzry9x8",
+   "func": "tr",
+   "origin": "[00000000]",
+   "testnet": true,
+   "canonical": "tr([00000000]tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp/0/*)"
+  },
+  {
+   "input": "wpkh([4d2d3bcb/84h/1h/0h]tpubDDE4CBpyaVWuSAmZQZkNKASLpNFQdNP7zmdnichDoSa6uNCtSSXMVQghdPo3bKLTesUi9rdM1qG8Nv6W8Rcy4o9JSk3ozGfyYszk5LmybRn/0/*)#hfhztvj8",
+   "func": "wpkh",
+   "origin": "[4d2d3bcb/84h/1h/0h]",
+   "testnet": true,
+   "canonical": "wpkh([4d2d3bcb/84h/1h/0h]tpubDDE4CBpyaVWuSAmZQZkNKASLpNFQdNP7zmdnichDoSa6uNCtSSXMVQghdPo3bKLTesUi9rdM1qG8Nv6W8Rcy4o9JSk3ozGfyYszk5LmybRn/0/*)"
+  },
+  {
+   "input": "tr([4d2d3bcb/86h/1h/0h]tpubDCZS5ueGL6M4A7Zkx7z79vgNHTc861HguyfBuVLXvyWWkbSLzQ5PTWYdfmvTZ32XPTxSSByAPjFkkMRXa8TyVq2dp2qqXK4s87PReep2bdV/0/*)#de8aehsf",
+   "func": "tr",
+   "origin": "[4d2d3bcb/86h/1h/0h]",
+   "testnet": true,
+   "canonical": "tr([4d2d3bcb/86h/1h/0h]tpubDCZS5ueGL6M4A7Zkx7z79vgNHTc861HguyfBuVLXvyWWkbSLzQ5PTWYdfmvTZ32XPTxSSByAPjFkkMRXa8TyVq2dp2qqXK4s87PReep2bdV/0/*)"
+  }
+ ],
+ "refuse": [
+  {
+   "name": "xprv of BIP32 vector 1 inside wpkh",
+   "input": "wpkh(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "tprv",
+   "input": "wpkh(tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "bare WIF",
+   "input": "5KasyVKwgbH5VmDomdJdevZXRMMrbWcePkW17vxeg8daJWoeqHQ",
+   "err": "private"
+  },
+  {
+   "name": "WIF inside wpkh",
+   "input": "wpkh(5KasyVKwgbH5VmDomdJdevZXRMMrbWcePkW17vxeg8daJWoeqHQ)",
+   "err": "private"
+  },
+  {
+   "name": "xprv with broken grammar after it",
+   "input": "wpkh(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi/9/*",
+   "err": "private"
+  },
+  {
+   "name": "path /1/*",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/1/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "path /0h/*",
+   "input": "tr(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0h/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "multipath",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/<0;1>/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "112-character key",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet88/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "origin with 11 steps",
+   "input": "wpkh([d34db33f/1/2/3/4/5/6/7/8/9/10/11]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "origin with 7-hex fingerprint",
+   "input": "wpkh([d34db33/84h]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "origin with uppercase fingerprint",
+   "input": "wpkh([D34DB33F/84h]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "origin index leading zero",
+   "input": "wpkh([d34db33f/01]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "origin index 2^31",
+   "input": "wpkh([d34db33f/2147483648]xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "key checksum off by one",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet9/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "err": "syntax"
+  },
+  {
+   "name": "sh(wpkh)",
+   "input": "sh(wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*))",
+   "err": "syntax"
+  },
+  {
+   "name": "pkh",
+   "input": "pkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "combo",
+   "input": "combo(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "two keys",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "bad descriptor checksum alphabet",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)#qpzry9xb",
+   "err": "syntax"
+  },
+  {
+   "name": "short descriptor checksum",
+   "input": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)#qpzry9x",
+   "err": "syntax"
+  },
+  {
+   "name": "no key",
+   "input": "wpkh()",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: pubkey version / prvkey mismatch (0)",
+   "input": "wpkh(xpub661MyMwAqRbcEYS8w7XLSVeEsBXy79zSzH1J8vCdxAZningWLdN3zgtU6LBpB85b3D2yc8sfvZU521AAwdZafEz7mnzBBsz4wKY5fTtTQBm/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: prvkey version / pubkey mismatch (1)",
+   "input": "wpkh(xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzFGTQQD3dC4H2D5GBj7vWvSQaaBv5cxi9gafk7NF3pnBju6dwKvH/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: invalid pubkey prefix 04 (2)",
+   "input": "wpkh(xpub661MyMwAqRbcEYS8w7XLSVeEsBXy79zSzH1J8vCdxAZningWLdN3zgtU6Txnt3siSujt9RCVYsx4qHZGc62TG4McvMGcAUjeuwZdduYEvFn/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: invalid prvkey prefix 04 (3)",
+   "input": "wpkh(xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzFGpWnsj83BHtEy5Zt8CcDr1UiRXuWCmTQLxEK9vbz5gPstX92JQ/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: invalid pubkey prefix 01 (4)",
+   "input": "wpkh(xpub661MyMwAqRbcEYS8w7XLSVeEsBXy79zSzH1J8vCdxAZningWLdN3zgtU6N8ZMMXctdiCjxTNq964yKkwrkBJJwpzZS4HS2fxvyYUA4q2Xe4/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: invalid prvkey prefix 01 (5)",
+   "input": "wpkh(xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzFAzHGBP2UuGCqWLTAPLcMtD9y5gkZ6Eq3Rjuahrv17fEQ3Qen6J/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: zero depth with non-zero parent fingerprint (6)",
+   "input": "wpkh(xprv9s2SPatNQ9Vc6GTbVMFPFo7jsaZySyzk7L8n2uqKXJen3KUmvQNTuLh3fhZMBoG3G4ZW1N2kZuHEPY53qmbZzCHshoQnNf4GvELZfqTUrcv/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: zero depth with non-zero parent fingerprint (7)",
+   "input": "wpkh(xpub661no6RGEX3uJkY4bNnPcw4URcQTrSibUZ4NqJEw5eBkv7ovTwgiT91XX27VbEXGENhYRCf7hyEbWrR3FewATdCEebj6znwMfQkhRYHRLpJ/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: zero depth with non-zero index (8)",
+   "input": "wpkh(xprv9s21ZrQH4r4TsiLvyLXqM9P7k1K3EYhA1kkD6xuquB5i39AU8KF42acDyL3qsDbU9NmZn6MsGSUYZEsuoePmjzsB3eFKSUEh3Gu1N3cqVUN/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: zero depth with non-zero index (9)",
+   "input": "wpkh(xpub661MyMwAuDcm6CRQ5N4qiHKrJ39Xe1R1NyfouMKTTWcguwVcfrZJaNvhpebzGerh7gucBvzEQWRugZDuDXjNDRmXzSZe4c7mnTK97pTvGS8/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: unknown extended key version (10) (a private payload: byte 45 is 0x00)",
+   "input": "wpkh(DMwo58pR1QLEFihHiXPVykYB6fJmsTeHvyTp7hRThAtCX8CvYzgPcn8XnmdfHGMQzT7ayAmfo4z3gY5KfbrZWZ6St24UVf2Qgo6oujFktLHdHY4/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: unknown extended key version (11)",
+   "input": "wpkh(DMwo58pR1QLEFihHiXPVykYB6fJmsTeHvyTp7hRThAtCX8CvYzgPcn8XnmdfHPmHJiEDXkTiJTVV9rHEBUem2mwVbbNfvT2MTcAqj3nesx8uBf9/0/*)",
+   "err": "syntax"
+  },
+  {
+   "name": "BIP32 vector 5: private key 0 not in 1..n-1 (12)",
+   "input": "wpkh(xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzF93Y5wvzdUayhgkkFoicQZcP3y52uPPxFnfoLZB21Teqt1VvEHx/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: private key n not in 1..n-1 (13)",
+   "input": "wpkh(xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzFAzHGBP2UuGCqWLTAPLcMtD5SDKr24z3aiUvKr9bJpdrcLg1y3G/0/*)",
+   "err": "private"
+  },
+  {
+   "name": "BIP32 vector 5: invalid checksum (14)",
+   "input": "wpkh(xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHL/0/*)",
+   "err": "private"
+  }
+ ]
+}

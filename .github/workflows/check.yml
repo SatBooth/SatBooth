@@ -1,0 +1,41 @@
+name: check
+
+# A branch is checked through its pull request; a push runs this only on main, so one commit is not checked twice.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # The repository variable RUNNER, when set, names the label of another runner (a self-hosted one); unset, the
+    # job runs on GitHub's hosted runner. Leave it unset in a public repository: there a pull request from a fork
+    # would run its code on that runner.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: scripts/tools.sh
+      - run: scripts/check.sh
+        env:
+          # Only the vendor-consistency step uses this proxy; the checksum database stays on.
+          GOPROXY_VENDOR: https://proxy.golang.org
+      # The lock file's owner check needs root to chown a file to another user. The test binary is built as the
+      # runner user (same Go, same vendor tree, no root-owned files in the workspace) and only run under sudo.
+      - run: |
+          GOFLAGS=-mod=vendor go test -c -o "$RUNNER_TEMP/service.test" ./service
+          sudo "$RUNNER_TEMP/service.test" -test.run '^TestLockFileOwner$' -test.v | tee "$RUNNER_TEMP/lockowner.out"
+          grep -q -- '--- PASS: TestLockFileOwner' "$RUNNER_TEMP/lockowner.out"
+      - run: scripts/vulncheck.sh
+      - run: scripts/fuzz.sh 20

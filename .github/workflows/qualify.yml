@@ -1,0 +1,49 @@
+name: qualify
+
+# Dev-only: real Alby Hub containers on a regtest network (dev/regtest). Not part of the check gate.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'full: the whole qualification; a group: the setup, that group and the end checks'
+        type: choice
+        default: full
+        options: [full, deploy, image, refund, hub, onchain]
+  schedule:
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+# Several runners of one machine can share a Docker daemon, and this workflow uses fixed image tags and Compose
+# project names: on a runner named by the variable RUNNER its runs take turns (a waiting run is replaced by a
+# newer one). On GitHub's hosted runners every run has a machine of its own and a group of its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ vars.RUNNER || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    # The repository variable RUNNER, when set, names the label of another runner (a self-hosted one); unset, the
+    # job runs on GitHub's hosted runner. Leave it unset in a public repository: there a pull request from a fork
+    # would run its code on that runner.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The scheduled run has no input and is the full run. The input reaches the shell through the environment.
+      - run: |
+          case "$ONLY" in
+            '' | full) scripts/qualify.sh ;;
+            *) scripts/qualify.sh --only "$ONLY" ;;
+          esac
+        env:
+          ONLY: ${{ inputs.only }}
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: qualify-logs
+          path: dev/regtest/logs/
+          if-no-files-found: ignore
