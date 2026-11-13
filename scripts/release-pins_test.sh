@@ -8,7 +8,7 @@ pins=$PWD/scripts/release-pins.sh
 repo=$PWD
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2> /dev/null; rm -rf "$tmp"' EXIT
 
 fail() { echo "release-pins_test: FAIL: $*" >&2; exit 1; }
 
@@ -191,6 +191,30 @@ if run "$d" check "$tmp/changed.txt" > "$tmp/out" 2>&1; then fail "check accepte
 grep -qx "satbooth-relay pinned sha256:$(hex b 64), built sha256:$(hex d 64)" "$tmp/out" || fail "check output: $(cat "$tmp/out")"
 grep -qx 'satbooth match' "$tmp/out" || fail "check did not report satbooth as a match: $(cat "$tmp/out")"
 grep -qx 'satbooth-tools match' "$tmp/out" || fail "check did not report satbooth-tools as a match"
+
+# set is atomic: when the second site cannot be written, the three sites are unchanged and no temporary file is left.
+if [ "$(id -u)" -ne 0 ]; then
+  d=$tmp/atomic
+  fresh "$d"
+  cp -R "$d" "$tmp/atomic-before"
+  chmod 555 "$d/deploy/hub"
+  fails "set with an unwritable second site" "satbooth-relay: cannot write beside" run "$d" set v0.4.0 "$digests"
+  chmod 755 "$d/deploy/hub"
+  diff -r "$d" "$tmp/atomic-before" > /dev/null ||
+    fail "a failed set changed a site or left a file: $(diff -r "$d" "$tmp/atomic-before")"
+fi
+
+# check-tag: exits 0 exactly for a release tag, and reads no site.
+for t in v0.1.0 v1.2.3 v10.20.30 v0.1.0-rc.1 v1.2.3-rc.12; do
+  "$pins" check-tag "$t" || fail "check-tag refused $t"
+done
+for t in '' v1 v1.2 v1.2.3.4 1.2.3 V1.2.3 v1.2.3-rc v1.2.3-rc. v1.2.3-rc.1.2 v1.2.3-beta.1 v1.2.3-rc.1x \
+  ' v1.2.3' 'v1.2.3 ' $'v1.2.3\n' latest; do
+  if "$pins" check-tag "$t" 2> /dev/null; then fail "check-tag accepted \"$t\""; fi
+done
+fails "check-tag without an argument" "usage: check-tag" "$pins" check-tag
+fails "check-tag with two arguments" "usage: check-tag" "$pins" check-tag v1.2.3 v1.2.4
+fails "check-tag says why" "not a release tag" "$pins" check-tag v1
 
 # The repository's own sites parse when RELEASE_PINS_ROOT is unset.
 (cd "$repo" && "$pins" check-format) || fail "the repository's pins were refused"

@@ -14,7 +14,10 @@ tag=$1
 
 fail() { echo "release-smoke: FAIL: $*" >&2; exit 1; }
 
-[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $tag"
+# shellcheck source=scripts/release-lib.sh
+. "$(dirname "$0")/release-lib.sh"
+
+[[ $tag =~ $RELEASE_TAG_RE ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $tag"
 
 cd "$(dirname "$0")/.."
 pins=scripts/release-pins.sh
@@ -22,16 +25,13 @@ pins=scripts/release-pins.sh
 version=$("$pins" version)
 [ "$version" = "$tag" ] || fail "the pins are at $version, not $tag"
 
-shown=$("$pins" show)
-refs=()
-while read -r name ref; do
-  digest=${ref##*@}
+release_pins_read "$pins" || fail "cannot read the pinned images"
+for i in 0 1 2; do
+  name=${PIN_NAMES[$i]} ref=${PIN_REFS[$i]} digest=${PIN_DIGESTS[$i]}
   have=$(docker buildx imagetools inspect "${ref%%@*}" --format '{{.Manifest.Digest}}')
   [ "$have" = "$digest" ] || fail "$name:$tag holds $have, pinned $digest"
   docker pull --quiet "$ref" > /dev/null
   echo "release-smoke: $name $digest pulled"
-  refs+=("$ref")
-done <<< "$shown"
-[ "${#refs[@]}" -eq 3 ] || fail "expected three images, have ${#refs[@]}"
+done
 
-scripts/image-run-test.sh "${refs[@]}"
+scripts/image-run-test.sh "${PIN_REFS[@]}"

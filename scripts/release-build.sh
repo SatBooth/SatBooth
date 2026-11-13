@@ -15,12 +15,14 @@ if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
   echo "usage: release-build.sh <outdir> [<platform>]" >&2
   exit 2
 fi
-outdir=$1
 platform=${2:-}
 case "$platform" in
   '' | linux/amd64 | linux/arm64) ;;
   *) echo "release-build: platform must be linux/amd64 or linux/arm64: $platform" >&2; exit 2 ;;
 esac
+# <outdir> may be relative to the caller's directory: made absolute before the change to the repository root.
+mkdir -p -- "$1"
+outdir=$(cd -- "$1" && pwd)
 
 fail() { echo "release-build: FAIL: $*" >&2; exit 1; }
 
@@ -28,8 +30,6 @@ cd "$(dirname "$0")/.."
 # shellcheck source=scripts/release-lib.sh
 . scripts/release-lib.sh
 
-mkdir -p "$outdir"
-outdir=$(cd "$outdir" && pwd)
 release_ensure_builder
 
 # Prints the digest of the image or index at the top of an OCI archive's index.json.

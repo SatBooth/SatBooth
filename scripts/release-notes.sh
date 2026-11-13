@@ -12,14 +12,17 @@ tag=$1
 
 fail() { echo "release-notes: FAIL: $*" >&2; exit 1; }
 
-[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $tag"
+# shellcheck source=scripts/release-lib.sh
+. "$(dirname "$0")/release-lib.sh"
+
+[[ $tag =~ $RELEASE_TAG_RE ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $tag"
 
 cd "$(dirname "$0")/.."
 pins=scripts/release-pins.sh
 
 version=$("$pins" version)
 [ "$version" = "$tag" ] || fail "the pins are at $version, not $tag"
-shown=$("$pins" show)
+release_pins_read "$pins" || fail "cannot read the pinned images"
 
 cat <<TEXT
 Changes: (to be written before publishing)
@@ -27,10 +30,10 @@ Changes: (to be written before publishing)
 ## Images
 
 TEXT
-while read -r _ ref; do
+for ref in "${PIN_REFS[@]}"; do
   # shellcheck disable=SC2016
   printf -- '- `%s`\n' "$ref"
-done <<< "$shown"
+done
 
 cat <<TEXT
 
@@ -45,11 +48,11 @@ By attestation, which accepts only the release workflow of this repository, run 
 runner, for each image:
 
 TEXT
-while read -r _ ref; do
+for ref in "${PIN_REFS[@]}"; do
   printf -- '    gh attestation verify oci://%s -R SatBooth/SatBooth \\\n' "${ref/:$tag@/@}"
   printf -- '      --signer-workflow SatBooth/SatBooth/.github/workflows/release.yml \\\n'
   printf -- '      --source-ref refs/tags/%s --deny-self-hosted-runners\n' "$tag"
-done <<< "$shown"
+done
 
 cat <<'TEXT'
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: scripts/release-pins.sh show | check-format | version | check <digests.txt> [<tag>]
+# Usage: scripts/release-pins.sh show | check-format | version | check <digests.txt> [<tag>] | check-tag <tag>
 #        | set <version> <digests.txt>
 # The release images are pinned by tag and digest at three sites: the service `satbooth` of deploy/public/compose.yml,
 # the service `relay` of deploy/hub/compose.yml, and the tools_image= line of deploy/setup.sh. This script reads and
@@ -13,7 +13,9 @@
 #   check         exits 0 iff every pinned digest equals the digest in <digests.txt> (the file release-build.sh
 #                 writes) and, with a <tag>, the version equals it; prints each name with "match" or
 #                 "pinned X, built Y"
-#   set           rewrites the three sites to <version> and the digests of <digests.txt>
+#   check-tag     exits 0 iff <tag> is a release tag (RELEASE_TAG_RE of scripts/release-lib.sh); reads no site
+#   set           rewrites the three sites to <version> and the digests of <digests.txt>: every new content is written
+#                 to a temporary file beside its site first, and the sites are replaced only when all three are ready
 # RELEASE_PINS_ROOT is the tree whose sites are read (default: this repository).
 set -euo pipefail
 
@@ -21,7 +23,9 @@ set -euo pipefail
 NAMESPACE=ghcr.io/satbooth
 
 names=(satbooth satbooth-relay satbooth-tools)
-version_re='v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?'
+# shellcheck source=scripts/release-lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/release-lib.sh"
+version_re=$RELEASE_VERSION_RE
 digest_re='sha256:[0-9a-f]{64}'
 
 fail() { echo "release-pins: $*" >&2; exit 1; }
@@ -45,17 +49,22 @@ site_needle() {
   esac
 }
 
-# site_ref <name>: the ref held by the site, that is by the line holding the needle; fails unless exactly one line
-# holds it.
+# site_ref <name>: the ref held by the site, that is by the line holding the needle (less its `image:` or
+# `tools_image=` key and its trailing blanks); fails unless exactly one line holds it.
 site_ref() {
-  local file lines n
+  local file needle line hit='' n=0 ref
   file=$(site_file "$1")
   [ -f "$file" ] || fail "$1: no such file: $file"
-  lines=$(grep -F -- "$(site_needle "$1")" "$file" || true)
-  n=$(printf '%s' "$lines" | grep -c . || true)
+  needle=$(site_needle "$1")
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in *"$needle"*) n=$((n + 1)); hit=$line ;; esac
+  done < "$file"
   [ "$n" -eq 1 ] || fail "$1: $n pin lines in $file, want exactly one"
-  printf '%s\n' "$lines" |
-    sed -E 's/^[[:space:]]*image:[[:space:]]*//; s/^[[:space:]]*tools_image=//; s/[[:space:]]+$//'
+  ref=$hit
+  if [[ $ref =~ ^[[:space:]]*image:[[:space:]]*(.*)$ ]]; then ref=${BASH_REMATCH[1]}; fi
+  if [[ $ref =~ ^[[:space:]]*tools_image=(.*)$ ]]; then ref=${BASH_REMATCH[1]}; fi
+  while [[ $ref == *[[:space:]] ]]; do ref=${ref%?}; done
+  printf '%s\n' "$ref"
 }
 
 # ref_version <ref>: the tag of a ref that has passed the format check.
@@ -98,7 +107,12 @@ check_digests_file() {
 }
 
 # digest_of <digests.txt> <name>: the digest listed for the name, in a file that check_digests_file accepted.
-digest_of() { awk -v n="$2" '$1 == n { print $2 }' "$1"; }
+digest_of() {
+  local name digest
+  while read -r name digest; do
+    if [ "$name" = "$2" ]; then printf '%s\n' "$digest"; fi
+  done < "$1"
+}
 
 cmd=${1:-}
 case $cmd in
@@ -140,6 +154,10 @@ case $cmd in
     fi
     exit "$status"
     ;;
+  check-tag)
+    [ "$#" -eq 2 ] || fail "usage: check-tag <tag>"
+    [[ $2 =~ $RELEASE_TAG_RE ]] || fail "not a release tag like v1.2.3 or v1.2.3-rc.1: $2"
+    ;;
   set)
     [ "$#" -eq 3 ] || fail "usage: set <version> <digests.txt>"
     [[ $2 =~ ^$version_re$ ]] || fail "not a version like v1.2.3 or v1.2.3-rc.1: $2"
@@ -151,10 +169,17 @@ case $cmd in
       d=$(digest_of "$3" "$name") || exit 1
       refs+=("$NAMESPACE/$name:$2@$d")
     done
+    # Each site's new content goes to a temporary file in the site's directory, and a trap removes whatever is left
+    # of them on any exit. Only when all three exist are they moved over the sites.
+    tmps=()
+    trap 'rm -f ${tmps[@]+"${tmps[@]}"}' EXIT
+    files=()
     i=0
     for name in "${names[@]}"; do
       file=$(site_file "$name")
-      new=$(mktemp "$file.XXXXXX") || exit 1
+      new=$(mktemp "$file.XXXXXX" 2> /dev/null) || fail "$name: cannot write beside $file"
+      tmps+=("$new")
+      files+=("$file")
       case $name in
         satbooth-tools) repl="tools_image=${refs[$i]}" ;;
         *) repl="image: ${refs[$i]}" ;;
@@ -163,11 +188,14 @@ case $cmd in
         index($0, needle) { match($0, /^[[:space:]]*/); print substr($0, 1, RLENGTH) repl; next }
         { print }' "$file" > "$new"
       chmod --reference="$file" "$new" 2> /dev/null || chmod "$(stat -f '%Lp' "$file" 2> /dev/null || echo 644)" "$new"
-      mv "$new" "$file"
       i=$((i + 1))
+    done
+    for i in 0 1 2; do
+      mv "${tmps[$i]}" "${files[$i]}"
     done
     ;;
   *)
-    fail "usage: release-pins.sh show | check-format | version | check <digests.txt> [<tag>] | set <version> <digests.txt>"
+    fail "usage: release-pins.sh show | check-format | version | check <digests.txt> [<tag>] | check-tag <tag>" \
+      "| set <version> <digests.txt>"
     ;;
 esac
