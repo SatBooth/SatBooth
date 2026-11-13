@@ -101,8 +101,9 @@ organisation owner does this once.
    another digest that was there when it read the tag; it fails instead. It reads a tag and creates it a moment
    later, so a concurrent writer with package-write rights (threat model §6) could still create the tag in between;
    operators who pull by digest are unaffected. Then `smoke` pulls the published images on an amd64 and an arm64
-   runner and runs `scripts/image-run-test.sh` on them; only when it passes on both architectures does `draft` create a draft release
-   (a prerelease for an rc) from `scripts/release-notes.sh <tag>`, whose "Changes:" placeholder is one line to replace.
+   runner and runs `scripts/image-run-test.sh` on them; only when it passes on both architectures does `draft` create a
+   draft release (a prerelease for an rc) from `scripts/release-notes.sh <tag>`, whose "Changes:" placeholder is one
+   line to replace.
 
 5. **Check that the packages are public.** GitHub's documentation says that a package published by a workflow takes the
    visibility of the repository, so the three packages should be public. The first release confirms which case applies.

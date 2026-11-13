@@ -72,11 +72,43 @@ awk -v zeros="$zeros" '{ print }
 RELEASE_PINS_ROOT=$d "$pins" check-format || fail "the extra service changed what check-format reads"
 refused "a SatBooth namespace image on another service" "$d" "extra runs ghcr.io/satbooth/other:"
 
-# A service on an image that is neither pinned by digest nor local.
-d=$tmp/unpinned
+# add_service <name> <dir> <host> <fragment> <line>...: the lines, as a service `extra`, at the top of the bundle's
+# services; the bundle is refused and the refusal says <fragment>. Check-format must still read the pins.
+add_service() {
+  local name=$1 d=$tmp/$1 host=$3 fragment=$4
+  fresh "$d"
+  printf '  extra:\n' > "$d/block"
+  shift 4
+  printf '    %s\n' "$@" >> "$d/block"
+  awk 'FNR == NR { block = block $0 "\n"; next } { print } /^services:$/ { printf "%s", block }' \
+    "$d/block" "$d/deploy/$host/compose.yml" > "$d/c.yml" && mv "$d/c.yml" "$d/deploy/$host/compose.yml"
+  RELEASE_PINS_ROOT=$d "$pins" check-format || fail "$name: the extra service changed what check-format reads"
+  refused "$name" "$d" "$fragment"
+}
+zeros=$(printf '%064d' 0)
+
+add_service "an unpinned image" x hub "extra runs alpine:3" "image: alpine:3"
+add_service "a remote image tagged local" x2 hub "extra runs docker.io/evil/x:local" \
+  "image: docker.io/evil/x:local" "build: {context: .}"
+add_service "a remote image tagged local, always pulled" x3 hub "extra runs evil.example/x:local" \
+  "image: evil.example/x:local" "build: {context: .}" "pull_policy: always"
+add_service "a local image without a build" x4 hub "extra runs nobuild:local" "image: nobuild:local"
+add_service "a local build with pull_policy always" x5 hub "extra runs built:local" \
+  "image: built:local" "build: {context: .}" "pull_policy: always"
+add_service "the namespace in capitals" x6 hub "extra runs GHCR.IO/SatBooth/other@sha256:" \
+  "image: GHCR.IO/SatBooth/other@sha256:$zeros"
+add_service "the namespace behind a port" x7 hub "extra runs ghcr.io:443/satbooth/other@sha256:" \
+  "image: ghcr.io:443/satbooth/other@sha256:$zeros"
+add_service "an image named by a variable" x8 hub "extra names its image with a variable" \
+  "image: \${EXTRA_IMAGE:-alpine@sha256:$zeros}"
+
+# A local build with no registry, and a digest-pinned image elsewhere, are accepted.
+d=$tmp/good
 fresh "$d"
-awk '{ print } /^services:$/ { print "  extra:"; print "    image: alpine:3" }' \
-  "$d/deploy/hub/compose.yml" > "$d/c.yml" && mv "$d/c.yml" "$d/deploy/hub/compose.yml"
-refused "an unpinned image" "$d" "extra runs alpine:3"
+printf '  extra:\n    image: built:local\n    build: {context: .}\n' > "$d/block"
+printf '  extra2:\n    image: alpine@sha256:%s\n' "$zeros" >> "$d/block"
+awk 'FNR == NR { block = block $0 "\n"; next } { print } /^services:$/ { printf "%s", block }' \
+  "$d/block" "$d/deploy/hub/compose.yml" > "$d/c.yml" && mv "$d/c.yml" "$d/deploy/hub/compose.yml"
+run "$d" || fail "a local build and a digest-pinned image were refused"
 
 echo "release-bundles_test: ok"

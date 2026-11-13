@@ -7,9 +7,9 @@ hub host and `public/` for the public host. The two hosts are never one machine 
 the pins in the tree of a tag are the ones that release published. On both hosts, in a clean checkout, verify the tag of
 the release you deploy with `git tag -v <tag>`, after importing the release signing key and comparing its fingerprint
 (`SECURITY.md`, "Release signing key"), then run `git switch --detach "refs/tags/<tag>^{commit}"` and check that
-`git rev-parse HEAD` equals `git rev-parse "refs/tags/<tag>^{commit}"`. Between releases, the pins on `main` name the last release while the code around
-them may be newer. "Release images" below says how to verify the images themselves, and `docs/releasing.md` is the
-maintainer's procedure.
+`git rev-parse HEAD` equals `git rev-parse "refs/tags/<tag>^{commit}"`. Between releases, the pins on `main` name the
+last release while the code around them may be newer. "Release images" below says how to verify the images
+themselves, and `docs/releasing.md` is the maintainer's procedure.
 
 ## Set up with `satbooth-setup`
 

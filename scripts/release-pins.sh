@@ -208,19 +208,37 @@ case $cmd in
       while IFS= read -r var; do unset_vars+=(-u "$var"); done < <(grep -oE '^[A-Z0-9_]+' "$dir/example.env" || true)
       rendered=$(env ${unset_vars[@]+"${unset_vars[@]}"} docker compose --profile "*" -f "$dir/compose.yml" \
         --env-file "$dir/example.env" config --format json) || fail "check-bundles: $dir/compose.yml does not render"
+      # The same file without interpolation: an image that is a variable would be judged by the example value only.
+      raw=$(env ${unset_vars[@]+"${unset_vars[@]}"} docker compose --profile "*" -f "$dir/compose.yml" \
+        --env-file "$dir/example.env" config --no-interpolate --format json) ||
+        fail "check-bundles: $dir/compose.yml does not render without interpolation"
       case $host in
         public) want=$(jq -n --arg r "${SITE_REFS[0]}" '{satbooth: $r, "satbooth-oneoff": $r}') ;;
         hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r}') ;;
       esac
-      problems=$(jq -r --arg ns "$NAMESPACE/" --argjson want "$want" '
+      # Another service's image is accepted when it is pinned by digest, or when it is built here: a service with a
+      # `build`, a name without registry or namespace, tag `local`, and no `pull_policy: always`. No image of another
+      # service may name satbooth/ in any case, whatever the registry or port before it.
+      problems=$(jq -r --argjson want "$want" '
         .services as $s
         | ($want | to_entries[] | select($s[.key].image != .value)
             | "\(.key) runs \($s[.key].image // "no image"), not \(.value)"),
-          ($s | to_entries[] | select($want[.key] == null) | (.value.image // "") as $img
-            | select(($img | startswith($ns)) or ($img | test("@sha256:[0-9a-f]{64}$|:local$") | not))
+          ($s | to_entries[] | select($want[.key] == null) | (.value.image // "") as $img | .value as $v
+            | select(
+                ($img | ascii_downcase | contains("satbooth/"))
+                or (
+                  ($img | test("@sha256:[0-9a-f]{64}$") | not)
+                  and (($v.build != null and ($img | test("^[a-z0-9][a-z0-9._-]*:local$"))
+                        and ($v.pull_policy // "") != "always") | not)
+                ))
             | "\(.key) runs \($img | if . == "" then "no image" else . end);"
-              + " it must be outside \($ns) and pinned by digest or local")
+              + " it must be pinned by digest outside satbooth/, or be a local build with no registry"
+              + " and no pull_policy always")
         ' <<< "$rendered") || fail "check-bundles: cannot read the rendering of $dir/compose.yml"
+      vars_in=$(jq -r '.services | to_entries[] | select((.value.image // "") | contains("$"))
+        | "\(.key) names its image with a variable"' <<< "$raw") ||
+        fail "check-bundles: cannot read the raw rendering of $dir/compose.yml"
+      problems+=${vars_in:+${problems:+$'\n'}$vars_in}
       if [ -n "$problems" ]; then
         while IFS= read -r line; do echo "deploy/$host: $line" >&2; done <<< "$problems"
         status=1

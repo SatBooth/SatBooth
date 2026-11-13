@@ -142,8 +142,8 @@ if docker compose version > /dev/null 2>&1; then
       fail "compose: $dir/compose.build.yml leaves a service on a release image from the registry"
     fi
   done
-  # Both bundles, as Compose resolves them, run the pinned refs and no other image of SatBooth's namespace; a text search
-  # for the pin would not see an `image:` that overrides it.
+  # Both bundles, as Compose resolves them, run the pinned refs and no other image of SatBooth's namespace; a text
+  # search for the pin would not see an `image:` that overrides it.
   scripts/release-pins.sh check-bundles || fail "compose: a base bundle runs an image other than the pinned one"
   scripts/release-bundles_test.sh || fail "compose: scripts/release-bundles_test.sh"
 elif [ -n "${CI-}" ]; then
