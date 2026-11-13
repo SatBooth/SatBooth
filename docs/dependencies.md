@@ -654,6 +654,7 @@ image, and each pin, is in `deploy/README.md` ("Release images").
 | Image | Pin | Used for |
 |---|---|---|
 | Go builder | `golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9` | the build stage of `deploy/image/Dockerfile` (only the two binaries and its CA bundle leave it); the `volume-init` of the public bundle and of `dev/regtest/` |
+| BuildKit | `moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c` (v0.34.1, published 2026-10-20; the newest release at least 14 days old when pinned) | the `docker-container` builder of `scripts/release-lib.sh`: Docker's own BuildKit, pinned because layer compression and the exporter decide the release image digests |
 | Debian | `debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2` | the bitcoind, Fulcrum and Monero images of the hub bundle and of `dev/regtest/`, the hub bundle's `netns` and `volume-init` |
 | Alby Hub | `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770…` (the table above) | the hub bundle and the regtest hubs |
 | `satbooth`, `satbooth-relay` | built locally from `deploy/image/Dockerfile`, `FROM scratch`; never pushed to a registry | the public bundle, the hub bundle's relay, and qualification |
