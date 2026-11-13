@@ -42,7 +42,7 @@ expected=$(
     printf '      --signer-workflow SatBooth/SatBooth/.github/workflows/release.yml \\\n'
     printf '      --source-ref refs/tags/%s --deny-self-hosted-runners\n' "$tag"
   done
-  printf '\nBy rebuild, which needs Docker with buildx. The digests it prints must equal the pinned ones.\n'
+  printf '\nBy rebuild, which needs Docker with buildx and `jq`. The digests it prints must equal the pinned ones.\n'
   printf 'It writes large files, so the output directory is outside the checkout:\n\n'
   printf '    out=$(mktemp -d)\n    scripts/release-build.sh "$out"\n'
   printf '    scripts/release-pins.sh check "$out/digests.txt"\n'

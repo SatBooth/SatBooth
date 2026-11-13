@@ -122,12 +122,12 @@ organisation owner does this once.
 
 ## When a run is refused
 
-If `agree` fails, the pins and the build disagree: nothing is pushed. If `publish` fails before the push, nothing is
-pushed. If the run is refused or fails after some images were pushed, the digests in the registry are the pinned ones
-and `release-push.sh` leaves a tag that holds another digest as a failure. In every case the answer is the next version:
-fix the cause in a pull request, then tag that version. Never move or delete a tag: the tag rulesets forbid it, and an
-operator who verified the old tag must keep seeing the same commit under it. A tag that was pushed and did not publish
-stays, unreleased.
+If `agree` fails, the pins and the build disagree: nothing is pushed. If the approval is refused, nothing is pushed. If
+`publish` fails after some images were pushed, the registry holds only the pinned digests: `release-push.sh` never moves
+a registry tag that holds another digest, it fails instead. In every case the answer is the next version: fix the cause
+in a pull request, then tag that version. Never move or delete a tag: the tag rulesets forbid it, and an operator who
+verified the old tag must keep seeing the same commit under it. A tag that was pushed and did not publish stays,
+unreleased.
 
 ## Between releases
 

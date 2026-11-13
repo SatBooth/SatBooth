@@ -920,10 +920,9 @@ settings, which `docs/releasing.md` ("Before the first release") sets up and rea
 configuration, not something the workflow enforces. The `release` environment needs the maintainer's approval, accepts
 deployments from `v*` tags only and cannot be bypassed by administrators. Two rulesets cover `refs/tags/v*`: one
 forbids update and deletion, with no bypass, so a tag can be neither moved nor removed; the other restricts creation to
-the repository-admin role. A workflow that names an environment
-that does not exist gets one created without protection, so the settings must exist before the first release. The
-publish job pushes the pinned digests and tags them with the version; it fails when a registry tag already holds
-another digest.
+the repository-admin role. A workflow that names an environment that does not exist gets one created without
+protection, so the settings must exist before the first release. The publish job pushes the pinned digests and tags
+them with the version; it fails when a registry tag already holds another digest.
 
 What a compromised run or a stolen token could still do. Any workflow that someone with write access to the repository
 pushes, on any branch, can request `packages: write` and push to the three packages without the environment. A

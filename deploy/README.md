@@ -38,9 +38,8 @@ and what does not.
   addresses are answers, and each must be outside the bundles' own Docker networks.
 - **Docker** with Compose on both hosts, and this repository checked out on both, at the release tag you deploy. The
   setup wrapper needs Docker Engine in its default mode: `deploy/setup.sh` refuses a rootless engine or Podman
-  ("a rootless Docker engine or Podman
-  is not supported by this wrapper (the bundles are qualified on Docker Engine in its default mode)"), because the
-  bundles are qualified on the default mode only.
+  ("a rootless Docker engine or Podman is not supported by this wrapper (the bundles are qualified on Docker Engine in
+  its default mode)"), because the bundles are qualified on the default mode only.
 - **From the admin system, the refund approval public key or keys**, if you want refunds: `satbooth-approve keygen
   -out <path>` there prints the public key (`docs/refunds.md`, "Refunds" and "`satbooth-approve`"). The admin's signing
   key lives on neither host, and `satbooth-approve` is not in the tools image: the setup command takes public keys only.

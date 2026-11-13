@@ -53,7 +53,7 @@ done <<< "$shown"
 
 cat <<'TEXT'
 
-By rebuild, which needs Docker with buildx. The digests it prints must equal the pinned ones.
+By rebuild, which needs Docker with buildx and `jq`. The digests it prints must equal the pinned ones.
 It writes large files, so the output directory is outside the checkout:
 
     out=$(mktemp -d)
