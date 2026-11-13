@@ -826,10 +826,12 @@ func (s *Service) exclusive(ctx context.Context, o store.Order, txid string, con
 	return true, nil
 }
 
-// workHeld handles an order whose events or ledger could not be read when step 3 chose its work: it reads stale, no
-// final event is written for it in this pass (heldInPass), and the pass is not good (workFailed).
-func (s *Service) workHeld(id string, stale map[string]struct{}) {
+// workHeld handles an order whose events or ledger could not be read when step 3 chose its work: it reads stale, it is
+// skipped (settle does not settle it in this pass), no final event is written for it (heldInPass), and the pass is
+// not good (workFailed).
+func (s *Service) workHeld(id string, stale map[string]struct{}, skip map[string]bool) {
 	stale[id] = struct{}{}
+	skip[id] = true
 	s.heldInPass[id] = struct{}{}
 	s.workFailed = true
 }
@@ -857,7 +859,7 @@ type orderWork struct {
 // their window (a test pins it): every output of those is read by the first arm of WatchedTXOs. A store error puts the
 // order in stale and goes on; its extras are not read, as an unread output counts zero (boundOut).
 func (s *Service) work(ctx context.Context, now time.Time, orders map[string]store.Order, touched *orderList,
-	listedMined map[store.TXOKey]bool, stale map[string]struct{}) ([]orderWork, error) {
+	listedMined map[store.TXOKey]bool, skip map[string]bool, stale map[string]struct{}) ([]orderWork, error) {
 	watched, err := s.st.WatchedTXOs(ctx, now)
 	if err != nil {
 		return nil, s.trackFailed(ctx, "watched", err)
@@ -921,21 +923,16 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 						return nil, ctx.Err()
 					}
 					s.log.Error(logTrackFailed, "at", "events")
-					s.workHeld(o.ID, stale)
+					s.workHeld(o.ID, stale, skip)
 					failed[o.ID] = true
 				}
 				final = err == nil && ev.Final
 				finals[o.ID] = final
 			}
 			if failed[o.ID] {
-				// Its events are unknown: the order is held (no final event in this pass) and the pass is not good. The
-				// output is read from the budget of resting reads, unless the scan listed it mined: then it is read as
-				// any other.
-				if !listedMined[k] {
-					late = append(late, t)
-					continue
-				}
-				add(t)
+				// Its events are unknown: the order is skipped and held (no final event in this pass) and the pass is
+				// not good. The output is read from the budget of resting reads.
+				late = append(late, t)
 				continue
 			}
 			if final {
@@ -945,12 +942,8 @@ func (s *Service) work(ctx context.Context, now time.Time, orders map[string]sto
 						return nil, ctx.Err()
 					}
 					s.log.Error(logTrackFailed, "at", "ledger")
-					s.workHeld(o.ID, stale)
-					if !listedMined[k] {
-						late = append(late, t)
-						continue
-					}
-					add(t)
+					s.workHeld(o.ID, stale, skip)
+					late = append(late, t)
 					continue
 				}
 				t.dead = !v.Recorded && !v.Foreign
@@ -1067,7 +1060,7 @@ func (s *Service) trackAll(ctx context.Context, now time.Time, loaded bool, orde
 		touched.add(id)
 	}
 	carried := map[string]struct{}{}
-	list, err := s.work(ctx, now, orders, touched, listedMined, stale)
+	list, err := s.work(ctx, now, orders, touched, listedMined, skip, stale)
 	if err != nil {
 		return nil, err
 	}

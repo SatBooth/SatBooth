@@ -15,7 +15,7 @@
   (replaced, double spent, or evicted); a reorg that puts it back in the mempool keeps it. Inside the watch window, an
   evicted record that comes back is recorded again: `order.reverted` when it left (if the order stopped reading paid),
   then `order.paid_again` when it is back (once the order has its final event, a payment that is gone and has no record
-  is read with a backoff, so a return to the mempool with no block is seen about 10 minutes later and the record waits
+  is read with a backoff, so a return to the mempool with no block is seen within about 10 minutes and the record waits
   that long; see "The watcher's cost"). It is settled only once mined `SettledDepth` deep. A late payment is never
   recorded from the mempool, whatever the tier: it needs at least 1 confirmation, so a late payment replaced before a
   block sends no `order.late`. A payment that counted, was evicted before the expiry and was broadcast again after it
@@ -130,7 +130,7 @@
     time, to the second, so an unrelated payment of the order first seen in the same second can also silence it). If
     a later scan lists it mined, it is tracked again and recorded by the usual rules. A rebroadcast seen only in the
     mempool does not bring it back, so an order at a 0 tier then waits for a block. Between the order's final event and
-    the window's end, a payment that comes back to the mempool with no block is seen about 10 minutes later. The same `ALERT` comes at the
+    the window's end, a payment that comes back to the mempool with no block is seen within about 10 minutes. The same `ALERT` comes at the
     window's end for every on-time payment that died earlier and was never carried on (a cancelled or double-spent
     on-time payment, for example), unless the order reads paid by its events (`order.paid`, with no `order.reverted`
     that `order.paid_again` has not answered): a person has nothing to do then. SatBooth stops polling it either way.
@@ -243,7 +243,7 @@
   `poll_seconds`: it starts no new order once `poll_seconds` have passed since it began its reads, and an order it has
   started it finishes, so one order with many payments stretches a pass by at most its own reads. The next pass starts
   with the first order the last one did not reach. An order that is not reached waits for its turn, is not settled
-  meanwhile, and keeps its place; the discovery of new payments (their first-seen times) runs in every pass. Meanwhile the
+  meanwhile, and keeps its place. An order with more payments than one pass reads is not read at all: no new record, no reversal of a record it already holds, and no final event; the merchant checks it by hand from the `ALERT`. The discovery of new payments (their first-seen times) runs in every pass. Meanwhile the
   confirmation count it shows can read 0, as it does after a start, until a pass reads it. The page
   reads "Checking payment…" when no pass has succeeded for 3 poll intervals plus the last good pass's duration, so a
   long healthy pass does not trip it; for one order alone when its settle or a call for one of its payments failed in
@@ -251,7 +251,7 @@
   with more separate payments than one pass reads (`poll_seconds` × `poll_rate`, at least 8) is not read or settled:
   it reads "Checking payment…" and gets `ALERT: an on-chain order has more payments than one pass reads; it is not
   settled; check it by hand` (with its id, at least once per order each time SatBooth starts), and the merchant handles it by
-  hand. A payment with many outputs is one read and does not count more than one. bitcoind not answering ends the pass with one `ALERT:
+  hand. A payment with many outputs is one read and does not count more than one. Such an order is not read at all: no new record, no reversal of a record it already holds, and no final event; the merchant checks it by hand from the `ALERT`. bitcoind not answering ends the pass with one `ALERT:
   bitcoind call failed` (with the method and the error code). Until a pass succeeds nothing is recorded and no event is
   added (a Lightning-only order's `expired` follows the clock and still shows in the API; an on-chain order's
   `expired` and `underpaid` wait for their events); the next good pass catches up from the stored scan position.

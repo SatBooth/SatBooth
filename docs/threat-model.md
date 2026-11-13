@@ -351,7 +351,7 @@ replacing a payment can keep an order's final event waiting for as long as they 
 either rail of a mixed order, and the paid state is not affected), the order never
 reads `expired` while an on-time payment is live, and one whose settle keeps failing past its window reads `new` for
 good, with `ALERT: an on-chain order left its watch window without a final event` as the signal. Anyone who knows an order's address can pay it in more separate transactions than one pass reads
-(`poll_seconds` × `poll_rate`, at least 8): that order is then never read, recorded or given a final event, and the
+(`poll_seconds` × `poll_rate`, at least 8): that order is then not read at all (no new record, no reversal of a record it already holds, and no final event), and the
 operator is told by `ALERT: an on-chain order has more payments than one pass reads; it is not settled; check it by
 hand` (and by the window's end `ALERT`); the other orders are served in turn, each at least once every few passes
 while the backlog lasts, and read "Checking payment…" after waiting more than 3 × `poll_seconds`. The cost
