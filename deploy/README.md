@@ -103,7 +103,7 @@ carries the public host's copies so that the stage can refuse when the two hosts
 | `hub_ip` | the hub's fixed address in it (`HUB_IP`): not its network, gateway or broadcast address | `172.30.78.10` |
 | `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`), needed with or without the Electrum server; must not overlap `hub_subnet` | `172.30.78.128/25` |
 | `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs the full, unpruned chain with `txindex=1` and Fulcrum's own index, instead of the pruned default (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
-| `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 550 to 1048576. Refused with `electrum: true`: leave it out | `50000` |
+| `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 10240 (10 GiB, about five weeks of blocks) to 1048576. Refused with `electrum: true`: leave it out | `50000` |
 
 A minimal answers file for the public host (Lightning only):
 
@@ -803,7 +803,7 @@ third party, which would learn the hub's addresses and the host's IP. Pinned to 
 call no third party: they fail on the host. (The hub's other calls to third parties, such as its fiat rates and
 `MEMPOOL_API`, are separate: see `docs/design.md`.)
 
-The prune size is the answer `bitcoind_prune_mib`, 550 to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
+The prune size is the answer `bitcoind_prune_mib`, 10240 (10 GiB, about five weeks of blocks) to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
 months of blocks, plus bitcoind's chainstate) by default. bitcoind still downloads and checks the whole chain once; it
 then keeps only the newest blocks. A smaller size is less disk and a shorter time the hub may be offline. Time the hub is
 locked after a restart counts as offline: its Lightning node follows no blocks until you unlock it (unless

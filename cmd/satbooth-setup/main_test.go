@@ -397,7 +397,7 @@ func TestPromptedPruneAndElectrum(t *testing.T) {
 	os.WriteFile(hf, h1, 0o600)
 	net := []string{"mainnet", "192.0.2.20", "192.0.2.10", "/srv/satbooth-hub", "", "", "", ""}
 	hubDir := tmp(t)
-	r := do(lines(cat(net, []string{"no", "549", "20000", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
+	r := do(lines(cat(net, []string{"no", "10239", "20000", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
 	st := stateAnswers(t, hubDir, "hub_answers")
 	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 1 || !strings.Contains(st, `"bitcoind_prune_mib":20000`) || !strings.Contains(st, `"electrum":false`) {
 		t.Fatalf("%d %s %s", r.code, r.errOut, st)

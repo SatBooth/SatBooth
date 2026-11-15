@@ -272,7 +272,8 @@ func TestHubAnswersPrune(t *testing.T) {
 	}{
 		{`"electrum":false`, false, 50000, ""},
 		{`"bitcoind_prune_mib":null`, false, 50000, ""},
-		{`"bitcoind_prune_mib":550`, false, 550, ""},
+		{`"bitcoind_prune_mib":10240`, false, 10240, ""},
+		{`"bitcoind_prune_mib":10239`, false, 0, "at least 10240"},
 		{`"bitcoind_prune_mib":123456`, false, 123456, ""},
 		{`"bitcoind_prune_mib":1048576`, false, 1048576, ""},
 		{`"bitcoind_prune_mib":1048577`, false, 0, "at most 1048576"},
@@ -280,6 +281,7 @@ func TestHubAnswersPrune(t *testing.T) {
 		{`"electrum":true`, true, 0, ""},
 		{`"electrum":true,"bitcoind_prune_mib":null`, true, 0, ""},
 		{`"bitcoind_prune_mib":549`, false, 0, "bitcoind_prune_mib"},
+		{`"bitcoind_prune_mib":550`, false, 0, "bitcoind_prune_mib"},
 		{`"electrum":true,"bitcoind_prune_mib":60000`, true, 0, "leave bitcoind_prune_mib out"},
 	} {
 		a, err := ParseHubAnswers([]byte(hubWith(c.extra)))
@@ -301,10 +303,10 @@ func TestHubAnswersPrune(t *testing.T) {
 }
 
 // A seeded property over the prune size and electrum: accepted exactly when electrum is off and the size is at least
-// 550 (or electrum is on and no size is given), and an accepted set renders the size it holds.
+// 10240 (or electrum is on and no size is given), and an accepted set renders the size it holds.
 func TestHubAnswersPruneProperty(t *testing.T) {
-	rng := rand.New(rand.NewSource(550))
-	sizes := []int{-1 << 40, -1, 0, 1, 549, 550, 551, 1000, 50000, 1048575, 1048576, 1048577, 1<<31 - 1, 1 << 40, 1<<63 - 1}
+	rng := rand.New(rand.NewSource(10240))
+	sizes := []int{-1 << 40, -1, 0, 1, 549, 550, 10239, 10240, 10241, 50000, 1048575, 1048576, 1048577, 1<<31 - 1, 1 << 40, 1<<63 - 1}
 	for i := 0; i < 3000; i++ {
 		electrum := rng.Intn(2) == 0
 		given := rng.Intn(4) != 0
@@ -317,7 +319,7 @@ func TestHubAnswersPruneProperty(t *testing.T) {
 			extra += fmt.Sprintf(`,"bitcoind_prune_mib":%d`, size)
 		}
 		a, err := ParseHubAnswers([]byte(hubWith(extra)))
-		wantOK := (electrum && !given) || (!electrum && (!given || size >= 550 && size <= 1048576))
+		wantOK := (electrum && !given) || (!electrum && (!given || size >= 10240 && size <= 1048576))
 		if (err == nil) != wantOK {
 			t.Fatalf("%s: accepted=%v, want %v", extra, err == nil, wantOK)
 		}
@@ -351,7 +353,7 @@ func TestHubAnswersRefusals(t *testing.T) {
 	}{
 		{"unknown key", []byte(`{"network":"mainnet","hub_admin":"127.0.0.1"}`), "unknown"},
 		{"duplicate key", []byte(`{"network":"mainnet","host_dir":"/srv/x","host_dir":"/srv/x"}`), "host_dir"},
-		{"prune below bitcoind's minimum", set(func(a *HubAnswers) { a.BitcoindPruneMiB = 549 }), "bitcoind_prune_mib"},
+		{"prune below the minimum", set(func(a *HubAnswers) { a.BitcoindPruneMiB = 10239 }), "bitcoind_prune_mib"},
 		{"prune zero", []byte(hubWith(`"bitcoind_prune_mib":0`)), "bitcoind_prune_mib"},
 		{"prune negative", []byte(hubWith(`"bitcoind_prune_mib":-1`)), "bitcoind_prune_mib"},
 		{"prune not a number", []byte(hubWith(`"bitcoind_prune_mib":"50000"`)), "bitcoind_prune_mib"},

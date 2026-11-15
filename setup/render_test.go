@@ -329,7 +329,7 @@ func TestPruneAndTxindexAreExclusive(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		h := baseHub()
 		h.Electrum = rng.Intn(2) == 0
-		h.BitcoindPruneMiB = []int{0, 549, 550, 551, 50000, rng.Intn(1 << 40)}[rng.Intn(6)]
+		h.BitcoindPruneMiB = []int{0, 10239, 10240, 10241, 50000, rng.Intn(1 << 40)}[rng.Intn(6)]
 		in := &PublicToHub{Version: 1, Network: h.Network, HubPrivateAddr: h.HubPrivateAddr, PublicPrivateAddr: h.PublicPrivateAddr, InvoiceClient: curveKeys[0]}
 		fulAuth := ""
 		if h.Electrum {

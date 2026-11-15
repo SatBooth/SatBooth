@@ -78,7 +78,7 @@ type HubAnswers struct {
 	HubIP             string `json:"hub_ip"`          // default 172.30.78.10, inside HubSubnet
 	ElectrumSubnet    string `json:"electrum_subnet"` // default 172.30.78.128/25, not overlapping HubSubnet
 	Electrum          bool   `json:"electrum"`        // default false: a pruned node and no Electrum server (Fulcrum)
-	// BitcoindPruneMiB is bitcoind's prune target in MiB: default 50000, at least 550, and absent (0) with Electrum,
+	// BitcoindPruneMiB is bitcoind's prune target in MiB: default 50000, at least 10240, and absent (0) with Electrum,
 	// whose node is unpruned.
 	BitcoindPruneMiB int `json:"bitcoind_prune_mib,omitempty"`
 }
@@ -92,7 +92,7 @@ const (
 	defHubIP          = "172.30.78.10"
 	defElectrumSubnet = "172.30.78.128/25"
 	defPruneMiB       = 50000
-	minPruneMiB       = 550     // bitcoind refuses a smaller prune target
+	minPruneMiB       = 10240   // 10 GiB, about five weeks of blocks (bitcoind's own minimum is 550)
 	maxPruneMiB       = 1048576 // 1 TiB: above it pruning keeps the whole chain, and bitcoind multiplies the value by 1 MiB
 	maxURLBytes       = 512
 	maxCurrencies     = 32
@@ -294,7 +294,7 @@ func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 	case !givenPrune:
 		a.BitcoindPruneMiB = defPruneMiB
 	case a.BitcoindPruneMiB < minPruneMiB || a.BitcoindPruneMiB > maxPruneMiB:
-		return nil, answerErr("bitcoind_prune_mib", "must be at least 550 (bitcoind's minimum) and at most 1048576, in MiB")
+		return nil, answerErr("bitcoind_prune_mib", "must be at least 10240 (10 GiB, about five weeks of blocks, so a hub that was off or locked for a while can still follow the chain) and at most 1048576, in MiB")
 	}
 	switch a.Network {
 	case "mainnet", "signet", "regtest":
