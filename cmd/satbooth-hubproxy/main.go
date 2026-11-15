@@ -56,7 +56,8 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "listen: %v\n", err)
 		return 1
 	}
-	srv := &http.Server{Handler: hubproxy.Handler(u, logger), ReadHeaderTimeout: readHeaderTimeout, MaxHeaderBytes: 64 << 10}
+	srv := &http.Server{Handler: hubproxy.Handler(u, logger), ReadHeaderTimeout: readHeaderTimeout, IdleTimeout: 120 * time.Second,
+		MaxHeaderBytes: 64 << 10}
 	logger.Info("listening", "addr", ln.Addr().String(), "upstream", u.String())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()

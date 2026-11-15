@@ -198,25 +198,9 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 		return nil, ErrClosed
 	}
 	root := l.root
-	if err := checkDir(root, setupDir); err != nil {
-		return nil, err
-	}
-	raw, err := readSmall(root, stateName)
-	if err != nil {
-		return nil, errors.New("setup: cannot read setup/state.json: run the hub's stage 2 first")
-	}
-	st, err := parseState(raw)
+	st, err := l.hubState()
 	if err != nil {
 		return nil, err
-	}
-	if st.Host != hostHub {
-		return nil, ErrNotAStage
-	}
-	if st.Stage != StageHubInit && st.Stage != StageHubPair {
-		return nil, ErrWrongStage
-	}
-	if lexists(root, journalName) {
-		return nil, ErrIncomplete
 	}
 	if err := checkDir(root, "config"); err != nil {
 		return nil, err
@@ -270,6 +254,8 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 		return &Report{Next: []string{
 			"This hub host had no certificate authority: made one (config/hub-ca.pem, with its key in setup/ca-key.pem) and " +
 				"the stub's certificate and key (config/stub-cert.pem, config/stub-key.pem). Keep setup/ca-key.pem; no service mounts it.",
+			"Add this line to " + st.Hub.HostDir + "/compose.env if it has no HUB_STUB_IP (a compose.env written before the stub " +
+				"has none): HUB_STUB_IP=" + StubIP(st.Hub.ElectrumSubnet),
 			"Give the new files to the hub and the stub: " + dc + ". Then start the bundle, which now includes the stub.",
 		}}, nil
 	}
@@ -277,4 +263,30 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 		"The stub's certificate in " + st.Hub.HostDir + "/config is renewed (2 years); the CA is unchanged.",
 		"Give the new files to the stub: " + dc + ". Then restart the stub (hubstub). Neither the hub nor bitcoind restarts.",
 	}}, nil
+}
+
+// hubState is the state of a hub host whose stage 2 is done and that has no unfinished run.
+func (l *Lock) hubState() (*state, error) {
+	root := l.root
+	if err := checkDir(root, setupDir); err != nil {
+		return nil, err
+	}
+	raw, err := readSmall(root, stateName)
+	if err != nil {
+		return nil, errors.New("setup: cannot read setup/state.json: run the hub's stage 2 first")
+	}
+	st, err := parseState(raw)
+	if err != nil {
+		return nil, err
+	}
+	if st.Host != hostHub {
+		return nil, ErrNotAStage
+	}
+	if st.Stage != StageHubInit && st.Stage != StageHubPair {
+		return nil, ErrWrongStage
+	}
+	if lexists(root, journalName) {
+		return nil, ErrIncomplete
+	}
+	return st, nil
 }

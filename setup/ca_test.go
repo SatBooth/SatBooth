@@ -398,7 +398,8 @@ func TestRenewMakesTheCAOfAnOlderHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := strings.Join(rep.Next, "\n"); !strings.Contains(text, "had no certificate authority") || !strings.Contains(text, "volume-init") {
+	if text := strings.Join(rep.Next, "\n"); !strings.Contains(text, "had no certificate authority") || !strings.Contains(text, "volume-init") ||
+		!strings.Contains(text, "HUB_STUB_IP="+StubIP(e.hub.ElectrumSubnet)) {
 		t.Errorf("report: %s", text)
 	}
 	for _, n := range []string{caCertFile, caKeyFile, stubCertFile, stubKeyFile} {

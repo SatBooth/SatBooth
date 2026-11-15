@@ -867,7 +867,8 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   host are what stop that, and they are not part of the bundle until they are added. In the operator's browser,
   `satbooth-hubproxy` stands on the tunnel's port and replaces the hub's content policy (which allows Alby's hosts and
   relays) with a self-only one; a page of the hub can then load and contact nothing outside its own origin. Residual: the
-  policy does not stop a link the operator clicks, and the hub's own listener (8081) is still reachable from the
+  policy does not stop a link the operator clicks; the operator's own host can reach the hub's listener (HUB_IP, port
+  8081) directly, bypassing the proxy and its policy, which affects only the operator's own browser; and the hub's own listener (8081) is still reachable from the
   bundle's other containers, as the listener always was (below).
 - The per-host bundles (plan 10, as built; `deploy/README.md`, `design.md` §3 "Operations, as built (plan 10)").
   The hub host publishes on its private-link address only the three things SatBooth calls: the relay's client listener (7448),

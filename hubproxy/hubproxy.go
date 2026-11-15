@@ -37,6 +37,7 @@ func ParseUpstream(s string) (*url.URL, error) {
 func Handler(upstream *url.URL, log *slog.Logger) http.Handler {
 	rt := http.DefaultTransport.(*http.Transport).Clone()
 	rt.Proxy = nil
+	// The hub answers within this or the proxy gives a 502; a streaming response, once begun, is not bound by it.
 	rt.ResponseHeaderTimeout = 60 * time.Second
 	return NewProxy(upstream, rt, log)
 }
