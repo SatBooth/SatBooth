@@ -12,12 +12,15 @@ import (
 // forward path with HUB_IP as its source, and these rules bound it there: the hub's outside calls that are not pinned
 // to the stub fail at the firewall, not only at the TLS handshake. The one thing it may open to the internet is a TCP
 // connection to a listed Lightning peer, an address and a port (peers do not all listen on 9735). bitcoind is another
-// container (other addresses) and is not bound: it needs the internet for its peers.
+// container (other addresses) and is not bound: it needs the internet for its peers. The namespace has a second
+// address, on the internal electrum network; a process that bound to it would leave by the default route with that
+// source, so the rules also drop what comes from the electrum network and is not for it.
 const (
 	logPrefix = "satbooth-hub-egress: "
 	nftTable  = "satbooth_hub"
 	nftSet    = "satbooth_hub_peers"
 	iptChain  = "SATBOOTH_HUB_EGRESS"
+	iptElec   = "SATBOOTH_HUB_ELECTRUM"
 	iptPeers  = "SATBOOTH_HUB_PEERS"
 )
 
@@ -42,6 +45,7 @@ func EgressNft(a *HubAnswers) string {
 	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", ip)
 	w("# connections made to it, and open TCP connections to the Lightning peers in the set %s, and nothing else:", nftSet)
 	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   nft add element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
 	w("#   nft delete element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
@@ -62,6 +66,14 @@ func EgressNft(a *HubAnswers) string {
 	} {
 		w("add rule inet %s egress ip saddr %s %s", nftTable, ip, r)
 	}
+	for _, r := range []string{
+		"ct state established,related accept",
+		fmt.Sprintf("ip daddr %s accept", a.ElectrumSubnet),
+		fmt.Sprintf(`limit rate 5/minute burst 5 packets log prefix "%s"`, logPrefix),
+		"counter drop",
+	} {
+		w("add rule inet %s egress ip saddr %s %s", nftTable, a.ElectrumSubnet, r)
+	}
 	return b.String()
 }
 
@@ -69,8 +81,10 @@ func EgressNft(a *HubAnswers) string {
 // jumps to for the namespace's address, and a chain of peers (SATBOOTH_HUB_PEERS) that holds one ACCEPT rule for each
 // peer. Allowed packets to the two networks RETURN, so Docker's own rules still judge them; a packet to a listed peer
 // is accepted there, which it would be anyway on its way out to the internet. IPT names the binary (iptables-legacy by
-// default). Running the script again rebuilds the egress chain, keeps the peers chain and adds the answers' peers that
-// are missing, and adds the jump once.
+// default). Running the script again replaces the egress chains in one step (never an empty chain behind the jump),
+// keeps the peers chain, adds the answers' peers that are missing, and adds each jump once. A second chain
+// (SATBOOTH_HUB_ELECTRUM) holds what comes from the electrum network. A peer is ACCEPTed in its chain, which ends the
+// traversal of DOCKER-USER: rules of the operator's after the jump do not see the packets to a listed peer.
 func EgressIptables(a *HubAnswers) string {
 	var b strings.Builder
 	w := func(f string, args ...any) { fmt.Fprintf(&b, f+"\n", args...) }
@@ -79,6 +93,7 @@ func EgressIptables(a *HubAnswers) string {
 	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", a.HubIP)
 	w("# connections made to it, and open TCP connections to the Lightning peers in the chain %s, and nothing else:", iptPeers)
 	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   iptables-legacy -w -A %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
 	w("#   iptables-legacy -w -D %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
@@ -91,14 +106,28 @@ func EgressIptables(a *HubAnswers) string {
 		w(`"$IPT" -w -C %[1]s -d %[2]s -p tcp --dport %[3]d -j ACCEPT 2>/dev/null || "$IPT" -w -A %[1]s -d %[2]s -p tcp --dport %[3]d -j ACCEPT`,
 			iptPeers, ap.Addr(), ap.Port())
 	}
-	w(`"$IPT" -w -N %s 2>/dev/null || "$IPT" -w -F %s`, iptChain, iptChain)
-	w(`"$IPT" -w -A %s -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN`, iptChain)
-	w(`"$IPT" -w -A %s -d %s -j RETURN`, iptChain, a.HubSubnet)
-	w(`"$IPT" -w -A %s -d %s -j RETURN`, iptChain, a.ElectrumSubnet)
-	w(`"$IPT" -w -A %s -p tcp -j %s`, iptChain, iptPeers)
-	w(`"$IPT" -w -A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptChain, logPrefix)
-	w(`"$IPT" -w -A %s -j DROP`, iptChain)
+	// The two chains are written by one iptables-restore --noflush, which replaces them in a single step: a rerun has no
+	// moment with an empty chain behind a live jump. The peers chain is not in it (it keeps what was added by hand).
+	w(`"${IPT}-restore" --noflush -w <<'RULES'`)
+	w("*filter")
+	w(":%s - [0:0]", iptChain)
+	w("-F %s", iptChain)
+	w("-A %s -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN", iptChain)
+	w("-A %s -d %s -j RETURN", iptChain, a.HubSubnet)
+	w("-A %s -d %s -j RETURN", iptChain, a.ElectrumSubnet)
+	w("-A %s -p tcp -j %s", iptChain, iptPeers)
+	w(`-A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptChain, logPrefix)
+	w("-A %s -j DROP", iptChain)
+	w(":%s - [0:0]", iptElec)
+	w("-F %s", iptElec)
+	w("-A %s -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN", iptElec)
+	w("-A %s -d %s -j RETURN", iptElec, a.ElectrumSubnet)
+	w(`-A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptElec, logPrefix)
+	w("-A %s -j DROP", iptElec)
+	w("COMMIT")
+	w("RULES")
 	w(`"$IPT" -w -C DOCKER-USER -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s %[1]s -j %[2]s`, a.HubIP, iptChain)
+	w(`"$IPT" -w -C DOCKER-USER -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s %[1]s -j %[2]s`, a.ElectrumSubnet, iptElec)
 	return b.String()
 }
 

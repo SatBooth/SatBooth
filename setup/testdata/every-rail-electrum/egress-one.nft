@@ -2,6 +2,7 @@
 # The namespace (hub, relay, UI proxy) has the address 172.30.78.10. It may reach the bundle's own two networks, answer
 # connections made to it, and open TCP connections to the Lightning peers in the set satbooth_hub_peers, and nothing else:
 # everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.
+# What leaves with an address on the electrum network (172.30.78.128/25) for anywhere outside it is dropped too.
 # Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:
 #   nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
 #   nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
@@ -16,3 +17,7 @@ add rule inet satbooth_hub egress ip saddr 172.30.78.10 ip daddr { 172.30.78.0/2
 add rule inet satbooth_hub egress ip saddr 172.30.78.10 ip daddr . tcp dport @satbooth_hub_peers accept
 add rule inet satbooth_hub egress ip saddr 172.30.78.10 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
 add rule inet satbooth_hub egress ip saddr 172.30.78.10 counter drop
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ct state established,related accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ip daddr 172.30.78.128/25 accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 counter drop

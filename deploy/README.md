@@ -383,12 +383,16 @@ calls, and any connection a Lightning peer makes to the hub's own listener if yo
 connection to the internet only to a **listed Lightning peer: an address and a port**, since peers do not all listen
 on 9735. Everything else, outside DNS included, is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
 bitcoind is another container with other addresses and is not bound: it needs the internet for its peers. The
+namespace has a second address, on the internal `electrum` network: whatever leaves with that source for a
+destination outside `ELECTRUM_SUBNET` is dropped and logged as well. The
 `electrum` and `monero` options change nothing here. Docker's networks here have no IPv6, so peers are IPv4 addresses.
 
 The list starts with the answers' `lightning_peers` (answers file only: `"lightning_peers": ["203.0.113.7:9735"]`;
 IPv4 literals with a port from 1 to 65535, no hostname; empty by default). **Add a peer before you connect to it or open
 a channel with it**, and remove it when it is gone. A hub that tries a peer that is not listed gets a connection that
-never opens.
+never opens. A peer removed from the list does not cut a connection that is already open (an established flow is let
+through): restart the connection. A peer taken out of the answers does not leave a running set or chain either: the
+files only add, so remove it by hand (below).
 
 Setup prints the rules and never applies them. Print the nftables set on a host with `nft` (it is independent of how
 Docker programs its own rules, including through `iptables-nft`), and the iptables set only where Docker uses
@@ -400,8 +404,12 @@ deploy/setup.sh <dir> hub egress-rules -format iptables > hub-egress.sh      # i
 ```
 
 Apply as root: `nft -f hub-egress.nft` (it rebuilds its chain, and keeps the peer set and what was added to it), or
-`sh hub-egress.sh` (it rebuilds its chain `SATBOOTH_HUB_EGRESS`, keeps the peer chain `SATBOOTH_HUB_PEERS`, and adds
-one jump from `DOCKER-USER`; `IPT=iptables` names another binary). Add and remove a peer (the files repeat these):
+`sh hub-egress.sh` (it replaces its two chains `SATBOOTH_HUB_EGRESS` and `SATBOOTH_HUB_ELECTRUM` in one step with
+`iptables-restore --noflush`, so that a rerun never leaves them empty behind their jumps, keeps the peer chain
+`SATBOOTH_HUB_PEERS`, and adds one jump each from `DOCKER-USER`; `IPT=iptables` names another binary, and its
+`-restore` twin must exist). A peer in the iptables set is `ACCEPT`ed, which ends the traversal of `DOCKER-USER`: rules
+of your own that come after the jump do not see the packets to a listed peer (put them before it). If `iptables
+--version` says `nf_tables`, Docker programs nftables: use the nft file, not the iptables one. Add and remove a peer (the files repeat these):
 
 ```sh
 nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }       # nftables: add
@@ -427,7 +435,7 @@ docker run --rm --network container:<project>-netns-1 debian:13-slim bash -c \
 ```
 
 The drops appear in `journalctl -k | grep satbooth-hub-egress`, and in `nft list chain inet satbooth_hub egress`
-(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v`. `scripts/egress-rules-test.sh` applies the printed rules
+(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v` (and `SATBOOTH_HUB_ELECTRUM`). `scripts/egress-rules-test.sh` applies the printed rules
 to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases,
 including adding and removing a peer and saving and loading the nftables state.
 

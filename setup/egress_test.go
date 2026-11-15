@@ -134,6 +134,17 @@ func TestEgressRulesShape(t *testing.T) {
 				}
 			}
 		}
+		// The electrum network's source is bound too, and the iptables chains are replaced in one step, never flushed
+		// on their own behind a live jump.
+		if !strings.Contains(nft, "ip saddr 172.30.78.128/25 counter drop") ||
+			!strings.Contains(ipt, "-A SATBOOTH_HUB_ELECTRUM -j DROP") ||
+			!strings.Contains(ipt, "-s 172.30.78.128/25 -j SATBOOTH_HUB_ELECTRUM") {
+			t.Fatalf("the electrum network's source is not dropped:\n%s\n%s", nft, ipt)
+		}
+		if !strings.Contains(ipt, "-restore\" --noflush -w <<'RULES'") || strings.Contains(ipt, "\"$IPT\" -w -F ") ||
+			strings.Contains(ipt, "-N SATBOOTH_HUB_EGRESS") {
+			t.Fatalf("the iptables chains are not replaced in one step:\n%s", ipt)
+		}
 		for _, p := range peers {
 			ap := netip.MustParseAddrPort(p)
 			if !strings.Contains(nft, fmt.Sprintf("%s . %d", ap.Addr(), ap.Port())) ||
