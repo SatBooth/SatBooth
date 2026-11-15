@@ -107,7 +107,7 @@ services:
       # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
       # chain/address_lookup.go:20-26, lnclient/ldk/ldk.go:217-232). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
       # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so
-      # that the hub calls no third-party server and those two lookups fail locally.
+      # that the hub's address lookups call no third party and fail locally.
       LDK_ELECTRUM_SERVER: ${HUB_ELECTRUM_SERVER:?set HUB_ELECTRUM_SERVER}
     volumes:
       - hub-data:/data

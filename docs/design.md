@@ -161,7 +161,7 @@ Facts that shape the design (getAlby/hub main, read 2026-10-26 to 10-30):
     address lookups (rotating the deposit address its UI shows, auto swap-out to an xpub) to an Electrum server, Alby's
     by default (getAlby/hub v1.24.6 `chain/address_lookup.go:20-26`, `config/models.go:34`). By default the bundle runs
     no Electrum server and points `LDK_ELECTRUM_SERVER` at `tcp://127.0.0.1:9`, where nothing listens: those lookups
-    fail on the host and nothing goes to Alby. With the opt-in `electrum` profile it points at its own Fulcrum.
+    fail on the host and these lookups call no third party, Alby included. With the opt-in `electrum` profile it points at its own Fulcrum.
     `MEMPOOL_API` is left at the hub's default; the operator may set it in `hub.env`.
 - Hard-coded `getalby.com/api` calls remain for fiat rates, channel suggestions at startup and service
   status. **Catch:** `api.Health` calls `getalby.com/api/internal/info` first and fails when that fails, so

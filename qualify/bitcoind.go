@@ -267,6 +267,22 @@ func (b *bitcoindRPC) getAddressInfo(wallet, addr string) (addressInfo, error) {
 	return a, err
 }
 
+// importWithNow makes a blank watch-only wallet and imports a descriptor into it the way deploy/README.md does, with
+// "timestamp": "now". It runs before pruneEarlyBlocks: after it, "now" reaches into pruned regtest blocks (see noRescan).
+func (b *bitcoindRPC) importWithNow(wallet string) error {
+	if err := b.createWalletWatch(wallet); err != nil {
+		return err
+	}
+	var di struct {
+		Descriptor string `json:"descriptor"`
+	}
+	const d = "wpkh(tpubDCkSAnZvmxjBougv4pPk4oajoNK7cC96msLQHRzDe8zvxM1sbNTJwnxxvfmmeUuB2jzrGwXnt1vFcebpLRUgGFLKuemhi81jCUSFodqMwaY/0/*)"
+	if err := b.call("", "getdescriptorinfo", []any{d}, &di); err != nil {
+		return err
+	}
+	return b.importDescriptorOpts(wallet, di.Descriptor, map[string]any{"timestamp": "now"})
+}
+
 // pruneEarlyBlocks mines enough blocks that the early block files are older than the 288 blocks bitcoind always keeps,
 // prunes them (manual pruning, dev/regtest/bitcoind/bitcoin.conf), and checks that they are gone: the node reports a
 // prune height above 0 and refuses the data of block 1. It returns the prune height.

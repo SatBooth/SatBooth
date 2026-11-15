@@ -658,10 +658,13 @@ ssh -L 8080:127.0.0.1:8080 <hub host>   # open http://127.0.0.1:8080 and set the
 docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build
 # or, with Monero on this host:
 docker compose -f deploy/hub/compose.yml --env-file <your env file> --profile monero up -d --build
+# or, with an Electrum server (`electrum: true`), and Monero too if you run it:
+docker compose -f deploy/hub/compose.yml --env-file <your env file> --profile electrum [--profile monero] up -d --build
 ```
 
-Later starts are the last command alone. (`satbooth-setup hub init` prints these commands with its own env file, and
-`hub pair` prints the second start.) Until `relay.json` holds a real pair (step 5 below), the relay exits with
+Later starts are the last command that applies to you, alone: the one with the profiles you use. (`satbooth-setup hub
+init` prints the first start with its own env file, and `hub pair` prints the second start, with the profiles that
+match your answers.) Until `relay.json` holds a real pair (step 5 below), the relay exits with
 code 2 on every start (a configuration without a pair is refused) and `unless-stopped` restarts it in a loop; that is
 expected before pairing, and it stops once the pairs are in and the relay is restarted. With the setup command the relay
 is not started until stage 3 has written `relay.json`, so the loop does not arise.
@@ -796,21 +799,26 @@ to an xpub (`swaps/swaps_service.go:1598-1622`). Neither is part of SatBooth's p
 By default the bundle therefore runs **no Electrum server**: `bitcoin.conf` has `prune=50000` and no `txindex`, and
 `HUB_ELECTRUM_SERVER` is `tcp://127.0.0.1:9`, an address nothing listens on. It is set because the hub's own default is
 Alby's server (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`): left unset, those two lookups would go to a
-third party, which would learn the hub's addresses and the host's IP. Pinned to the unreachable address, they fail on
-the host and nothing leaves it.
+third party, which would learn the hub's addresses and the host's IP. Pinned to the unreachable address, those address lookups
+call no third party: they fail on the host. (The hub's other calls to third parties, such as its fiat rates and
+`MEMPOOL_API`, are separate: see `docs/design.md`.)
 
 The prune size is the answer `bitcoind_prune_mib`, 550 to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
 months of blocks, plus bitcoind's chainstate) by default. bitcoind still downloads and checks the whole chain once; it
-then keeps only the newest blocks. A smaller size is less disk and a shorter time the hub may be offline: a hub that was
-off for longer than the blocks kept cover has no way to catch up from bitcoind and needs a fresh sync, so size it above
-the longest outage you would accept. SatBooth's watch-only wallet follows the tip; if it asks for a block the node no
+then keeps only the newest blocks. A smaller size is less disk and a shorter time the hub may be offline. Time the hub is
+locked after a restart counts as offline: its Lightning node follows no blocks until you unlock it (unless
+`AUTO_UNLOCK_PASSWORD` is set), while bitcoind keeps pruning. If the hub was offline or locked for longer than the blocks
+kept cover, its Lightning node cannot read the blocks it missed and may not see a force-close or a breach of one of its
+channels. Never delete the hub's data to "resync": that loses its channel state. Keep the default size, unlock the hub
+promptly after every restart, and size above the longest outage you would accept. How a hub recovers once its next
+block is pruned is not verified here. SatBooth's watch-only wallet follows the tip; if it asks for a block the node no
 longer has, it re-anchors its scan at the tip (`docs/threat-model.md`, the on-chain residual that names a pruned node).
 
 **With an Electrum server.** For the two lookups, answer `electrum: true` in `hub init` (or set `HUB_ELECTRUM_SERVER=
 tcp://fulcrum:50001` and use the files below by hand) **and** start the bundle with `--profile electrum`: the two go
 together. The answer without the profile gives an unpruned node with `txindex=1` and no Fulcrum; the profile without
-the answer leaves Fulcrum with a pruned node and no `fulcrum.conf`, and Compose refuses to start it. (`hub init` and
-`hub pair` print the start commands with the profile when the answer is `true`.) Fulcrum needs bitcoind with
+the answer leaves Fulcrum with a pruned node and no `fulcrum.conf`, and Compose refuses to start it. (`hub pair` prints the start command with the profile when the
+answer is `true`; `hub init` starts the hub alone, which needs none.) Fulcrum needs bitcoind with
 `txindex=1` and unpruned (the full chain: several hundred GB and growing, instead of the prune size plus the chainstate),
 its own index on disk (its README gives 133 GB as of August 2023, more since) and at least 1 GB of RAM; it builds the index on first start, which takes
 hours to days. Until then the hub's lookups fail, and nothing of SatBooth's depends on them. `bitcoind_prune_mib` is

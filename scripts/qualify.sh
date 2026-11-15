@@ -487,6 +487,15 @@ for _ in range(3):
     || { echo "deploy/hub: bitcoind does not mount the generated bitcoin.conf" >&2; return 1; }
   log "deploy/hub: bitcoind runs with the generated bitcoin.conf"
   hub_runs "after its first start"
+  # The hub's namespace resolves bitcoind to its address on the hub network (the electrum network has no route to the
+  # published port, and the hub's RPC user is allowed from HUB_SUBNET only): the name must not resolve to the other one.
+  local bcaddr
+  bcaddr=$(hdc exec -T netns getent hosts bitcoind | awk '{print $1; exit}')
+  case "$bcaddr" in
+    172.30.79.[0-9] | 172.30.79.[0-9][0-9] | 172.30.79.1[01][0-9] | 172.30.79.12[0-7]) ;;
+    *) echo "deploy/hub: netns resolves bitcoind to '$bcaddr', not an address of HUB_SUBNET (172.30.79.0/25)" >&2; return 1 ;;
+  esac
+  log "deploy/hub: bitcoind resolves to $bcaddr, inside HUB_SUBNET, from the hub's namespace"
 
   # bitcoind's RPC over the published port. The hub's password is read by a root helper from config/hub.env, SatBooth's from
   # the public directory's bitcoind.pass: each goes to curl through a pipe, and only the HTTP codes are printed.

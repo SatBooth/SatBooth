@@ -207,6 +207,11 @@ func TestBootstrap(t *testing.T) {
 		return err == nil && b.Lightning.TotalSpendableMsat >= 250_000_000, err
 	})
 
+	// 5a. The import of the README, with "now", while no block is pruned yet.
+	if err := btc.importWithNow("import-now"); err != nil {
+		t.Fatalf("importdescriptors with \"now\": %v", shownErr(err))
+	}
+
 	// 5b. The node is pruned, as the hub bundle's is by default: the early blocks go now, after the hubs have followed
 	// the chain over them, and every phase after this one runs against a node that cannot serve them.
 	pruneHeight, err := btc.pruneEarlyBlocks()

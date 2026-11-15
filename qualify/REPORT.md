@@ -1110,10 +1110,9 @@ What the suite does on it:
   (as root: after the first start the file belongs to bitcoind's user), set `HUB_ELECTRUM_SERVER`, delete
   `fulcrum.conf` and the Fulcrum volume, start. bitcoind starts pruned, Fulcrum does not exist, and the txindex
   directory is removed.
-  The run showed two differences from the first draft of the steps, now fixed in the README: the files of `config/`
-  belong to the users that read them, so the `bitcoin.conf` edit needs root; and the txindex directory is in the chain's
-  own directory (`/data/regtest/indexes/txindex`, `/data/signet/...`; only mainnet's is `/data/indexes/txindex`).
-  bitcoind does not remove the old index by itself.
+  Observed: after the first start the files of `config/` belong to the users that read them, so the `bitcoin.conf` edit
+  needs root; the txindex directory is in the chain's own directory (`/data/regtest/indexes/txindex`,
+  `/data/signet/...`; only mainnet's is `/data/indexes/txindex`); and bitcoind does not remove the old index by itself.
 
 Targeted local runs (Docker Desktop, macOS), all green: `--only deploy` (pruned bundle, electrum profile, upgrade),
 `--only hub` (`TestQualify` and `TestHubAddressLookup`) and `--only onchain` (every on-chain phase of the full run, with
