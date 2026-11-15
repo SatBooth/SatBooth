@@ -215,7 +215,7 @@ egress_bad() { egress_findings=$((egress_findings + 1)); egress_note "FAIL: $*";
 egress_cleanup() {
   [ -n "${egress_ev:-}" ] || return 0
   local n
-  for n in hubnet peer dns-any dns-lo conntrack; do egress_stop "$n"; done
+  for n in hubnet peer dns-any dns-lo dns-ns conntrack; do egress_stop "$n"; done
   if [ -n "${egress_fw:-}" ]; then
     if [ "$egress_fw" = nft ]; then
       egress_rr nft delete table inet satbooth_hub > /dev/null 2>&1 || true
@@ -380,6 +380,7 @@ for _ in range(3):
   egress_bg peer "$egress_ev/peer.log" tcpdump -i vpeer-h -nn -e -s 96 -U -w "$egress_ev/peer.pcap" 'not arp'
   egress_bg dns-any "$egress_ev/dns-any.log" tcpdump -i any -nn -e -s 256 -U -w "$egress_ev/dns-any.pcap" 'port 53'
   egress_bg dns-lo "$egress_ev/dns-lo.log" nsenter -t "$netns_pid" -n tcpdump -i lo -nn -s 512 -U -w "$egress_ev/dns-lo.pcap" 'udp and host 127.0.0.11'
+  egress_bg dns-ns "$egress_ev/dns-ns.txt" nsenter -t "$netns_pid" -n tcpdump -i any -nn -e -l -s 256 'port 53'
   egress_bg conntrack "$egress_ev/conntrack.txt" conntrack -E -e NEW -o timestamp,extended
   sleep 2
 
@@ -509,6 +510,12 @@ for _ in range(3):
   { grep -oE 'method=[A-Z]+ host=[^ ]+ path=[^ ]+' "$egress_ev/stub.log" || true; } | sort | uniq -c | sort -rn > "$egress_ev/stub-calls.txt"
   hdc logs --no-color hub > "$egress_ev/hub.log" 2>&1 || true
 
+  # How Docker set the namespace's resolver up, for reading a failure.
+  { echo "== resolv.conf of the namespace"; docker run --rm --network "container:$nid" "$egress_tools_image" cat /etc/resolv.conf
+    echo "== routes"; docker run --rm --network "container:$nid" "$egress_tools_image" ip route
+    echo "== dns of the container"; docker inspect -f '{{json .HostConfig.Dns}}' "$nid"
+    echo "== dockerd log"; egress_rr journalctl -u docker --no-pager -n 60 2>&1 | cut -c1-300
+  } > "$egress_ev/dns-setup.txt" 2>&1 || true
   # Stop the recorders, read the kernel's log, and judge.
   egress_rr dmesg > "$egress_ev/dmesg.txt" 2>&1 || egress_rr journalctl -k --no-pager > "$egress_ev/dmesg.txt" 2>&1 || true
   if [ "$egress_fw" = nft ]; then
@@ -516,7 +523,7 @@ for _ in range(3):
   else
     egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_EGRESS -n -v -x > "$egress_ev/counters.txt" 2>&1 || true
   fi
-  for r in hubnet peer dns-any dns-lo conntrack; do egress_stop "$r"; done
+  for r in hubnet peer dns-any dns-lo dns-ns conntrack; do egress_stop "$r"; done
   sleep 2
   egress_judge "$hub_mac" "$peer_ip" "$regtest_net" "$off_name" "$on_name" "$outward" "$ctl_name"
   egress_ran=1
