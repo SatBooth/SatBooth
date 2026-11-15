@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/x509"
@@ -179,8 +180,11 @@ func newSerial(rand io.Reader) (*big.Int, error) {
 }
 
 // Where the files of the CA and the stub's certificate go, in the base directory. The CA key is in setup/, which no
-// service mounts, and is never copied; the other three are in config/, HUB_CONFIG_DIR.
+// service mounts, and is never copied; the stub's two files and the CA's certificate are in config/, HUB_CONFIG_DIR.
+// setup/ also keeps its own copy of the CA's certificate (public): volume-init gives config/hub-ca.pem to the hub's
+// user, so a later run of setup as the operator cannot read it, and reads the copy instead.
 const (
+	caCopyFile   = "setup/ca-cert.pem"
 	caCertFile   = "config/hub-ca.pem"
 	stubCertFile = "config/stub-cert.pem"
 	stubKeyFile  = "config/stub-key.pem"
@@ -205,26 +209,30 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 	if err := checkDir(root, "config"); err != nil {
 		return nil, err
 	}
-	caCert, certErr := readSmall(root, caCertFile)
+	caCert, certErr := readSmall(root, caCopyFile)
 	caKey, keyErr := readSmall(root, caKeyFile)
 	created := false
 	switch {
-	case notThere(certErr) && notThere(keyErr):
+	case notThere(certErr) && notThere(keyErr) && !lexists(root, caCertFile):
 		// A hub host set up before the bundle had a stub has no authority: make it, and the leaf below.
 		if caCert, caKey, err = NewCA(rand); err != nil {
 			return nil, err
 		}
 		// The certificate first, as stage 2 writes them: a stop between the two leaves a certificate without its key.
-		for _, f := range []file{{caCertFile, caCert}, {caKeyFile, caKey}} {
+		for _, f := range []file{{caCertFile, caCert}, {caCopyFile, caCert}, {caKeyFile, caKey}} {
 			if err := writeNew(root, f.name, f.data); err != nil {
 				return nil, fmt.Errorf("setup: cannot write %s", f.name)
 			}
 		}
 		created = true
+	case notThere(certErr) && keyErr == nil:
+		return nil, errors.New("setup: setup/ca-cert.pem is missing: this hub host was set up before setup kept its own copy " +
+			"of the authority's certificate, and config/hub-ca.pem now belongs to the hub's user, so setup cannot read it. " +
+			"Copy it once, as root: sudo cat config/hub-ca.pem > setup/ca-cert.pem (the file is public; the redirect runs as you), then run this again")
 	case certErr != nil:
-		return nil, errors.New("setup: cannot read config/hub-ca.pem (setup/ca-key.pem and it must both be there, or both absent)")
+		return nil, errors.New("setup: cannot read setup/ca-cert.pem (it and setup/ca-key.pem must both be there, or both absent)")
 	case keyErr != nil:
-		return nil, errors.New("setup: cannot read setup/ca-key.pem (it and config/hub-ca.pem must both be there, or both absent)")
+		return nil, errors.New("setup: cannot read setup/ca-key.pem (it and setup/ca-cert.pem must both be there, or both absent)")
 	}
 	cert, key, err := IssueStubCert(caCert, caKey, rand)
 	if err != nil {
@@ -247,6 +255,10 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 			return nil, fmt.Errorf("setup: cannot replace %s", f.name)
 		}
 	}
+	cfgCopy := ""
+	if !created {
+		cfgCopy = l.restoreConfigCA(caCert)
+	}
 	if err := syncDir(root, "config"); err != nil {
 		return nil, err
 	}
@@ -260,10 +272,39 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 			"Give the new files to the hub and the stub: " + dc + ". Then start the bundle, which now includes the stub.",
 		}}, nil
 	}
-	return &Report{Next: []string{
+	next := []string{
 		"The stub's certificate in " + st.Hub.HostDir + "/config is renewed (2 years); the CA is unchanged.",
 		"Give the new files to the stub: " + dc + ". Then restart the stub (hubstub). Neither the hub nor bitcoind restarts.",
-	}}, nil
+	}
+	if cfgCopy != "" {
+		next = append(next, cfgCopy)
+	}
+	return &Report{Next: next}, nil
+}
+
+// restoreConfigCA makes config/hub-ca.pem equal to the CA's certificate when it is missing or readable and different.
+// A copy the operator cannot read (the hub's user owns it) is left alone, and so is one that cannot be replaced: it
+// returns the instruction to give the operator then, or "" when nothing is left to do.
+func (l *Lock) restoreConfigCA(caCert []byte) string {
+	root := l.root
+	cur, err := readSmall(root, caCertFile)
+	if err == nil && bytes.Equal(cur, caCert) {
+		return ""
+	}
+	if err != nil && !notThere(err) {
+		return ""
+	}
+	tmp := caCertFile + ".new"
+	if lexists(root, tmp) {
+		if root.Remove(tmp) != nil {
+			return "config/hub-ca.pem is missing or differs from setup/ca-cert.pem and cannot be replaced: copy setup/ca-cert.pem to it, then run volume-init."
+		}
+	}
+	if writeNew(root, tmp, caCert) == nil && root.Rename(tmp, caCertFile) == nil {
+		return ""
+	}
+	root.Remove(tmp)
+	return "config/hub-ca.pem is missing or differs from setup/ca-cert.pem and cannot be replaced: copy setup/ca-cert.pem to it, then run volume-init."
 }
 
 // hubState is the state of a hub host whose stage 2 is done and that has no unfinished run.

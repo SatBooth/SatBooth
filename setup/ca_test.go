@@ -196,10 +196,13 @@ func TestHubInitWritesTheCA(t *testing.T) {
 	e := newEnv(t, fxEveryRail(t))
 	e.upTo(2)
 	d := e.hubDir
-	for _, n := range []string{caCertFile, stubCertFile, stubKeyFile, caKeyFile} {
+	for _, n := range []string{caCertFile, caCopyFile, stubCertFile, stubKeyFile, caKeyFile} {
 		if m := fileMode(t, filepath.Join(d, n)); m != 0o600 {
 			t.Errorf("%s has mode %o", n, m)
 		}
+	}
+	if string(e.read(d, caCopyFile)) != string(e.read(d, caCertFile)) {
+		t.Error("setup/ca-cert.pem is not a copy of config/hub-ca.pem")
 	}
 	caKey := e.read(d, caKeyFile)
 	if !strings.Contains(string(caKey), "EC PRIVATE KEY") {
@@ -321,6 +324,58 @@ func TestRenewRefusals(t *testing.T) {
 	}
 }
 
+// After volume-init the hub's user owns config/hub-ca.pem and the operator cannot read it: a renewal reads setup's own
+// copy and succeeds, and leaves the unreadable file alone.
+func TestRenewWithTheConfigCopyUnreadable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every file")
+	}
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	p := filepath.Join(d, caCertFile)
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(p, 0o600)
+	if _, err := renew(t, d, 9); err != nil {
+		t.Fatalf("renew with config/hub-ca.pem unreadable: %v", err)
+	}
+	if err := os.Chmod(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ca, leaf := parseCert(t, e.read(d, caCopyFile)), parseCert(t, e.read(d, stubCertFile))
+	for _, n := range StubNames() {
+		if err := verifyName(ca, leaf, n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	// A config copy that is missing is restored from setup's.
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renew(t, d, 10); err != nil {
+		t.Fatal(err)
+	}
+	if string(e.read(d, caCertFile)) != string(e.read(d, caCopyFile)) {
+		t.Error("config/hub-ca.pem was not restored")
+	}
+}
+
+// A host set up before setup kept its own copy has the key and not the copy: the error names that cause and the fix.
+func TestRenewWithoutSetupsCopy(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	if err := os.Remove(filepath.Join(d, caCopyFile)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := renew(t, d, 9)
+	if err == nil || !strings.Contains(err.Error(), "setup/ca-cert.pem is missing") || !strings.Contains(err.Error(), "config/hub-ca.pem > setup/ca-cert.pem") {
+		t.Fatalf("error: %v", err)
+	}
+}
+
 // The CA itself refuses to vouch for any other name: a leaf made with its key for a name outside the list fails
 // verification, alone or beside listed names, and every listed name still verifies.
 func TestCAIsConstrainedToTheNames(t *testing.T) {
@@ -377,7 +432,7 @@ func TestRenewMakesTheCAOfAnOlderHost(t *testing.T) {
 	e := newEnv(t, fxEveryRail(t))
 	e.upTo(3)
 	d := e.hubDir
-	for _, n := range []string{caCertFile, caKeyFile, stubCertFile, stubKeyFile} {
+	for _, n := range []string{caCertFile, caCopyFile, caKeyFile, stubCertFile, stubKeyFile} {
 		if err := os.Remove(filepath.Join(d, n)); err != nil {
 			t.Fatal(err)
 		}
@@ -402,7 +457,7 @@ func TestRenewMakesTheCAOfAnOlderHost(t *testing.T) {
 		!strings.Contains(text, "HUB_STUB_IP="+StubIP(e.hub.ElectrumSubnet)) {
 		t.Errorf("report: %s", text)
 	}
-	for _, n := range []string{caCertFile, caKeyFile, stubCertFile, stubKeyFile} {
+	for _, n := range []string{caCertFile, caCopyFile, caKeyFile, stubCertFile, stubKeyFile} {
 		if m := fileMode(t, filepath.Join(d, n)); m != 0o600 {
 			t.Errorf("%s has mode %o", n, m)
 		}

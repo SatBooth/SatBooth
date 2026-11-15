@@ -94,7 +94,7 @@ var specs = map[Stage]*spec{
 		files: []string{stateName, stateTmp, "config/hub.env", "config/fulcrum.conf", "config/bitcoin.conf",
 			"config/monerod.conf", "config/wallet-rpc/rpc-login", "config/wallet-rpc/wallet.pass",
 			"setup/carry/wallet-rpc.pass", "setup/read-public-to-hub.json", "compose.env",
-			caCertFile, stubCertFile, stubKeyFile, caKeyFile}},
+			caCertFile, caCopyFile, stubCertFile, stubKeyFile, caKeyFile}},
 	StageHubPair: {host: hostHub, prev: StageHubInit, into: []string{"setup", "config"},
 		files: []string{stateTmp, "config/relay.json", "setup/hub-to-public.json"}},
 	StagePublicDone: {host: hostPublic, prev: StagePublicInit, into: []string{"setup", "etc"},
