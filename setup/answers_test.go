@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/satbooth/satbooth/relay"
 	"math/rand"
 	"net/netip"
@@ -246,13 +247,95 @@ func TestPublicAnswersDefaults(t *testing.T) {
 
 func baseHub() HubAnswers {
 	return HubAnswers{Network: "mainnet", HubPrivateAddr: "192.0.2.20", PublicPrivateAddr: "192.0.2.10", HostDir: "/srv/satbooth-hub", HubAdminAddr: "127.0.0.1", HubSubnet: "172.30.78.0/25",
-		HubIP: "172.30.78.10", ElectrumSubnet: "172.30.78.128/25"}
+		HubIP: "172.30.78.10", ElectrumSubnet: "172.30.78.128/25", BitcoindPruneMiB: 50000}
 }
 
 func TestHubAnswersDefaults(t *testing.T) {
 	a, err := ParseHubAnswers([]byte(`{"network":"mainnet","hub_private_addr":"192.0.2.20","public_private_addr":"192.0.2.10","host_dir":"/srv/satbooth-hub"}`))
 	if err != nil || *a != baseHub() {
 		t.Fatalf("%+v, %v", a, err)
+	}
+}
+
+// hubWith is a hub answers file with the given extra members.
+func hubWith(extra string) string {
+	return `{"network":"mainnet","hub_private_addr":"192.0.2.20","public_private_addr":"192.0.2.10","host_dir":"/srv/satbooth-hub",` + extra + `}`
+}
+
+// The prune size: absent or null is the default, a chosen size is kept, and with an Electrum server it is refused.
+func TestHubAnswersPrune(t *testing.T) {
+	for _, c := range []struct {
+		extra     string
+		electrum  bool
+		pruneMiB  int
+		wantError string
+	}{
+		{`"electrum":false`, false, 50000, ""},
+		{`"bitcoind_prune_mib":null`, false, 50000, ""},
+		{`"bitcoind_prune_mib":550`, false, 550, ""},
+		{`"bitcoind_prune_mib":123456`, false, 123456, ""},
+		{`"electrum":true`, true, 0, ""},
+		{`"electrum":true,"bitcoind_prune_mib":null`, true, 0, ""},
+		{`"bitcoind_prune_mib":549`, false, 0, "bitcoind_prune_mib"},
+		{`"electrum":true,"bitcoind_prune_mib":60000`, true, 0, "leave bitcoind_prune_mib out"},
+	} {
+		a, err := ParseHubAnswers([]byte(hubWith(c.extra)))
+		if c.wantError != "" {
+			if err == nil || !strings.Contains(err.Error(), c.wantError) {
+				t.Errorf("%s: %v", c.extra, err)
+			}
+			continue
+		}
+		if err != nil || a.Electrum != c.electrum || a.BitcoindPruneMiB != c.pruneMiB {
+			t.Errorf("%s: %+v, %v", c.extra, a, err)
+		}
+		// The answers survive a round trip through the state file's form.
+		b, err := ParseHubAnswers(mustJSON(a))
+		if err != nil || *b != *a {
+			t.Errorf("%s: round trip %+v, %v", c.extra, b, err)
+		}
+	}
+}
+
+// A seeded property over the prune size and electrum: accepted exactly when electrum is off and the size is at least
+// 550 (or electrum is on and no size is given), and an accepted set renders the size it holds.
+func TestHubAnswersPruneProperty(t *testing.T) {
+	rng := rand.New(rand.NewSource(550))
+	sizes := []int{-1 << 40, -1, 0, 1, 549, 550, 551, 1000, 50000, 1<<31 - 1, 1 << 40}
+	for i := 0; i < 3000; i++ {
+		electrum := rng.Intn(2) == 0
+		given := rng.Intn(4) != 0
+		size := sizes[rng.Intn(len(sizes))]
+		if rng.Intn(3) == 0 {
+			size = rng.Intn(2000)
+		}
+		extra := fmt.Sprintf(`"electrum":%v`, electrum)
+		if given {
+			extra += fmt.Sprintf(`,"bitcoind_prune_mib":%d`, size)
+		}
+		a, err := ParseHubAnswers([]byte(hubWith(extra)))
+		wantOK := (electrum && !given) || (!electrum && (!given || size >= 550))
+		if (err == nil) != wantOK {
+			t.Fatalf("%s: accepted=%v, want %v", extra, err == nil, wantOK)
+		}
+		if err != nil {
+			continue
+		}
+		want := 0
+		if !electrum {
+			want = 50000
+			if given {
+				want = size
+			}
+		}
+		if a.BitcoindPruneMiB != want {
+			t.Fatalf("%s: prune %d, want %d", extra, a.BitcoindPruneMiB, want)
+		}
+		in := &PublicToHub{Version: 1, Network: a.Network, HubPrivateAddr: a.HubPrivateAddr, PublicPrivateAddr: a.PublicPrivateAddr, InvoiceClient: curveKeys[0]}
+		conf := string(BitcoinConf(a, in, "rpcauth=hub:x", "rpcauth=fulcrum:y"))
+		if got := strings.Contains(conf, fmt.Sprintf("\nprune=%d\n", want)); got == electrum {
+			t.Fatalf("%s: bitcoin.conf:\n%s", extra, conf)
+		}
 	}
 }
 
@@ -265,6 +348,13 @@ func TestHubAnswersRefusals(t *testing.T) {
 	}{
 		{"unknown key", []byte(`{"network":"mainnet","hub_admin":"127.0.0.1"}`), "unknown"},
 		{"duplicate key", []byte(`{"network":"mainnet","host_dir":"/srv/x","host_dir":"/srv/x"}`), "host_dir"},
+		{"prune below bitcoind's minimum", set(func(a *HubAnswers) { a.BitcoindPruneMiB = 549 }), "bitcoind_prune_mib"},
+		{"prune zero", []byte(hubWith(`"bitcoind_prune_mib":0`)), "bitcoind_prune_mib"},
+		{"prune negative", []byte(hubWith(`"bitcoind_prune_mib":-1`)), "bitcoind_prune_mib"},
+		{"prune not a number", []byte(hubWith(`"bitcoind_prune_mib":"50000"`)), "bitcoind_prune_mib"},
+		{"prune with electrum", []byte(hubWith(`"electrum":true,"bitcoind_prune_mib":50000`)), "bitcoind_prune_mib"},
+		{"prune zero with electrum", []byte(hubWith(`"electrum":true,"bitcoind_prune_mib":0`)), "bitcoind_prune_mib"},
+		{"electrum not a bool", []byte(hubWith(`"electrum":"yes"`)), "electrum"},
 		{"relative dir", set(func(a *HubAnswers) { a.HostDir = "x" }), "host_dir"},
 		{"no network", set(func(a *HubAnswers) { a.Network = "" }), "network"},
 		{"hub_ip is the gateway", set(func(a *HubAnswers) { a.HubIP = "172.30.78.1" }), "hub_ip"},
@@ -767,7 +857,7 @@ func TestParseHubAnswersProperty(t *testing.T) {
 			t.Fatalf("relay refuses the rendered file: %v: %s", err, in)
 		}
 		env := string(HubComposeEnv(a))
-		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 8 || strings.ContainsAny(env, " \"'$\r\t") {
+		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 9 || strings.ContainsAny(env, " \"'$\r\t") {
 			t.Fatalf("hub env file: %q", env)
 		}
 	}

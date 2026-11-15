@@ -363,6 +363,29 @@ func TestLightningOnlyStages(t *testing.T) {
 	}
 }
 
+// The default hub writes no fulcrum.conf, and its state holds the answers with the prune size.
+func TestPrunedHubStages(t *testing.T) {
+	e := newEnv(t, fxLightningPruned(t))
+	for n := 1; n <= 4; n++ {
+		if _, err := e.run(n, 1); err != nil {
+			t.Fatalf("stage %d: %v", n, err)
+		}
+	}
+	wantTree(t, "hub", e.hubDir, []string{"config/", "wallet/", "setup/", "config/hub.env",
+		"config/bitcoin.conf", "setup/read-public-to-hub.json", "setup/state.json", "compose.env", "config/relay.json",
+		"setup/hub-to-public.json"})
+	conf := string(e.read(e.hubDir, "config/bitcoin.conf"))
+	if !strings.Contains(conf, "\nprune=50000\n") || strings.Contains(conf, "txindex") || strings.Contains(conf, "fulcrum") {
+		t.Errorf("bitcoin.conf:\n%s", conf)
+	}
+	if !strings.Contains(string(e.read(e.hubDir, "compose.env")), "\nHUB_ELECTRUM_SERVER=tcp://127.0.0.1:9\n") {
+		t.Error("compose.env lacks the unreachable Electrum URL")
+	}
+	if st := string(e.read(e.hubDir, "setup/state.json")); !strings.Contains(st, `"electrum": false`) || !strings.Contains(st, `"bitcoind_prune_mib": 50000`) {
+		t.Errorf("state.json: %s", st)
+	}
+}
+
 func clientKey(t *testing.T, dir, name string) string {
 	t.Helper()
 	k, err := nostr.LoadSecretKeyFile(filepath.Join(dir, "etc", name))

@@ -36,23 +36,27 @@ func (lk *Lock) HubInit(a *HubAnswers, handoff []byte, digest string, rand io.Re
 	if err != nil {
 		return nil, err
 	}
-	fulPass, err := secret()
-	if err != nil {
-		return nil, err
+	var fulPass string
+	if ha.Electrum {
+		if fulPass, err = secret(); err != nil {
+			return nil, err
+		}
 	}
 	hubAuth, err := RPCAuthLine(rand, "hub", hubPass)
 	if err != nil {
 		return nil, err
 	}
-	fulAuth, err := RPCAuthLine(rand, "fulcrum", fulPass)
-	if err != nil {
-		return nil, err
+	var fulAuth string
+	if ha.Electrum {
+		if fulAuth, err = RPCAuthLine(rand, "fulcrum", fulPass); err != nil {
+			return nil, err
+		}
 	}
-	files := []file{
-		{name: "config/hub.env", data: HubEnv(hubPass)},
-		{name: "config/fulcrum.conf", data: FulcrumConf(fulPass)},
-		{name: "config/bitcoin.conf", data: BitcoinConf(ha, in, hubAuth, fulAuth)},
+	files := []file{{name: "config/hub.env", data: HubEnv(hubPass)}}
+	if ha.Electrum {
+		files = append(files, file{name: "config/fulcrum.conf", data: FulcrumConf(fulPass)})
 	}
+	files = append(files, file{name: "config/bitcoin.conf", data: BitcoinConf(ha, in, hubAuth, fulAuth)})
 	dirs := []string{"setup", "config", "wallet"}
 	if in.Monero {
 		loginPass, err := secret()

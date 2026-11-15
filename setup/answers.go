@@ -77,6 +77,10 @@ type HubAnswers struct {
 	HubSubnet         string `json:"hub_subnet"`      // default 172.30.78.0/25
 	HubIP             string `json:"hub_ip"`          // default 172.30.78.10, inside HubSubnet
 	ElectrumSubnet    string `json:"electrum_subnet"` // default 172.30.78.128/25, not overlapping HubSubnet
+	Electrum          bool   `json:"electrum"`        // default false: a pruned node and no Electrum server (Fulcrum)
+	// BitcoindPruneMiB is bitcoind's prune target in MiB: default 50000, at least 550, and absent (0) with Electrum,
+	// whose node is unpruned.
+	BitcoindPruneMiB int `json:"bitcoind_prune_mib,omitempty"`
 }
 
 // The defaults of the optional answers.
@@ -87,6 +91,8 @@ const (
 	defHubSubnet      = "172.30.78.0/25"
 	defHubIP          = "172.30.78.10"
 	defElectrumSubnet = "172.30.78.128/25"
+	defPruneMiB       = 50000
+	minPruneMiB       = 550 // bitcoind refuses a smaller prune target
 	maxURLBytes       = 512
 	maxCurrencies     = 32
 	// maxPayoutSat is the most a refund cap or the alert threshold may be: service takes at most 2^53 msat for each of
@@ -262,7 +268,7 @@ func ParsePublicAnswers(b []byte) (*PublicAnswers, error) {
 // ParseHubAnswers parses and validates the stage 2 answers.
 func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 	var a HubAnswers
-	seen, err := strictAnswers(b, &a, "network", "hub_private_addr", "public_private_addr", "host_dir", "hub_admin_addr", "hub_subnet", "hub_ip", "electrum_subnet")
+	seen, err := strictAnswers(b, &a, "network", "hub_private_addr", "public_private_addr", "host_dir", "hub_admin_addr", "hub_subnet", "hub_ip", "electrum_subnet", "electrum", "bitcoind_prune_mib")
 	if err != nil {
 		return nil, err
 	}
@@ -277,6 +283,17 @@ func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 	}
 	if !seen["electrum_subnet"] {
 		a.ElectrumSubnet = defElectrumSubnet
+	}
+	givenPrune := seen["bitcoind_prune_mib"] && !seen["bitcoind_prune_mib"+nullSuffix]
+	switch {
+	case a.Electrum && givenPrune:
+		return nil, answerErr("bitcoind_prune_mib", "is set with electrum: the Electrum server needs an unpruned node: leave bitcoind_prune_mib out")
+	case a.Electrum:
+		a.BitcoindPruneMiB = 0
+	case !givenPrune:
+		a.BitcoindPruneMiB = defPruneMiB
+	case a.BitcoindPruneMiB < minPruneMiB:
+		return nil, answerErr("bitcoind_prune_mib", "must be at least 550 (bitcoind's minimum), in MiB")
 	}
 	switch a.Network {
 	case "mainnet", "signet", "regtest":

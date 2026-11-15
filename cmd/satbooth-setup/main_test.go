@@ -356,6 +356,7 @@ func TestDependentAnswersAreAskedAgainTogether(t *testing.T) {
 	script = lines("mainnet", "192.0.2.20", "192.0.2.10", "/srv/satbooth-hub",
 		"", "", "172.30.99.10", "", // the hub's address is outside the default subnet
 		"", "172.30.78.0/25", "172.30.78.10", "172.30.78.128/25",
+		"", "", // no Electrum server, the default prune size
 		setup.Digest(h1))
 	r = do(script, "hub", "init", "-dir", hubDir, "-handoff", hf)
 	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 1 {
@@ -372,7 +373,7 @@ func TestPromptedHubAndWallets(t *testing.T) {
 	hf := filepath.Join(aDir, "h")
 	h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
 	os.WriteFile(hf, h1, 0o600)
-	script := lines("mainnet", "192.0.2.20", "192.0.2.10", "/srv/satbooth-hub", "", "", "", "",
+	script := lines("mainnet", "192.0.2.20", "192.0.2.10", "/srv/satbooth-hub", "", "", "", "", "", "",
 		"not a digest", setup.Digest(h1))
 	r := do(script, "hub", "init", "-dir", hubDir, "-handoff", hf)
 	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 1 {
@@ -381,6 +382,42 @@ func TestPromptedHubAndWallets(t *testing.T) {
 	r = do("zz\n"+wallet1+"\n"+wallet1[:10]+"\n"+wallet2+"\n", "hub", "pair", "-dir", hubDir)
 	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 2 {
 		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+}
+
+// The Electrum and prune questions: a prune size below bitcoind's minimum is refused and asked again, a chosen size is
+// kept, and with an Electrum server the prune size is not asked.
+func TestPromptedPruneAndElectrum(t *testing.T) {
+	pubDir, aDir := tmp(t), tmp(t)
+	if r := do("", "public", "init", "-dir", pubDir, "-answers", writeJSON(t, aDir, "p.json", everyRailAnswers())); r.code != 0 {
+		t.Fatal(r.errOut)
+	}
+	hf := filepath.Join(aDir, "h")
+	h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
+	os.WriteFile(hf, h1, 0o600)
+	net := []string{"mainnet", "192.0.2.20", "192.0.2.10", "/srv/satbooth-hub", "", "", "", ""}
+	hubDir := tmp(t)
+	r := do(lines(cat(net, []string{"no", "549", "20000", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
+	st := stateAnswers(t, hubDir, "hub_answers")
+	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 1 || !strings.Contains(st, `"bitcoind_prune_mib":20000`) || !strings.Contains(st, `"electrum":false`) {
+		t.Fatalf("%d %s %s", r.code, r.errOut, st)
+	}
+	hubDir = tmp(t)
+	r = do(lines(cat(net, []string{"yes", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
+	st = stateAnswers(t, hubDir, "hub_answers")
+	if r.code != 0 || strings.Contains(r.errOut, "Prune") || !strings.Contains(st, `"electrum":true`) || strings.Contains(st, "bitcoind_prune_mib") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, st)
+	}
+	if _, err := os.Stat(filepath.Join(hubDir, "config/fulcrum.conf")); err != nil {
+		t.Fatal(err)
+	}
+	hubDir = tmp(t)
+	r = do(lines(cat(net, []string{"maybe", "", "", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
+	if r.code != 0 || !strings.Contains(r.errOut, "yes or no is required") || !strings.Contains(stateAnswers(t, hubDir, "hub_answers"), `"electrum":false`) {
+		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+	if _, err := os.Stat(filepath.Join(hubDir, "config/fulcrum.conf")); err == nil {
+		t.Fatal("a pruned hub wrote fulcrum.conf")
 	}
 }
 
@@ -434,7 +471,7 @@ func TestHostDirFlag(t *testing.T) {
 	if r.code != 1 || !strings.Contains(r.errOut, "host_dir is not the directory") || len(tree(t, hd)) != 0 {
 		t.Fatalf("%d %s", r.code, r.errOut)
 	}
-	script = lines("mainnet", "192.0.2.20", "192.0.2.10", "", "", "", "")
+	script = lines("mainnet", "192.0.2.20", "192.0.2.10", "", "", "", "", "", "")
 	r = do(script, "hub", "init", "-dir", hd, "-host-dir", "/srv/satbooth-hub", "-handoff", hf, "-digest", setup.Digest(h1))
 	if r.code != 0 || strings.Contains(r.errOut, "base directory") {
 		t.Fatalf("%d %s", r.code, r.errOut)
@@ -687,7 +724,7 @@ func TestEveryQuestionIsAskedAgainWhenTheCauseIsElsewhere(t *testing.T) {
 	script = lines("mainnet", "10.1.0.20", "10.2.0.10", "/srv/satbooth-hub",
 		"", "10.1.0.0/24", "10.1.0.10", "10.3.0.0/24", // refused: the group again
 		"mainnet", "10.1.0.20", "10.2.0.10", // refused again: everything
-		"", "", "", "", "", "10.9.0.0/24", "10.9.0.10", "")
+		"", "", "", "", "", "10.9.0.0/24", "10.9.0.10", "", "", "")
 	r = do(script, "hub", "init", "-dir", hubDir, "-handoff", hf, "-digest", setup.Digest(h1))
 	st = stateAnswers(t, hubDir, "hub_answers")
 	if r.code != 0 || strings.Count(r.errOut, "Refused:") != 2 || !strings.Contains(st, `"hub_private_addr":"10.1.0.20"`) ||

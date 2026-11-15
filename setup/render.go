@@ -87,9 +87,18 @@ func RelayJSON(a *HubAnswers, in *PublicToHub, out *HubToPublic) []byte {
 	return encodeJSON(v)
 }
 
+// The two Electrum URLs of the hub's environment. Without an Electrum server the hub's address lookups point at a
+// local port nothing listens on, so the hub never calls a third-party server (its own default).
+const (
+	electrumOff = "tcp://127.0.0.1:9"
+	electrumOn  = "tcp://fulcrum:50001"
+)
+
 // BitcoinConf is bitcoin.conf. The chain and the public host's address are the answers'; the handoff gives only
 // SatBooth's rpcauth line. hubAuth and fulcrumAuth are the two rpcauth lines ("rpcauth=user:salt$hash"); the
-// handoff's line for SatBooth is written only with on-chain. The caller must have run a.CheckAgainst(in).
+// handoff's line for SatBooth is written only with on-chain. Without a.Electrum the node is pruned and neither
+// fulcrumAuth nor the Electrum subnet appears; with it the node is unpruned with txindex=1 (an Electrum server needs
+// it, and bitcoind refuses prune with txindex). The caller must have run a.CheckAgainst(in).
 func BitcoinConf(a *HubAnswers, in *PublicToHub, hubAuth, fulcrumAuth string) []byte {
 	chain, section := "main", "main"
 	switch a.Network {
@@ -102,20 +111,28 @@ func BitcoinConf(a *HubAnswers, in *PublicToHub, hubAuth, fulcrumAuth string) []
 	line := func(s string) { b.WriteString(s + "\n") }
 	line("chain=" + chain)
 	line("server=1")
-	line("txindex=1")
+	if a.Electrum {
+		line("txindex=1")
+	} else {
+		line("prune=" + strconv.Itoa(a.BitcoindPruneMiB))
+	}
 	line("")
 	line("[" + section + "]")
 	line("rpcbind=0.0.0.0")
 	line("rpcport=" + bitcoindRPCPort)
 	line("rpcallowip=" + a.HubSubnet)
-	line("rpcallowip=" + a.ElectrumSubnet)
+	if a.Electrum {
+		line("rpcallowip=" + a.ElectrumSubnet)
+	}
 	if in.SatboothRPCAuth != "" {
 		line("rpcallowip=" + hostPrefix(a.PublicPrivateAddr))
 	}
 	line(hubAuth)
 	line(whitelistHub)
-	line(fulcrumAuth)
-	line(whitelistFulcrum)
+	if a.Electrum {
+		line(fulcrumAuth)
+		line(whitelistFulcrum)
+	}
 	if in.SatboothRPCAuth != "" {
 		line(in.SatboothRPCAuth)
 		line(whitelistSatbooth)
@@ -158,6 +175,10 @@ func WalletRPCLogin(user, password string) []byte { return []byte(user + ":" + p
 
 // HubComposeEnv is the hub bundle's env file, the keys in the order of deploy/hub/example.env.
 func HubComposeEnv(a *HubAnswers) []byte {
+	electrum := electrumOff
+	if a.Electrum {
+		electrum = electrumOn
+	}
 	return []byte("HUB_PRIVATE_ADDR=" + a.HubPrivateAddr + "\n" +
 		"HUB_ADMIN_ADDR=" + a.HubAdminAddr + "\n" +
 		"HUB_SUBNET=" + a.HubSubnet + "\n" +
@@ -165,7 +186,8 @@ func HubComposeEnv(a *HubAnswers) []byte {
 		"ELECTRUM_SUBNET=" + a.ElectrumSubnet + "\n" +
 		"HUB_NETWORK=" + hubNetwork(a.Network) + "\n" +
 		"HUB_CONFIG_DIR=" + a.HostDir + "/config\n" +
-		"MONERO_WALLET_DIR=" + a.HostDir + "/wallet\n")
+		"MONERO_WALLET_DIR=" + a.HostDir + "/wallet\n" +
+		"HUB_ELECTRUM_SERVER=" + electrum + "\n")
 }
 
 // PublicComposeEnv is the public bundle's env file, the keys in the order of deploy/public/example.env.

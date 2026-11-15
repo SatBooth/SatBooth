@@ -1,0 +1,14 @@
+{
+  "keys": [
+    {
+      "id": "orders-write",
+      "capability": "orders:write",
+      "sha256": "c0b6304bd6ce9b3e65150392c91a3aa76803a59c29e46f9fb2b9aac235e58386"
+    },
+    {
+      "id": "orders-read",
+      "capability": "orders:read",
+      "sha256": "b6014ac4130be89cbfa3f14daba903aadb0910531ecf3f783ca92e377f2b3287"
+    }
+  ]
+}
