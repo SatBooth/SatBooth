@@ -214,7 +214,15 @@ func TestBootstrap(t *testing.T) {
 
 	// 5b. The node is pruned, as the hub bundle's is by default: the early blocks go now, after the hubs have followed
 	// the chain over them, and every phase after this one runs against a node that cannot serve them.
-	pruneHeight, err := btc.pruneEarlyBlocks()
+	pruneHeight, err := btc.pruneEarlyBlocks(func(tip int) error {
+		for name, h := range map[string]*hubAPI{hubSatbooth: sat, hubMerchant: mer} {
+			poll(t, name+" follows the chain to the tip before the prune", 2*time.Minute, time.Second, func() (bool, error) {
+				n, err := h.bestBlockHeight()
+				return err == nil && n >= tip, err
+			})
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("prune the early blocks: %v", shownErr(err))
 	}

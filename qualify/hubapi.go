@@ -118,6 +118,22 @@ func (h *hubAPI) info() (*hubInfo, error) {
 	return &i, nil
 }
 
+// bestBlockHeight is the height of the block the hub's node has followed the chain to, from GET /api/node/status
+// (getAlby/hub v1.24.7 http/http_service.go:148, lnclient/ldk/ldk.go:2191: ldk-node's status, no JSON tags).
+func (h *hubAPI) bestBlockHeight() (int, error) {
+	var r struct {
+		InternalNodeStatus struct {
+			CurrentBestBlock struct {
+				Height int
+			}
+		}
+	}
+	if err := h.do("GET", "/api/node/status", nil, &r, false); err != nil {
+		return 0, err
+	}
+	return r.InternalNodeStatus.CurrentBestBlock.Height, nil
+}
+
 // setup is POST /api/setup (204). Setup alone does not start the node.
 func (h *hubAPI) setup() error {
 	return h.do("POST", "/api/setup", map[string]any{"backendType": "LDK", "unlockPassword": unlockPassword}, nil, false)
