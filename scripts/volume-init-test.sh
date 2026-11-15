@@ -67,3 +67,11 @@ expect hub hub "10003:10003 700 /vol/hub;10001:10001 700 /vol/bitcoind;10004:100
   /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /config/hub.env /config/bitcoin.conf /config/relay.json \
   /config/fulcrum.conf /config/monerod.conf /config/wallet-rpc /config/wallet-rpc/rpc-login \
   /config/wallet-rpc/wallet.pass /wallet /wallet/satbooth-view
+
+# Without the electrum profile there is no fulcrum.conf: volume-init must still exit 0 and prepare the other files, and
+# the Fulcrum volume.
+rm "$HUB_CONFIG_DIR/fulcrum.conf"
+twice "hub without fulcrum.conf" hub
+expect "hub without fulcrum.conf" hub "10003:10003 700 /vol/hub;10001:10001 700 /vol/bitcoind;10004:10004 700 /vol/fulcrum;\
+10003:10003 600 /config/hub.env;10001:10001 600 /config/bitcoin.conf;65532:65532 600 /config/relay.json;" \
+  /vol/hub /vol/bitcoind /vol/fulcrum /config/hub.env /config/bitcoin.conf /config/relay.json
