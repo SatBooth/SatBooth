@@ -41,8 +41,13 @@ jobs:
       # The printed rules, both the nftables and the iptables-legacy file, applied to a router and four network namespaces
       # inside one privileged container: that container has its own network namespace, so the runner's own firewall and
       # Docker's rules are not touched (the runner's Docker uses nftables, so the group below runs only the nftables file).
+      # The runner's kernel does not load the legacy iptables filter table by itself; the container shares the kernel, so
+      # the modules are loaded here first.
       - if: inputs.only == '' || inputs.only == 'full' || inputs.only == 'egress'
-        run: scripts/egress-rules-test.sh
+        run: |
+          sudo modprobe ip_tables
+          sudo modprobe iptable_filter
+          scripts/egress-rules-test.sh
       # The scheduled run has no input and is the full run. The input reaches the shell through the environment.
       - run: |
           case "$ONLY" in
