@@ -207,6 +207,14 @@ func TestBootstrap(t *testing.T) {
 		return err == nil && b.Lightning.TotalSpendableMsat >= 250_000_000, err
 	})
 
+	// 5b. The node is pruned, as the hub bundle's is by default: the early blocks go now, after the hubs have followed
+	// the chain over them, and every phase after this one runs against a node that cannot serve them.
+	pruneHeight, err := btc.pruneEarlyBlocks()
+	if err != nil {
+		t.Fatalf("prune the early blocks: %v", shownErr(err))
+	}
+	t.Logf("MEASURED pruned_to_height=%d", pruneHeight)
+
 	// 6. Client keys, 0600 files under /state/keys.
 	keyDir := filepath.Join(dir, "keys")
 	if err := os.MkdirAll(keyDir, 0o700); err != nil {

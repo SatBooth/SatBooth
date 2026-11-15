@@ -352,6 +352,7 @@ deploy_group() {
   deploy_stop 3
   deploy_down
   deploy_hub_group
+  deploy_hub_electrum_group
 }
 
 # port_free <port>: nothing listens on 127.0.0.1:<port> of this host.
@@ -537,6 +538,95 @@ for _ in range(3):
     || { echo "deploy/hub: running: '$running', exited: '$exited'" >&2; return 1; }
   [ "$(hdc ps -a -q | wc -l | tr -d ' ')" -eq 5 ] || { echo "deploy/hub: other containers were created" >&2; return 1; }
   log "deploy/hub: running: ${running}; exited: volume-init 0; nothing else created (Fulcrum and the Monero profile are not started)"
+  hub_down
+}
+
+# The hub host's bundle with an Electrum server, and the upgrade from it to the pruned default, with the steps of
+# deploy/README.md ("Upgrading a hub that ran unpruned with Fulcrum") as written. `electrum: true` gives an unpruned node
+# with txindex=1, Fulcrum's rpcauth and whitelist, fulcrum.conf and HUB_ELECTRUM_SERVER=tcp://fulcrum:50001; started
+# with --profile electrum, Fulcrum answers the Electrum protocol on the internal network and bitcoind has built its
+# txindex. The steps then run on that directory: they must leave a pruned bitcoind that starts, no Fulcrum and no
+# txindex directory. Needs no hub setup (the hub is only started).
+deploy_hub_electrum_group() {
+  log "deploy/hub: the bundle with an Electrum server, then the upgrade to the pruned default"
+  hub_pub_root=$(mktemp -d)
+  hub_pub_root=$(cd "$hub_pub_root" && pwd -P)
+  hub_root=$(mktemp -d)
+  hub_root=$(cd "$hub_root" && pwd -P)
+  local out digest_value=""
+  jq -n --arg host "$hub_pub_root" '{network: "regtest", host_dir: $host, hub_private_addr: "127.0.0.1",
+    public_private_addr: "127.0.0.2", checkout_base_url: "http://127.0.0.1:8080", webhook_url: "http://127.0.0.1:9/hook"}' \
+    > "$deploy_tmp/hub-public-answers-e.json"
+  out=$(deploy/setup.sh "$hub_pub_root" public init -answers "$deploy_tmp/hub-public-answers-e.json")
+  check_digest "setup public init (electrum step)" "$out" "$hub_pub_root/setup/public-to-hub.json"
+  jq -n --arg host "$hub_root" '{network: "regtest", host_dir: $host, hub_private_addr: "127.0.0.1",
+    public_private_addr: "127.0.0.2", hub_admin_addr: "127.0.0.3", hub_subnet: "172.30.79.0/25", hub_ip: "172.30.79.10",
+    electrum_subnet: "172.30.79.128/25", electrum: true}' > "$deploy_tmp/hub-answers-e.json"
+  out=$(deploy/setup.sh "$hub_root" hub init -handoff "$hub_pub_root/setup/public-to-hub.json" -digest "$digest_value" \
+    -answers "$deploy_tmp/hub-answers-e.json")
+  grep -qx 'txindex=1' "$hub_root/config/bitcoin.conf" && ! grep -q '^prune=' "$hub_root/config/bitcoin.conf" \
+    || { echo "deploy/hub: electrum: true did not give an unpruned txindex node" >&2; return 1; }
+  [ -f "$hub_root/config/fulcrum.conf" ] || { echo "deploy/hub: electrum: true wrote no fulcrum.conf" >&2; return 1; }
+  grep -qx 'HUB_ELECTRUM_SERVER=tcp://fulcrum:50001' "$hub_root/compose.env" \
+    || { echo "deploy/hub: compose.env does not point the hub at fulcrum" >&2; return 1; }
+  out=$(deploy/setup.sh "$hub_root" hub pair -invoice-wallet 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 <<< "")
+  grep -qF -- '--profile electrum' <<< "$out" || { echo "deploy/hub: setup's hub start command does not name the profile" >&2; return 1; }
+  log "up: deploy/hub with --profile electrum (bitcoind, Fulcrum, the hub)"
+  hdc --profile electrum up -d --build bitcoind fulcrum hub
+  local cli=(exec -T bitcoind bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/data)
+  local deadline=$((SECONDS + 300)) synced=""
+  until synced=$(hdc "${cli[@]}" getindexinfo 2> /dev/null | jq -r '.txindex.synced // empty' 2> /dev/null) && [ "$synced" = true ]; do
+    [ "$SECONDS" -lt "$deadline" ] || { echo "deploy/hub: bitcoind's txindex is not synced after 5 minutes" >&2; return 1; }
+    sleep 3
+  done
+  log "deploy/hub: bitcoind built its txindex"
+  # A regtest chain at its genesis block counts as initial block download, and Fulcrum waits for it to end: mine a block
+  # (a throwaway wallet of this run; the bundle itself is left without one).
+  local mineaddr
+  hdc "${cli[@]}" -named createwallet wallet_name=throwaway > /dev/null
+  mineaddr=$(hdc "${cli[@]}" -rpcwallet=throwaway getnewaddress)
+  hdc "${cli[@]}" generatetoaddress 3 "$mineaddr" > /dev/null
+  # Fulcrum answers server.version on the internal network, from the hub's namespace holder.
+  local reply=""
+  deadline=$((SECONDS + 300))
+  until reply=$(hdc exec -T netns bash -c 'exec 3<>/dev/tcp/fulcrum/50001 && printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server.version\",\"params\":[\"qualify\",\"1.4\"]}" >&3 && head -n 1 <&3' 2> /dev/null) \
+    && grep -q '"result"' <<< "$reply"; do
+    [ "$SECONDS" -lt "$deadline" ] || { echo "deploy/hub: Fulcrum does not answer server.version after 5 minutes" >&2; hdc logs --tail 20 fulcrum >&2 || true; return 1; }
+    sleep 3
+  done
+  log "deploy/hub: Fulcrum answers server.version from the hub's namespace"
+
+  log "deploy/hub: the README's upgrade steps"
+  # 1. Stop the bundle (the volumes stay).
+  hdc --profile electrum --profile monero down
+  # 2. bitcoin.conf: txindex=1 becomes prune=50000; the ELECTRUM_SUBNET rpcallowip and the two fulcrum lines go.
+  # After the first start the config files belong to bitcoind's user (volume-init), so the edit is made as root.
+  dc run --rm --no-deps -T --cap-add DAC_OVERRIDE -v "$hub_root/config:/c" --entrypoint sh volume-init -c \
+    "sed -i -e 's/^txindex=1\$/prune=50000/' -e '/^rpcallowip=172\\.30\\.79\\.128\\/25\$/d' -e '/^rpcauth=fulcrum:/d' \
+    -e '/^rpcwhitelist=fulcrum:/d' /c/bitcoin.conf"
+  dc run --rm --no-deps -T --cap-add DAC_OVERRIDE -v "$hub_root/config:/c:ro" --entrypoint sh volume-init -c \
+    "grep -q '^prune=50000\$' /c/bitcoin.conf && ! grep -q -e txindex -e fulcrum -e '172.30.79.128' /c/bitcoin.conf" \
+    || { echo "deploy/hub: the edited bitcoin.conf is not the README's result" >&2; return 1; }
+  # 3. compose.env: the unreachable Electrum URL.
+  sed -i.bak 's|^HUB_ELECTRUM_SERVER=.*$|HUB_ELECTRUM_SERVER=tcp://127.0.0.1:9|' "$hub_root/compose.env"
+  rm -f "$hub_root/compose.env.bak"
+  # 4. fulcrum.conf and the Fulcrum volume.
+  rm "$hub_root/config/fulcrum.conf"
+  docker volume rm "${hub_project}_fulcrum-data" > /dev/null
+  # 5. Start it, then remove the txindex directory.
+  hdc up -d --build
+  deadline=$((SECONDS + 120))
+  until hdc "${cli[@]}" getblockchaininfo > "$deploy_tmp/chaininfo.json" 2> /dev/null; do
+    [ "$SECONDS" -lt "$deadline" ] || { echo "deploy/hub: bitcoind does not start with the upgraded bitcoin.conf" >&2; hdc logs --tail 20 bitcoind >&2 || true; return 1; }
+    sleep 3
+  done
+  [ "$(jq -r .pruned "$deploy_tmp/chaininfo.json")" = true ] || { echo "deploy/hub: bitcoind is not pruned after the upgrade" >&2; return 1; }
+  hdc exec -T bitcoind rm -r /data/regtest/indexes/txindex
+  hdc exec -T bitcoind test ! -e /data/regtest/indexes/txindex || { echo "deploy/hub: indexes/txindex is still there" >&2; return 1; }
+  [ -z "$(hdc ps -a -q fulcrum)" ] || { echo "deploy/hub: Fulcrum exists after the upgrade" >&2; return 1; }
+  [ "$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' "$(hdc ps -q bitcoind)")" = 'true 0' ] \
+    || { echo "deploy/hub: bitcoind is not running steadily after the upgrade" >&2; return 1; }
+  log "deploy/hub: upgraded as the README says: bitcoind runs pruned, no Fulcrum, no txindex directory"
   hub_down
 }
 
@@ -868,6 +958,7 @@ end_checks() {
   [ "$code" = 403 ] || { echo "getblockcount as hub answered HTTP '$code', want 403" >&2; return 1; }
   [ "$after" -eq $((before + 1)) ] \
     || { echo "the refused probe added $((after - before)) log lines, want 1" >&2; return 1; }
+  no_third_party_electrum
 }
 
 log "start from a clean project"
@@ -1009,6 +1100,31 @@ hub_group() {
     echo "expected exactly one unknown-app line from UnknownKey (before $unknown_before, after $unknown_after)" >&2
     exit 1
   }
+  phase TestHubAddressLookup
+  check_address_lookup
+}
+
+# The hubs' Electrum server is tcp://127.0.0.1:9 (dev/regtest/compose.yml): nothing listens there. After
+# TestHubAddressLookup, hub-satbooth's log must hold the lookup's failure with that address in it (the hub says
+# "Failed to get current address transactions" and returns the current address), and no hub's log may name the server
+# the hub would use by default.
+check_address_lookup() {
+  local n
+  n=$(dc logs --no-color hub-satbooth 2>&1 | grep -F 'Failed to get current address transactions' | grep -cF '127.0.0.1:9' || true)
+  log "hub-satbooth: $n address-lookup failures that name 127.0.0.1:9"
+  [ "$n" -ge 1 ] || {
+    dc logs --no-color hub-satbooth 2>&1 | grep -i 'address' | tail -n 10 >&2 || true
+    echo "hub-satbooth's log has no address-lookup failure naming 127.0.0.1:9" >&2
+    return 1
+  }
+}
+no_third_party_electrum() {
+  local hub n
+  for hub in "${hubs[@]}"; do
+    n=$(dc logs --no-color "$hub" 2>&1 | grep -ci 'getalbypro' || true)
+    [ "$n" -eq 0 ] || { echo "$hub's log names a third party's server ($n lines)" >&2; return 1; }
+  done
+  log "no hub log names electrum.getalbypro.com"
 }
 
 # --only: the named group on top of the setup, then the end checks.

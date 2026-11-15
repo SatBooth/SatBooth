@@ -818,7 +818,8 @@ refused with `electrum: true`: an unpruned node has none.
 
 **Upgrading a hub that ran unpruned with Fulcrum** (the first release candidate's default) to the pruned default, on the
 hub host, with `dc` as above. `bitcoind` refuses `prune` together with `txindex=1`, so the order matters. Setup refuses a
-directory that already holds its files, so edit the files:
+directory that already holds its files, so edit the files (after the first start the files of `config/` belong to the users
+that read them, so on Linux edit `bitcoin.conf` as root):
 
 1. Stop the bundle: `dc --profile electrum --profile monero down` (this keeps the volumes).
 2. In `<dir>/config/bitcoin.conf`, delete the `txindex=1` line and add `prune=50000` in its place. Delete the
@@ -827,8 +828,9 @@ directory that already holds its files, so edit the files:
 3. Add `HUB_ELECTRUM_SERVER=tcp://127.0.0.1:9` to `<dir>/compose.env` (Compose refuses to start the hub without it).
 4. Delete `<dir>/config/fulcrum.conf`, and the Fulcrum volume: `docker volume rm satbooth-hub_fulcrum-data`.
 5. Start it: `dc up -d --build` (add `--profile monero` if you run Monero). bitcoind starts pruned and deletes old
-   blocks as it goes; the old `txindex` is no longer used, and `indexes/txindex` in bitcoind's data can be deleted to
-   free its space (`dc exec bitcoind rm -r /data/indexes/txindex`).
+   blocks as it goes; the old `txindex` is no longer used, and its directory `indexes/txindex` in bitcoind's data can
+   be deleted to free its space: `dc exec bitcoind rm -r /data/indexes/txindex` on mainnet (on signet
+   `/data/signet/indexes/txindex`, on regtest `/data/regtest/indexes/txindex`).
 
 To keep Fulcrum instead, change nothing of this, add `HUB_ELECTRUM_SERVER=tcp://fulcrum:50001` to `<dir>/compose.env`,
 and start with `--profile electrum`. Going from the pruned default to an Electrum server is not an edit: a pruned node
