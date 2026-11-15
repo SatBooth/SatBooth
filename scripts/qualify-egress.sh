@@ -489,6 +489,10 @@ for _ in range(3):
 
   # The Lightning phases of the suite, unchanged, with the rules on (the hub is the bundle at the regtest hub's address).
   log "egress: the Lightning phases with the rules on"
+  # Each phase checks the ledger totals of its own environment, so it starts from an empty one: in a full run the hub and
+  # refund groups have already used these two directories. They are moved aside, not removed.
+  dc run --rm --no-deps -T --cap-add DAC_OVERRIDE --entrypoint sh volume-init -c \
+    'set -eu; for d in pay refund; do if [ -e "/state/lightning/$d" ]; then mv "/state/lightning/$d" "/state/lightning/$d.before-egress"; fi; done'
   phase TestLightningPay
   phase TestRefundPay
   egress_ok "TestLightningPay and TestRefundPay passed with the rules on"
