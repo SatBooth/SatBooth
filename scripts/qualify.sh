@@ -8,13 +8,15 @@
 #                   TestImage phases and TestImageBudget); refund (the TestRefund phases, about 15 minutes);
 #                   hub (TestQualify and the check on the hub's unknown-app lines, about 1.5 minutes); onchain (every
 #                   on-chain phase of the full run, TestOnchainSetup to TestOnchainStuckAfter, with the bitcoind kills
-#                   between them, about 15 minutes).
+#                   between them, about 15 minutes); egress (the hub bundle with the printed egress rules applied for
+#                   real, recorded from the host, the Lightning phases and the hub's pages in Chrome: Linux with root,
+#                   scripts/qualify-egress.sh).
 # On failure the logs are saved to dev/regtest/logs/ (git-ignored) first.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-usage() { echo "usage: scripts/qualify.sh [--keep] [--only deploy|image|refund|hub|onchain]" >&2; exit 2; }
+usage() { echo "usage: scripts/qualify.sh [--keep] [--only deploy|image|refund|hub|onchain|egress]" >&2; exit 2; }
 keep=0
 only=""
 while [ "$#" -gt 0 ]; do
@@ -23,7 +25,7 @@ while [ "$#" -gt 0 ]; do
     --only)
       [ "$#" -ge 2 ] || usage
       case "$2" in
-        deploy | image | refund | hub | onchain) only=$2 ;;
+        deploy | image | refund | hub | onchain | egress) only=$2 ;;
         *) usage ;;
       esac
       shift
@@ -133,6 +135,7 @@ cleanup() {
     fi
     echo "qualify.sh: FAIL (exit $status); logs in $logdir/compose.log, $logdir/deploy-public.log and $logdir/deploy-hub.log" >&2
   fi
+  if [ "$(type -t egress_cleanup)" = function ]; then egress_cleanup || true; fi
   if [ "$keep" -eq 1 ]; then
     echo "qualify.sh: --keep: projects $project, $deploy_project and $hub_project left up" >&2
   else
@@ -970,6 +973,10 @@ end_checks() {
   no_third_party_electrum
 }
 
+# The egress group (the printed egress rules for real, recorded from the host): its own file, sourced here.
+# shellcheck source=scripts/qualify-egress.sh
+. scripts/qualify-egress.sh
+
 log "start from a clean project"
 ddc down -v --remove-orphans > /dev/null 2>&1 || true
 docker compose -p "$hub_project" down -v --remove-orphans > /dev/null 2>&1 || true
@@ -1151,9 +1158,14 @@ if [ -n "$only" ]; then
     refund) refund_group ;;
     hub) hub_group ;;
     onchain) onchain_group ;;
+    egress) egress_group ;;
   esac
   end_checks
   finished=1
+  if [ "$only" = egress ] && [ "${egress_ran:-0}" -ne 1 ]; then
+    log "setup ran; group egress was NOT RUN (see above): nothing is claimed about the egress rules"
+    exit 0
+  fi
   log "setup and group $only passed (a targeted run, not the qualification)"
   exit 0
 fi
@@ -1341,6 +1353,9 @@ image_group
 deploy_group
 
 phase TestImageBudget
+
+# Last: the hub bundle takes hub-satbooth's place for the egress group.
+egress_group
 
 end_checks
 finished=1

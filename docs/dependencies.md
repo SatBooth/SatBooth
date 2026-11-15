@@ -677,6 +677,14 @@ image, and each pin, is in `deploy/README.md` ("Release images").
 | Registry | `registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373` | test only: `scripts/release-push_test.sh` runs it on 127.0.0.1 and proves the absent, present-equal and present-other cases of the registry tag check of `scripts/release-push.sh` against a real OCI distribution server. The Docker official image of CNCF Distribution, pulled anonymously from Docker Hub in CI like the other base images; no release image contains it |
 | `satbooth`, `satbooth-relay`, `satbooth-tools` | built from `deploy/image/Dockerfile`, `FROM scratch`, and published by the release workflow to `ghcr.io/satbooth/<name>:<version>`; the bundles and `deploy/setup.sh` pin each by `tag@digest`, and `compose.build.yml` or `SATBOOTH_BUILD=1` builds from source | the public bundle, the hub bundle's relay, the setup command, and (built from source) qualification |
 
+**Qualification tools for the egress group (test only, nothing shipped).** `qualify/uicheck` drives the runner's Chrome over the
+Chrome DevTools Protocol with `github.com/coder/websocket`, which SatBooth already vendors: no Playwright, no new module and no
+Node dependency (Playwright would add a package and a browser download to pin, and Chrome and its protocol are on the
+runner already). The group installs `tcpdump`, `conntrack` and `nftables` with apt on the runner (workflow step) and builds a
+local image `satbooth-egress-tools` (`debian:13-slim` by the digest above, apt: `iproute2`, `netcat-openbsd`, `socat`,
+`tcpdump`, `conntrack`, `nftables`, `iptables`, `util-linux`) for the peer's namespace and the probes; it is built at run
+time, never published, and never part of a bundle or a release.
+
 **The font.** The logo's wordmark (`docs/logo/satbooth-logo*.svg`) is Rubik 2.300 (github.com/googlefonts/rubik, the
 variable font at weight 800), SIL Open Font License 1.1, with its letters converted to paths. No font file is in the
 repository or an image, and nothing renders text at run time: the checkout page writes "SatBooth" in HTML beside the

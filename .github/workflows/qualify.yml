@@ -1,6 +1,7 @@
 name: qualify
 
-# Dev-only: real Alby Hub containers on a regtest network (dev/regtest). Not part of the check gate.
+# Dev-only: real Alby Hub containers on a regtest network (dev/regtest). Not part of the check gate. The egress group
+# (and the full run, which ends with it) needs root on the host: GitHub's hosted runner has it by passwordless sudo.
 on:
   workflow_dispatch:
     inputs:
@@ -8,7 +9,7 @@ on:
         description: 'full: the whole qualification; a group: the setup, that group and the end checks'
         type: choice
         default: full
-        options: [full, deploy, image, refund, hub, onchain]
+        options: [full, deploy, image, refund, hub, onchain, egress]
   schedule:
     - cron: '41 4 * * 1'
 
@@ -33,6 +34,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The egress group records packets and connections from the host: tcpdump, conntrack and nft (the runner's image
+      # has Chrome, jq, nsenter and Docker already).
+      - if: inputs.only == '' || inputs.only == 'full' || inputs.only == 'egress'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcpdump conntrack nftables
       # The scheduled run has no input and is the full run. The input reaches the shell through the environment.
       - run: |
           case "$ONLY" in
@@ -41,7 +46,10 @@ jobs:
           esac
         env:
           ONLY: ${{ inputs.only }}
-      - if: failure()
+      # The logs of a failed run, and the egress group's evidence (packet captures of the hub's bridge, the DNS and the
+      # peer's interface, the firewall's counters and kernel log, the page check) whether it passed or not. The captures
+      # hold headers only (and DNS names); the regtest values in them guard nothing.
+      - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qualify-logs

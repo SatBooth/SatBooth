@@ -81,6 +81,7 @@ scripts/release-pins_test.sh || fail "release pins: scripts/release-pins_test.sh
 scripts/release-pins_prop_test.sh || fail "release pins: scripts/release-pins_prop_test.sh"
 scripts/release-notes_test.sh || fail "release notes: scripts/release-notes_test.sh"
 scripts/setup-image_test.sh || fail "setup wrapper: scripts/setup-image_test.sh"
+scripts/qualify-egress-test.sh || fail "qualify egress parsers: scripts/qualify-egress-test.sh"
 # Reads tags from a throwaway registry in Docker; skips without Docker, and without the registry image unless CI.
 RELEASE_PUSH_TEST_PULL=${CI:+1} scripts/release-push_test.sh || fail "release push: scripts/release-push_test.sh"
 
