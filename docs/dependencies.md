@@ -371,6 +371,12 @@ it minus what it has paid out (`db/queries/get_isolated_balance.go`).
     arise) has `ARBITRARY_EXECUTION`, `FILES`, `READ_SYSTEM_STATE`, `REFLECT` and `UNANALYZED` and no `NETWORK`;
     `scripts/capslock.sh` runs that analysis for it and for `cmd/satbooth-pair` (both ship in the tools image) and
     fails if `NETWORK` appears, if capslock fails or if it prints no capability at all.
+  - Adding `hubstub` and `cmd/satbooth-hubstub` (the hub bundle's stub, shipped in the relay image; standard library
+    only, no module) adds one package entry to `docs/capslock.json`, and no other package changed. It lists `NETWORK`
+    (it serves TLS), `FILES` (`tls.LoadX509KeyPair` reads the certificate and key), `REFLECT`, `RUNTIME`,
+    `SYSTEM_CALLS`, `ARBITRARY_EXECUTION`, `UNSAFE_POINTER` and `UNANALYZED`, the artefacts `net/http` and `crypto/tls`
+    carry for every server in the module. It answers with fixed strings rather than `encoding/json`, so the encoder's
+    writer over-approximation (above) adds nothing to it.
   - `service` and `cmd/satbooth` gain `MODIFY_SYSTEM_STATE` under the label `LOGGING` (plan 13): `service.Run` sets the
     standard logger's flags and output (`log.SetFlags`, `log.SetOutput`) once, to a writer that logs a fixed line. The
     standard logger is where `net/http` writes on its own (a client logs the first bytes a server sent on a connection

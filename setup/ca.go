@@ -25,7 +25,7 @@ const (
 	clockSkew = 10 * time.Minute
 )
 
-// pinnedHubNames are the hosts the hub process contacts by name at its defaults (the outbound-call audit of getAlby/hub
+// pinnedHubNames are the hosts the hub process contacts by name at its defaults (read from getAlby/hub
 // v1.24.7): Alby's API and web host (channel suggestions, the update document, rates, LSP orders, OAuth), mempool.space
 // (MEMPOOL_API), the two Boltz providers (swaps/provider.go:62-65), Megalith's rebalance service (REBALANCE_SERVICE_URL),
 // and Alby's Electrum and VSS servers. The bundle's hub container resolves each of them to the stub.

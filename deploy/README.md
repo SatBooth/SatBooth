@@ -556,7 +556,7 @@ too. The qualification suite runs the bundles this way.
 |---|---|---|
 | `satbooth` | `/satbooth` | The binary, built with `CGO_ENABLED=0 go build -trimpath -ldflags=-buildid=` from the vendored modules. |
 | `satbooth` | `/etc/ssl/certs/ca-certificates.crt` | The CA bundle, copied from the pinned Go image (the `certs` stage, which always runs for `linux/amd64`, so the bytes do not depend on the build host). SatBooth makes outbound TLS connections: rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc. |
-| `satbooth-relay` | `/satbooth-relay` | The binary, built the same way. |
+| `satbooth-relay` | `/satbooth-relay`, `/satbooth-hubstub` | The two binaries, built the same way: the relay, and the hub bundle's stub (`cmd/satbooth-hubstub`), which answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally. |
 | `satbooth-tools` | `/satbooth-setup` | The setup command, built the same way. It has no `ENTRYPOINT`: `deploy/setup.sh` names the command. |
 | `satbooth-tools` | `/satbooth-pair` | The pairing tool, built the same way. No CA bundle: neither tool uses the network. |
 
@@ -593,7 +593,7 @@ docker build -f deploy/image/Dockerfile --target satbooth -t satbooth:local .
 docker build -f deploy/image/Dockerfile --target satbooth-relay -t satbooth-relay:local .
 docker build -f deploy/image/Dockerfile --target satbooth-tools -t satbooth-tools:local .
 scripts/image-check.sh satbooth:local /satbooth /etc/ssl/certs/ca-certificates.crt
-scripts/image-check.sh satbooth-relay:local /satbooth-relay
+scripts/image-check.sh satbooth-relay:local /satbooth-relay /satbooth-hubstub
 scripts/image-check.sh satbooth-tools:local /satbooth-setup /satbooth-pair
 scripts/image-run-test.sh satbooth:local satbooth-relay:local satbooth-tools:local
 ```

@@ -55,6 +55,17 @@ case "$out" in
   *) fail "satbooth-relay printed no config error line" ;;
 esac
 echo "image-run-test: satbooth-relay exit 2, config error printed"
+
+# The stub in the relay image, with no flags: a usage line, exit 2.
+rc=0
+out=$(run --entrypoint /satbooth-hubstub "$relay" 2>&1) || rc=$?
+[ "$rc" -eq 2 ] || fail "satbooth-hubstub exited $rc, want 2"
+no_panic satbooth-hubstub "$out"
+case "$out" in
+  usage:*) ;;
+  *) fail "satbooth-hubstub printed no usage line" ;;
+esac
+echo "image-run-test: satbooth-hubstub exit 2, usage printed"
 # satbooth-setup without arguments is a usage error (2), with no network either: the tools image runs the way
 # deploy/setup.sh runs it. It has no entrypoint, so the command is named.
 rc=0
