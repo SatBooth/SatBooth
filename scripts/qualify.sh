@@ -541,14 +541,14 @@ for _ in range(3):
   [ "$owner" = 65532:65532 ] || { echo "deploy/hub: relay.json is owned by '$owner', want 65532:65532" >&2; return 1; }
   log "deploy/hub: relay.json is owned by 65532"
   hub_runs "after the relay's start"
-  # Exactly these containers exist: bitcoind, the hub, the namespace holder and the relay run; volume-init exited 0; no
-  # Fulcrum and nothing of the Monero profile was created.
+  # Exactly these containers exist: bitcoind, the hub, its UI proxy, the stub, the namespace holder and the relay run;
+  # volume-init exited 0; no Fulcrum and nothing of the Monero profile was created.
   local running exited
   running=$(hdc ps --status running --format '{{.Service}}' | LC_ALL=C sort | tr '\n' ' ')
   exited=$(hdc ps -a --status exited --format '{{.Service}} {{.ExitCode}}' | LC_ALL=C sort | tr '\n' ',')
-  [ "$running" = 'bitcoind hub netns relay ' ] && [ "$exited" = 'volume-init 0,' ] \
+  [ "$running" = 'bitcoind hub hubproxy hubstub netns relay ' ] && [ "$exited" = 'volume-init 0,' ] \
     || { echo "deploy/hub: running: '$running', exited: '$exited'" >&2; return 1; }
-  [ "$(hdc ps -a -q | wc -l | tr -d ' ')" -eq 5 ] || { echo "deploy/hub: other containers were created" >&2; return 1; }
+  [ "$(hdc ps -a -q | wc -l | tr -d ' ')" -eq 7 ] || { echo "deploy/hub: other containers were created" >&2; return 1; }
   log "deploy/hub: running: ${running}; exited: volume-init 0; nothing else created (Fulcrum and the Monero profile are not started)"
   hub_down
 }
