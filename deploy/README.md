@@ -555,7 +555,7 @@ code never calls `time.LoadLocation`), no shell, no package manager and no other
 | `actions/checkout@3d3c42e5...` | v7.0.1 | The pin `check.yml` and `release.yml` use. |
 | `actions/upload-artifact@cf430e03...`, `actions/download-artifact@9000827c...` | v7.0.2, v8.0.2 | `release.yml` moves each runner's digests to the job that compares them (`upload-artifact` is also used by `qualify.yml`). |
 | `actions/attest-build-provenance@4d101475...` | v4.2.2 | `release.yml` attests each pushed image; the action wraps `actions/attest@508db95d...` (v4.2.1). |
-| `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770...` (hub bundle) | Alby Hub v1.24.6 | The version qualified against (`qualify/REPORT.md`); the same pin as the regtest hubs. |
+| `ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6da...` (hub bundle) | Alby Hub v1.24.7 | The newest release. v1.24.6 polled the mempool API after every on-chain send and could report a broadcast send as failed (`docs/dependencies.md` §8); the same pin as the regtest hubs. |
 | `debian:13-slim@sha256:a72b4433...` (hub bundle) | Debian 13 | The base of the bitcoind and Monero images (decision 5), the `netns` holder and the hub bundle's `volume-init`; the same pin as the regtest helpers. |
 | Bitcoin Core 32.1, Monero v0.18.5.4 (hub bundle) | release tarballs, SHA-256 pinned | The versions qualified against; the hashes are the regtest images'. |
 | Fulcrum 2.1.4 (hub bundle) | release tarballs, SHA-256 pinned | The newest release (2026-10-18); the hashes are from its PGP-signed `shasums.txt`, see `docs/dependencies.md` §8. |
@@ -756,17 +756,27 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | `LDK_BITCOIND_RPC_PORT` | `18443` | fixed: `8332` (`bitcoin.conf` sets `rpcport=8332` on every chain) |
 | `LDK_BITCOIND_RPC_USER` | `hub`, whitelisted as in the bundle | fixed: `hub` |
 | `LDK_BITCOIND_RPC_PASSWORD` | a test string | secret: `hub.env` |
-| `LDK_GOSSIP_SOURCE` | empty | left out: unset and empty are the same, gossip over the peer-to-peer network (`lnclient/ldk/ldk.go:253`), whose channel announcements the hub checks with `getblockhash` and `gettxout` (both in the hub user's `rpcwhitelist`) |
+| `LDK_GOSSIP_SOURCE` | empty | fixed: empty, so no rapid gossip sync server and gossip over the peer-to-peer network (`lnclient/ldk/ldk.go:252-255`), whose channel announcements the hub checks with `getblockhash` and `gettxout` (both in the hub user's `rpcwhitelist`) |
 | `SEND_EVENTS_TO_ALBY` | `false` | fixed: `false` |
 | `AUTO_LINK_ALBY_ACCOUNT` | `false` | fixed: `false` |
-| `MEMPOOL_API` | unreachable, on purpose | left out: the hub's default (`https://mempool.space/api`); set it in `hub.env` to use your own |
+| `MEMPOOL_API` | unreachable, on purpose | fixed: `https://hubstub/api`, the bundle's own stub; the hub's default is `https://mempool.space/api`, and its web UI sends channel peers' public keys and funding transaction ids there (getAlby/hub v1.24.7 `api/api.go:1443-1458`) |
+| `BOLTZ_API` | not set | fixed: `https://hubstub`; any non-empty value stops the call to `getalby.com/api/internal/info` that the hub makes at every start to choose its swap provider (`swaps/swaps_service.go:96-103`); swaps do not work |
+| `LDK_LSPS2_ADDRESSES` | not set | fixed: `none`, which parses to no liquidity provider. Empty would leave the hub's built-in third-party node on, and an invoice above the inbound capacity would then connect to it (`lnclient/ldk/ldk.go:174-202, 2949-2966`) |
+| `HIDE_UPDATE_BANNER` | not set | fixed: `true` (hides the update banner in the web UI) |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | not set | fixed: `/etc/satbooth/ca.pem` and `/etc/satbooth/no-roots`: the hub trusts the bundle's own certificate authority and no system root, so a TLS connection from the hub to any real host fails. The bundle does not yet mount the certificate or run `hubstub`: until it does, the hub's TLS calls fail and its health check reports an error |
 | `LDK_ELECTRUM_SERVER` | not set | operator: `HUB_ELECTRUM_SERVER`, `tcp://127.0.0.1:9` or `tcp://fulcrum:50001` (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`) |
 | `LDK_ESPLORA_SERVER` | not set | left out: set, it would take the address lookups away from the Electrum server (`chain/address_lookup.go:20-26`) |
 | `RELAY` | `ws://127.0.0.1:7447` | fixed: `ws://127.0.0.1:7447` (the relay's hub listener) |
 | `AUTO_UNLOCK_PASSWORD` | a test string | left out: the operator unlocks the hub in its UI after each hub start |
 
+**Settings in the hub's web UI.** Two outside calls have no environment switch. In the hub's UI (Settings), turn
+**JIT channels** off, and set the display currency to **SATS**: with USD the UI asks `getalby.com` for rates whenever a
+fiat amount is shown (`useBitcoinRate.ts:7`), and with JIT channels on, the Receive and About pages ask a third-party
+node for fees (`api/api.go:1600-1628`). Avoid the Home page's widgets, swaps, buying a channel, the automatic channel
+and rebalancing: they call Alby's or other third parties' servers by design.
+
 The hub loads `hub.env` because it reads `.env` from its working directory (`service/service.go:56` in getAlby/hub
-v1.24.6, `godotenv.Load(".env")`, which never overrides a variable that is already set), and the bundle mounts the file
+v1.24.7, `godotenv.Load(".env")`, which never overrides a variable that is already set), and the bundle mounts the file
 there. Without `AUTO_UNLOCK_PASSWORD`, a restarted hub is locked until the operator unlocks it, and SatBooth cannot
 start (or reach the wallet) until then; adding it to `hub.env` makes the hub unlock itself, at the cost of keeping its
 unlock password on the host.

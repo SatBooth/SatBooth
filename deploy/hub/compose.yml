@@ -86,10 +86,10 @@ services:
 
   hub:
     <<: *hardening
-    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    image: ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6dac330fb8a426c02a247d81ebaf07deece22634e97d8f20dd48c3a8e38
     user: "10003:10003"
     network_mode: service:netns
-    # The hub loads .env from its working directory (getAlby/hub v1.24.6 service/service.go:56, godotenv.Load(".env"),
+    # The hub loads .env from its working directory (getAlby/hub v1.24.7 service/service.go:56, godotenv.Load(".env"),
     # which never overrides a variable already set): hub.env holds LDK_BITCOIND_RPC_PASSWORD and nothing set below.
     working_dir: /etc/albyhub
     environment:
@@ -103,9 +103,27 @@ services:
       SEND_EVENTS_TO_ALBY: "false"
       AUTO_LINK_ALBY_ACCOUNT: "false"
       RELAY: ws://127.0.0.1:7447
+      # Every other outside default of the hub, disabled or redirected (getAlby/hub v1.24.7, config/models.go):
+      # - BOLTZ_API and MEMPOOL_API: the swap provider and the mempool API are the bundle's own stub, the hubstub
+      #   service. A non-empty BOLTZ_API is also what stops the hub asking getalby.com which swap provider to use at
+      #   every start (swaps/swaps_service.go:96-103). The hub appends its paths to MEMPOOL_API (api/api.go:1444).
+      # - LDK_LSPS2_ADDRESSES: "none" parses to no liquidity provider, and the hub then never contacts one when it makes
+      #   an invoice (lnclient/ldk/ldk.go:174-202, 2949-2966). Empty would leave its built-in Megalith node on.
+      # - LDK_GOSSIP_SOURCE: empty, so no rapid gossip sync server; gossip comes from connected peers only.
+      # - HIDE_UPDATE_BANNER: hides the banner; the hub still asks its update check, which the stub answers.
+      # - SSL_CERT_FILE and SSL_CERT_DIR: the hub trusts the bundle's certificate authority and no system root, so a TLS
+      #   connection to any real host fails. The certificate file is mounted by the stub's own setup; until then the hub
+      #   has no root at all.
+      BOLTZ_API: https://hubstub
+      MEMPOOL_API: https://hubstub/api
+      LDK_LSPS2_ADDRESSES: none
+      LDK_GOSSIP_SOURCE: ""
+      HIDE_UPDATE_BANNER: "true"
+      SSL_CERT_FILE: /etc/satbooth/ca.pem
+      SSL_CERT_DIR: /etc/satbooth/no-roots
       # With bitcoind as LDK's chain source, the hub uses an Electrum server only to look up on-chain addresses
-      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
-      # chain/address_lookup.go:20-26, lnclient/ldk/ldk.go:217-232). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
+      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.7
+      # chain/address_lookup.go:22-28, lnclient/ldk/ldk.go:216-231). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
       # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so
       # that the hub's address lookups call no third party and fail locally.
       LDK_ELECTRUM_SERVER: ${HUB_ELECTRUM_SERVER:?set HUB_ELECTRUM_SERVER}

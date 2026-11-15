@@ -107,7 +107,7 @@ services:
         ipv4_address: 172.30.78.5
 
   hub-satbooth:
-    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    image: ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6dac330fb8a426c02a247d81ebaf07deece22634e97d8f20dd48c3a8e38
     environment: *hub-env
     volumes:
       - hub-satbooth-data:/data
@@ -117,7 +117,7 @@ services:
         ipv4_address: 172.30.78.10
 
   hub-merchant:
-    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    image: ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6dac330fb8a426c02a247d81ebaf07deece22634e97d8f20dd48c3a8e38
     environment: *hub-env
     volumes:
       - hub-merchant-data:/data
