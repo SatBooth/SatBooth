@@ -288,12 +288,13 @@ for _ in range(3):
   local admin=http://127.0.0.1:$TEST_HUB_ADMIN_PORT
   hdc config -q
   hdc build relay hubstub hubproxy > /dev/null
-  # The browser's driver, built in the qualify container (vendored sources, no network), for this host's system.
+  # The browser's driver, built in the qualify container (vendored sources, no network), for this host's system. No VCS
+  # stamping: the checkout belongs to the runner's user, and git refuses it as root (go test, which the suite runs, does not stamp).
   local goos goarch
   goos=$(uname -s | tr '[:upper:]' '[:lower:]')
   case "$(uname -m)" in x86_64) goarch=amd64 ;; aarch64 | arm64) goarch=arm64 ;; *) goarch=$(uname -m) ;; esac
   dc run --rm --no-deps -T -e "GOOS=$goos" -e "GOARCH=$goarch" -v "$egress_ev:/out" --entrypoint sh qualify -c \
-    'go build -tags qualify -o /out/uicheck ./qualify/uicheck'
+    'go build -buildvcs=false -tags qualify -o /out/uicheck ./qualify/uicheck'
 
   # The namespace first (it creates the bundle's networks), nothing of the hub yet.
   hdc up -d netns
