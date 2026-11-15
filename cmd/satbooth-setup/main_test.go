@@ -403,6 +403,12 @@ func TestPromptedPruneAndElectrum(t *testing.T) {
 		t.Fatalf("%d %s %s", r.code, r.errOut, st)
 	}
 	hubDir = tmp(t)
+	r = do(lines(cat(net, []string{"no", "1048577", "1048576", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
+	st = stateAnswers(t, hubDir, "hub_answers")
+	if r.code != 0 || !strings.Contains(r.errOut, "at most 1048576") || !strings.Contains(st, `"bitcoind_prune_mib":1048576`) {
+		t.Fatalf("%d %s %s", r.code, r.errOut, st)
+	}
+	hubDir = tmp(t)
 	r = do(lines(cat(net, []string{"yes", setup.Digest(h1)})...), "hub", "init", "-dir", hubDir, "-handoff", hf)
 	st = stateAnswers(t, hubDir, "hub_answers")
 	if r.code != 0 || strings.Contains(r.errOut, "Prune") || !strings.Contains(st, `"electrum":true`) || strings.Contains(st, "bitcoind_prune_mib") {

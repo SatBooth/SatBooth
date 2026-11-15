@@ -92,7 +92,8 @@ const (
 	defHubIP          = "172.30.78.10"
 	defElectrumSubnet = "172.30.78.128/25"
 	defPruneMiB       = 50000
-	minPruneMiB       = 550 // bitcoind refuses a smaller prune target
+	minPruneMiB       = 550     // bitcoind refuses a smaller prune target
+	maxPruneMiB       = 1048576 // 1 TiB: above it pruning keeps the whole chain, and bitcoind multiplies the value by 1 MiB
 	maxURLBytes       = 512
 	maxCurrencies     = 32
 	// maxPayoutSat is the most a refund cap or the alert threshold may be: service takes at most 2^53 msat for each of
@@ -292,8 +293,8 @@ func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 		a.BitcoindPruneMiB = 0
 	case !givenPrune:
 		a.BitcoindPruneMiB = defPruneMiB
-	case a.BitcoindPruneMiB < minPruneMiB:
-		return nil, answerErr("bitcoind_prune_mib", "must be at least 550 (bitcoind's minimum), in MiB")
+	case a.BitcoindPruneMiB < minPruneMiB || a.BitcoindPruneMiB > maxPruneMiB:
+		return nil, answerErr("bitcoind_prune_mib", "must be at least 550 (bitcoind's minimum) and at most 1048576, in MiB")
 	}
 	switch a.Network {
 	case "mainnet", "signet", "regtest":

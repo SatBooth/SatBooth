@@ -274,6 +274,9 @@ func TestHubAnswersPrune(t *testing.T) {
 		{`"bitcoind_prune_mib":null`, false, 50000, ""},
 		{`"bitcoind_prune_mib":550`, false, 550, ""},
 		{`"bitcoind_prune_mib":123456`, false, 123456, ""},
+		{`"bitcoind_prune_mib":1048576`, false, 1048576, ""},
+		{`"bitcoind_prune_mib":1048577`, false, 0, "at most 1048576"},
+		{`"bitcoind_prune_mib":9223372036854775807`, false, 0, "at most 1048576"},
 		{`"electrum":true`, true, 0, ""},
 		{`"electrum":true,"bitcoind_prune_mib":null`, true, 0, ""},
 		{`"bitcoind_prune_mib":549`, false, 0, "bitcoind_prune_mib"},
@@ -301,7 +304,7 @@ func TestHubAnswersPrune(t *testing.T) {
 // 550 (or electrum is on and no size is given), and an accepted set renders the size it holds.
 func TestHubAnswersPruneProperty(t *testing.T) {
 	rng := rand.New(rand.NewSource(550))
-	sizes := []int{-1 << 40, -1, 0, 1, 549, 550, 551, 1000, 50000, 1<<31 - 1, 1 << 40}
+	sizes := []int{-1 << 40, -1, 0, 1, 549, 550, 551, 1000, 50000, 1048575, 1048576, 1048577, 1<<31 - 1, 1 << 40, 1<<63 - 1}
 	for i := 0; i < 3000; i++ {
 		electrum := rng.Intn(2) == 0
 		given := rng.Intn(4) != 0
@@ -314,7 +317,7 @@ func TestHubAnswersPruneProperty(t *testing.T) {
 			extra += fmt.Sprintf(`,"bitcoind_prune_mib":%d`, size)
 		}
 		a, err := ParseHubAnswers([]byte(hubWith(extra)))
-		wantOK := (electrum && !given) || (!electrum && (!given || size >= 550))
+		wantOK := (electrum && !given) || (!electrum && (!given || size >= 550 && size <= 1048576))
 		if (err == nil) != wantOK {
 			t.Fatalf("%s: accepted=%v, want %v", extra, err == nil, wantOK)
 		}
