@@ -845,6 +845,26 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   (TLS 1.2 or later), no redirect followed, no proxy from the environment, a 10 s timeout, at most 256 KiB of an
   answer, one request per provider per `fetch_seconds` whatever the traffic, and nothing from an answer in a log, an
   error or a response (§10, threat 3).
+- The hub's calls to outside services (the hub bundle; `deploy/README.md`, "The stub"). Alby Hub calls Alby's servers
+  (health and update information, channel suggestions, rates, stories), mempool.space, a swap provider and Megalith's
+  rebalance service at its defaults, and a payment checkout has no business telling any of them that it exists. Controls:
+  the hub's environment redirects what it can to the stub (`BOLTZ_API`, `MEMPOOL_API`, `REBALANCE_SERVICE_URL`,
+  `LDK_VSS_URL`), disables the liquidity provider and rapid gossip sync, and hides the update banner; the container that
+  holds the hub's network namespace maps every other name the hub uses by default (the nine names of the stub's
+  certificate) to the stub in its `/etc/hosts`; the stub, `satbooth-hubstub`, answers them over TLS with a document
+  that says "healthy" and with refusals, logs the method, host and path of each request and never a body, and runs as a
+  non-root user with every capability dropped on the internal network, which has no route out; the hub trusts one
+  certificate authority, the bundle's, through `SSL_CERT_FILE`, with `SSL_CERT_DIR` pointed at a directory that does not
+  exist so that no system root is read (shown: with `SSL_CERT_FILE` alone, a Go client still trusted the system roots);
+  and the authority's certificate carries a critical name constraint for exactly those names, so its key cannot vouch
+  for another host. Residuals: **a compromised stub** can answer the hub with anything the hub accepts from those
+  names (a false "healthy", false suggestions) and can reach what is on the internal network, bitcoind's RPC (whose
+  hub user is confined by `rpcwhitelist`) and Fulcrum, but nothing outside, and it holds no secret but its own
+  certificate key; **theft of the authority's key** (`setup/ca-key.pem`, on a host nothing mounts it on) lets its thief
+  impersonate only the nine names, and only to a client that is on this host's network and trusts it, which is the hub;
+  **pinning names in `/etc/hosts` is not a firewall**: a name the hub resolves that is not in the list goes out to the
+  internet and fails only at the TLS handshake, after the connection and the DNS query. The egress rules of the hub
+  host are what stop that, and they are not part of the bundle until they are added.
 - The per-host bundles (plan 10, as built; `deploy/README.md`, `design.md` §3 "Operations, as built (plan 10)").
   The hub host publishes on its private-link address only the three things SatBooth calls: the relay's client listener (7448),
   bitcoind's RPC (8332) and, with the `monero` profile, wallet-rpc (18083). The hub's admin UI and API (8080) is

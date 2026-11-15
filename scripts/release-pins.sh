@@ -16,7 +16,8 @@
 #   check-tag     exits 0 iff <tag> is a release tag (RELEASE_TAG_RE of scripts/release-lib.sh); reads no site
 #   check-bundles exits 0 iff each base bundle, rendered by `docker compose` with every profile on and its example.env,
 #                 runs exactly the pinned refs: the effective image of `satbooth` and `satbooth-oneoff` (deploy/public)
-#                 and of `relay` (deploy/hub) equals the ref `show` prints, and every other service's image is outside
+#                 and of `relay` and of the services that run the relay image (`hubstub`, deploy/hub) equals the ref
+#                 `show` prints, and every other service's image is outside
 #                 the namespace and is pinned by digest or is a local build (`:local`). It reads what Compose resolves,
 #                 not the text of the files, so an `image:` that overrides the pinned one is seen. Needs `docker
 #                 compose` and `jq`; no daemon
@@ -77,6 +78,9 @@ ref_in_file() {
   [ "$n" -eq 1 ] || fail "$2: $n pin lines in $file, want exactly one"
   ref=$hit
   if [[ $ref =~ ^[$' \t']*image:[$' \t']*(.*)$ ]]; then ref=${BASH_REMATCH[1]}; fi
+  # A YAML anchor before the ref (`image: &relay_image <ref>`) is not part of it: the hub bundle's other services of the
+  # relay image say `image: *relay_image`, which holds no needle, so the pin is still one line.
+  if [[ $ref =~ ^\&[A-Za-z0-9_]+[$' \t']+(.*)$ ]]; then ref=${BASH_REMATCH[1]}; fi
   if [[ $ref =~ ^[$' \t']*tools_image=(.*)$ ]]; then ref=${BASH_REMATCH[1]}; fi
   while [[ $ref == *[$' \t\r'] ]]; do ref=${ref%?}; done
   REF=$ref
@@ -214,7 +218,7 @@ case $cmd in
         fail "check-bundles: $dir/compose.yml does not render without interpolation"
       case $host in
         public) want=$(jq -n --arg r "${SITE_REFS[0]}" '{satbooth: $r, "satbooth-oneoff": $r}') ;;
-        hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r}') ;;
+        hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r, hubstub: $r}') ;;
       esac
       # Another service's image is accepted when it is pinned by digest, or when it is built here: a service with a
       # `build`, a name without registry or namespace, tag `local`, and no `pull_policy: always`. No image of another
@@ -279,7 +283,13 @@ case $cmd in
       # The line holding the needle is replaced whole, keeping the white space that leads it.
       while IFS= read -r line || [ -n "$line" ]; do
         case $line in
-          *"$needle"*) [[ $line =~ ^([[:space:]]*) ]]; printf '%s%s\n' "${BASH_REMATCH[1]}" "$repl" ;;
+          *"$needle"*)
+            [[ $line =~ ^([[:space:]]*) ]]
+            indent=${BASH_REMATCH[1]}
+            # An anchor on the line stays: the other services of the relay image alias it.
+            anchor=''
+            if [[ $line =~ ^[[:space:]]*image:[[:space:]]+(\&[A-Za-z0-9_]+)[[:space:]] ]]; then anchor="${BASH_REMATCH[1]} "; fi
+            if [ -n "$anchor" ]; then printf '%simage: %s%s\n' "$indent" "$anchor" "${refs[$i]}"; else printf '%s%s\n' "$indent" "$repl"; fi ;;
           *) printf '%s\n' "$line" ;;
         esac
       done < "$file" > "$new"

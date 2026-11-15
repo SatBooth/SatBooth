@@ -188,9 +188,11 @@ const (
 )
 
 // HubRenewCert issues a new certificate and key for the stub from the CA that stage 2 made, and replaces the two files
-// of config/. The CA, its key and every other file stay as they are. It runs on a hub host whose stage 2 is done, with
-// no unfinished run. Each file is written under a temporary name and renamed into place; the key is renamed first, so a
-// run that stops between the two leaves a pair that does not match, and running it again repairs that.
+// of config/. The CA, its key and every other file stay as they are. On a hub host set up before the bundle had a stub,
+// where neither the CA's certificate nor its key exists, it makes the CA first and writes all four files. It runs on a
+// hub host whose stage 2 is done, with no unfinished run. Each leaf file is written under a temporary name and renamed
+// into place, the key first: a run that stops between the two leaves a pair that does not match, and running it again
+// repairs that.
 func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 	if l.closed {
 		return nil, ErrClosed
@@ -219,13 +221,25 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 	if err := checkDir(root, "config"); err != nil {
 		return nil, err
 	}
-	caCert, err := readSmall(root, caCertFile)
-	if err != nil {
-		return nil, errors.New("setup: cannot read config/hub-ca.pem")
-	}
-	caKey, err := readSmall(root, caKeyFile)
-	if err != nil {
-		return nil, errors.New("setup: cannot read setup/ca-key.pem")
+	caCert, certErr := readSmall(root, caCertFile)
+	caKey, keyErr := readSmall(root, caKeyFile)
+	created := false
+	switch {
+	case notThere(certErr) && notThere(keyErr):
+		// A hub host set up before the bundle had a stub has no authority: make it, and the leaf below.
+		if caCert, caKey, err = NewCA(rand); err != nil {
+			return nil, err
+		}
+		for _, f := range []file{{caKeyFile, caKey}, {caCertFile, caCert}} {
+			if err := writeNew(root, f.name, f.data); err != nil {
+				return nil, fmt.Errorf("setup: cannot write %s", f.name)
+			}
+		}
+		created = true
+	case certErr != nil:
+		return nil, errors.New("setup: cannot read config/hub-ca.pem (setup/ca-key.pem and it must both be there, or both absent)")
+	case keyErr != nil:
+		return nil, errors.New("setup: cannot read setup/ca-key.pem (it and config/hub-ca.pem must both be there, or both absent)")
 	}
 	cert, key, err := IssueStubCert(caCert, caKey, rand)
 	if err != nil {
@@ -251,8 +265,16 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 	if err := syncDir(root, "config"); err != nil {
 		return nil, err
 	}
+	dc := l.composeCmd("hub") + " --env-file " + st.Hub.HostDir + "/compose.env run --rm --no-deps volume-init"
+	if created {
+		return &Report{Next: []string{
+			"This hub host had no certificate authority: made one (config/hub-ca.pem, with its key in setup/ca-key.pem) and " +
+				"the stub's certificate and key (config/stub-cert.pem, config/stub-key.pem). Keep setup/ca-key.pem; no service mounts it.",
+			"Give the new files to the hub and the stub: " + dc + ". Then start the bundle, which now includes the stub.",
+		}}, nil
+	}
 	return &Report{Next: []string{
 		"The stub's certificate in " + st.Hub.HostDir + "/config is renewed (2 years); the CA is unchanged.",
-		"Restart the stub (hubstub) so that it serves the new certificate. Neither the hub nor bitcoind restarts.",
+		"Give the new files to the stub: " + dc + ". Then restart the stub (hubstub). Neither the hub nor bitcoind restarts.",
 	}}, nil
 }

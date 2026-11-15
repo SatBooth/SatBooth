@@ -341,26 +341,32 @@ own container (a capability would not help a non-root process in an image with n
 reaches no other container or the host). The hub container shares the `netns` container's network and its `/etc/hosts`,
 so `netns` carries the `extra_hosts` that send every name of the certificate to the stub; any other name is not pinned,
 and the hub trusts no authority but the bundle's, so a TLS connection to it fails. The hub mounts `config/hub-ca.pem`
-at `/etc/satbooth/ca.pem` (`SSL_CERT_FILE`) and nothing else of the authority's. The release image pinned in
-`compose.yml` is older than the stub: until the pins move at the next release, run the bundle from source
-(`compose.build.yml`).
+at `/etc/satbooth/ca.pem` (`SSL_CERT_FILE`) and nothing else of the authority's. `HUB_STUB_IP` is the last host address
+of `ELECTRUM_SUBNET`: if you edit one by hand, edit the other to match.
+
+The release image pinned in `compose.yml` (v0.1.0-rc.1) does not hold the stub yet; the next release does. With the
+pinned image, `hubstub` fails at start with `exec: /satbooth-hubstub: not found`, and the hub, which waits for it, does
+not start. Until the pin moves, run the hub bundle from source (`compose.build.yml`, "Build from source").
 
 **The hub's certificate authority.** Stage 2 on the hub host makes a private certificate authority (ECDSA P-256, valid
-10 years) and a certificate for the hub's stub (valid 2 years) that names exactly these hosts: `hubstub`, `getalby.com`,
-`api.getalby.com`, `mempool.space`, `api.boltz.exchange`, `api.satsrouting.exchange`, `megalithic.me`,
-`electrum.getalbypro.com` and `vss.getalbypro.com`. The hub trusts that authority alone (`SSL_CERT_FILE`), so the
-certificate verifies for those names and for no other. Files: `config/hub-ca.pem` (the authority's certificate, for the
-hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the stub), and `setup/ca-key.pem`, the authority's key: it is
-in `setup/`, which no service mounts, and is never copied; keep it that way. Every file has mode 0600. Before the
-certificate expires, run `deploy/setup.sh <dir> hub renew-cert`: it writes a new certificate and key for the stub from
-the same authority and leaves every other file as it is; restart the stub afterwards (it reads its certificate once, at start), and run `volume-init` first so the new files belong to its user. The hub and bitcoind do not
-restart. Each file is written as `<name>.new` (mode 0600) and renamed into place, the key first: if the run is
-interrupted, run it again (a `.new` file left behind is replaced; a certificate that does not match its key is repaired).
-The authority's certificate ends 10 years after stage 2 ran, and the command refuses once it has ended; a new authority
-means a new setup directory and a new `config/hub-ca.pem`, which the hub has to be given again. The authority can vouch
-only for the names above (a name constraint in its certificate), so a certificate it signs for any other host fails
-verification. When the stub is added to the bundle, `volume-init` must also give `hub-ca.pem` to the hub's user (10003)
-and the stub's two files to the stub's.
+10 years, allowed to vouch only for the names below) and a certificate for the hub's stub (valid 2 years) that names
+exactly these hosts: `hubstub`, `getalby.com`, `api.getalby.com`, `mempool.space`, `api.boltz.exchange`,
+`api.satsrouting.exchange`, `megalithic.me`, `electrum.getalbypro.com` and `vss.getalbypro.com`. The hub trusts that
+authority alone (`SSL_CERT_FILE`), so the certificate verifies for those names and for no other. Files, all mode 0600:
+`config/hub-ca.pem` (the authority's certificate, for the hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the
+stub), and `setup/ca-key.pem`, the authority's key: it is in `setup/`, which no service mounts, and is never copied.
+`volume-init` gives `hub-ca.pem` to the hub's user (10003) and the stub's two files to the stub's (65532).
+
+To renew the stub's certificate before it expires, run `deploy/setup.sh <dir> hub renew-cert`, then `volume-init`, then
+restart `hubstub` (it reads its certificate once, at start). The command keeps the authority and every other file; the
+hub and bitcoind do not restart. If it is interrupted, run it again. The authority's certificate ends 10 years after it
+was made, and the command refuses after that: a new authority means a new setup directory and a new `config/hub-ca.pem`
+for the hub.
+
+**A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
+`deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), then the
+`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. The hub's
+environment also changes (`BOLTZ_API`, `MEMPOOL_API` and the others above): `up -d` recreates it.
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
 65532 and sets them to 0700, and `etc/`'s files go with it: after the first start you read them as root. On the hub

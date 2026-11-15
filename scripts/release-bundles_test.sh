@@ -61,6 +61,15 @@ awk '/^  relay:$/ { print "  relay:"; print "    image: ghcr.io/example/relay:la
 RELEASE_PINS_ROOT=$d "$pins" check-format || fail "the relay override changed what check-format reads"
 refused "an override of relay" "$d" "relay runs ghcr.io/example/relay:latest"
 
+# The stub runs the relay image: another image under `hubstub` is refused, and the pin text is still found once.
+d=$tmp/stub
+fresh "$d"
+awk '{ if ($0 == "    image: *relay_image") print "    image: ghcr.io/example/stub:latest"; else print }' \
+  "$d/deploy/hub/compose.yml" > "$d/c.yml" && mv "$d/c.yml" "$d/deploy/hub/compose.yml"
+grep -q 'ghcr.io/example/stub' "$d/deploy/hub/compose.yml" || fail "the stub override was not written"
+RELEASE_PINS_ROOT=$d "$pins" check-format || fail "the stub override changed what check-format reads"
+refused "an override of hubstub" "$d" "hubstub runs ghcr.io/example/stub:latest"
+
 # A service of the SatBooth namespace that is not one of the three. The namespace is written with a YAML escape, so
 # the text search for the pin does not see it.
 d=$tmp/extra

@@ -170,7 +170,7 @@ func TestHubStubWiring(t *testing.T) {
 
 	stub := serviceText(t, c, "hubstub")
 	for _, want := range []string{
-		"image: ghcr.io/satbooth/satbooth-relay:", `entrypoint: ["/satbooth-hubstub"]`, "net.ipv4.ip_unprivileged_port_start", "<<: *hardening",
+		"image: *relay_image", `entrypoint: ["/satbooth-hubstub"]`, "net.ipv4.ip_unprivileged_port_start", "<<: *hardening",
 		"/stub-cert.pem\n        target: /etc/satbooth/stub-cert.pem\n        read_only: true",
 		"/stub-key.pem\n        target: /etc/satbooth/stub-key.pem\n        read_only: true",
 		"ipv4_address: ${HUB_STUB_IP:?set HUB_STUB_IP}",
@@ -184,13 +184,15 @@ func TestHubStubWiring(t *testing.T) {
 			t.Errorf("the stub service has %q", bad)
 		}
 	}
-	relayImage := func(s string) string {
-		_, v, _ := strings.Cut(s, "image: ")
-		v, _, _ = strings.Cut(v, "\n")
-		return v
+	if !strings.Contains(serviceText(t, c, "relay"), "image: &relay_image ghcr.io/satbooth/satbooth-relay:") {
+		t.Error("the relay does not carry the anchor of the one pin line")
 	}
-	if relayImage(stub) != relayImage(serviceText(t, c, "relay")) {
-		t.Error("the stub and the relay are not the same image reference")
+	if n := strings.Count(mustRead(t, c), "ghcr.io/satbooth/"); n != 1 {
+		t.Errorf("%d pin lines of the SatBooth namespace in the hub bundle, want 1", n)
+	}
+	// Nothing is mounted over the directory that stands for "no system roots".
+	if strings.Contains(mustRead(t, c), "target: /etc/satbooth/no-roots") {
+		t.Error("a volume targets /etc/satbooth/no-roots")
 	}
 
 	hub := serviceText(t, c, "hub")
@@ -238,4 +240,13 @@ func TestStubIP(t *testing.T) {
 			t.Fatalf("%s: stub address %s", p, ip)
 		}
 	}
+}
+
+func mustRead(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

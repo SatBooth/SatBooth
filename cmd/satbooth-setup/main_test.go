@@ -813,7 +813,7 @@ func TestRenewCertThroughTheCommand(t *testing.T) {
 	before := tree(t, hubDir)
 	r := do("", "hub", "renew-cert", "-dir", hubDir)
 	if r.code != 0 || !strings.Contains(r.out, "renewed") || !strings.Contains(r.out, "the CA is unchanged") ||
-		!strings.Contains(r.out, "Restart the stub") {
+		!strings.Contains(r.out, "restart the stub") {
 		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
 	}
 	after := tree(t, hubDir)

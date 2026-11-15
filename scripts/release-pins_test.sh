@@ -26,7 +26,7 @@ d_tools=$(hex 3 64)
 fresh() {
   mkdir -p "$1/deploy/public" "$1/deploy/hub"
   printf 'services:\n  satbooth:\n    image: %s/satbooth:v0.1.0-rc.1@sha256:%s\n' "$ns" "$d_sat" > "$1/deploy/public/compose.yml"
-  printf 'services:\n  relay:\n    image: %s/satbooth-relay:v0.1.0-rc.1@sha256:%s\n' "$ns" "$d_rel" > "$1/deploy/hub/compose.yml"
+  printf 'services:\n  relay:\n    image: &relay_image %s/satbooth-relay:v0.1.0-rc.1@sha256:%s\n  hubstub:\n    image: *relay_image\n' "$ns" "$d_rel" > "$1/deploy/hub/compose.yml"
   printf '#!/usr/bin/env bash\ntools_image=%s/satbooth-tools:v0.1.0-rc.1@sha256:%s\n' "$ns" "$d_tools" > "$1/deploy/setup.sh"
 }
 run() { RELEASE_PINS_ROOT=$1 "$pins" "${@:2}"; }
@@ -66,6 +66,13 @@ d=$tmp/final
 fresh "$d"
 for f in deploy/public/compose.yml deploy/hub/compose.yml deploy/setup.sh; do edit "$d/$f" 's/v0\.1\.0-rc\.1/v1.2.3/'; done
 run "$d" check-format || fail "v1.2.3 was refused"
+
+# The relay image's pin is one line with an anchor and an alias; a literal second pin line is refused.
+d=$tmp/alias
+fresh "$d"
+[ "$(run "$d" show | grep -c "^satbooth-relay $ns/satbooth-relay:v0.1.0-rc.1@sha256:$d_rel$")" -eq 1 ] || fail "the anchor is part of the ref"
+edit "$d/deploy/hub/compose.yml" "s|image: \\*relay_image|image: $ns/satbooth-relay:v0.1.0-rc.1@sha256:$d_rel|"
+refuses "a second literal pin of the relay image" "$d" "satbooth-relay: 2 pin lines"
 
 # One site at another version.
 d=$tmp/version
@@ -158,7 +165,9 @@ run "$d" set v0.2.0 "$digests" || fail "set failed"
 run "$d" check-format || fail "check-format refused the result of set"
 [ "$(run "$d" version)" = v0.2.0 ] || fail "version after set"
 grep -qx "    image: $ns/satbooth:v0.2.0@sha256:$(hex a 64)" "$d/deploy/public/compose.yml" || fail "set: public site"
-grep -qx "    image: $ns/satbooth-relay:v0.2.0@sha256:$(hex b 64)" "$d/deploy/hub/compose.yml" || fail "set: hub site"
+grep -qx "    image: &relay_image $ns/satbooth-relay:v0.2.0@sha256:$(hex b 64)" "$d/deploy/hub/compose.yml" || fail "set: hub site keeps its anchor"
+grep -qx "    image: \*relay_image" "$d/deploy/hub/compose.yml" || fail "set: the alias of the relay image changed"
+[ "$(grep -c "$ns/" "$d/deploy/hub/compose.yml")" -eq 1 ] || fail "set: the hub bundle has more than one pin line"
 grep -qx "tools_image=$ns/satbooth-tools:v0.2.0@sha256:$(hex c 64)" "$d/deploy/setup.sh" || fail "set: tools site"
 # set refuses a bad version and a bad digests file, and leaves the sites as they were.
 cp -R "$d" "$tmp/set-before"

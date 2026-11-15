@@ -370,3 +370,54 @@ func TestCAIsConstrainedToTheNames(t *testing.T) {
 		t.Errorf("a leaf for a listed name: %v", err)
 	}
 }
+
+// A hub host set up before the bundle had a stub has no authority: renew-cert makes it and the leaf, 0600, with a
+// chain that verifies; the next run keeps that authority. One of the two authority files alone is refused.
+func TestRenewMakesTheCAOfAnOlderHost(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	for _, n := range []string{caCertFile, caKeyFile, stubCertFile, stubKeyFile} {
+		if err := os.Remove(filepath.Join(d, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One of the pair alone: refused, nothing written.
+	if err := os.WriteFile(filepath.Join(d, caKeyFile), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renew(t, d, 1); err == nil {
+		t.Fatal("renewed with a CA key and no CA certificate")
+	}
+	if exists(filepath.Join(d, stubCertFile)) {
+		t.Fatal("a refused run wrote a file")
+	}
+	os.Remove(filepath.Join(d, caKeyFile))
+
+	rep, err := renew(t, d, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := strings.Join(rep.Next, "\n"); !strings.Contains(text, "had no certificate authority") || !strings.Contains(text, "volume-init") {
+		t.Errorf("report: %s", text)
+	}
+	for _, n := range []string{caCertFile, caKeyFile, stubCertFile, stubKeyFile} {
+		if m := fileMode(t, filepath.Join(d, n)); m != 0o600 {
+			t.Errorf("%s has mode %o", n, m)
+		}
+	}
+	ca, leaf := parseCert(t, e.read(d, caCertFile)), parseCert(t, e.read(d, stubCertFile))
+	for _, n := range StubNames() {
+		if err := verifyName(ca, leaf, n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	caBefore := string(e.read(d, caCertFile))
+	rep, err = renew(t, d, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(e.read(d, caCertFile)) != caBefore || !strings.Contains(strings.Join(rep.Next, "\n"), "the CA is unchanged") {
+		t.Error("the second run did not keep the CA")
+	}
+}

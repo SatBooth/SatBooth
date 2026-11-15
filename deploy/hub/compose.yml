@@ -175,7 +175,9 @@ services:
 
   relay:
     <<: *hardening
-    image: ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
+    # The one pin line of the relay image (scripts/release-pins.sh): the stub and the other binaries of the image use
+    # the anchor, so a release changes one line.
+    image: &relay_image ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
     network_mode: service:netns
     command: ["-config", "/etc/satbooth-relay/relay.json"]
     volumes:
@@ -199,7 +201,10 @@ services:
   # which a non-root process in a scratch image has.
   hubstub:
     <<: *hardening
-    image: ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
+    # The relay image holds the stub from the release after v0.1.0-rc.1: with the pinned rc.1 image the start fails with
+    # "exec: /satbooth-hubstub: not found" and the hub never starts (it waits for the stub). Until the pin moves, build
+    # the bundle from source with compose.build.yml (deploy/README.md).
+    image: *relay_image
     entrypoint: ["/satbooth-hubstub"]
     command: ["-cert", "/etc/satbooth/stub-cert.pem", "-key", "/etc/satbooth/stub-key.pem", "-listen", ":443"]
     sysctls:
