@@ -162,7 +162,8 @@ Facts that shape the design (getAlby/hub main, read 2026-10-26 to 10-30):
     by default (getAlby/hub v1.24.6 `chain/address_lookup.go:20-26`, `config/models.go:34`). By default the bundle runs
     no Electrum server and points `LDK_ELECTRUM_SERVER` at `tcp://127.0.0.1:9`, where nothing listens: those lookups
     fail on the host and these lookups call no third party, Alby included. With the opt-in `electrum` profile it points at its own Fulcrum.
-    `MEMPOOL_API` is left at the hub's default; the operator may set it in `hub.env`.
+    The bundle sets `MEMPOOL_API` to its own local stub (`https://hubstub/api`) in the hub's environment, which wins
+    over `hub.env`; the hub's default, `mempool.space`, is never used.
 - Hard-coded `getalby.com/api` calls remain for fiat rates, channel suggestions at startup and service
   status. **Catch:** `api.Health` calls `getalby.com/api/internal/info` first and fails when that fails, so
   health checks must use NWC `get_info` or node/channel state instead.
@@ -1889,7 +1890,7 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    `DAC_READ_SEARCH`, no network) gives each volume and file to the user that reads it and each directory mode 0700,
    and never changes a file's mode, so a loose secret file is still refused by whatever reads it. Every long-running
    service runs with a read-only root, all capabilities dropped and `no-new-privileges`.
-   - **The hub host** runs Alby Hub v1.24.6 (the qualified image, pinned by digest), `satbooth-relay` from the release
+   - **The hub host** runs Alby Hub v1.24.7 (pinned by digest; its qualification is pending), `satbooth-relay` from the release
      image, bitcoind (Bitcoin Core 32.1, pruned to about 50 GB by default), with the `electrum` profile Fulcrum 2.1.4 as the
      hub's Electrum server (it needs an unpruned bitcoind with `txindex=1`: the full chain and Fulcrum's own index, not the pruned default) and, with the `monero`
      profile, monerod and SatBooth's view-only monero-wallet-rpc (v0.18.5.4). bitcoind, Fulcrum and the Monero binaries are the
@@ -2362,8 +2363,8 @@ From these follow the rules below, as built.
   repo from the Bitcoin Core 32.1 release tarball, checked against a pinned SHA-256 on a digest-pinned Debian
   base, with no third-party image; the suite runs locally and in a separate GitHub workflow (manual dispatch
   and weekly), while normal pull requests keep the offline checks. Implementation choices:
-  - the qualified hub is the v1.24.6 release image, pinned by digest (`dependencies.md` §4); the tag points at
-    `921003b`, the commit the source citations name;
+  - the hub is the v1.24.7 release image, pinned by digest (`dependencies.md` §8); the suite ran against v1.24.6
+    (tag at `921003b`, the commit the source citations name), and the run against v1.24.7 is pending;
   - the Compose network is `internal: true`, so the test network has no internet and the run is also the egress
     test of §2.1. The tests run in a container on that network, never on the host. Observed: the hubs reach
     `running` without internet, and the startup channel-suggestion call fails without blocking;

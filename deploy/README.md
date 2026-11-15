@@ -762,6 +762,8 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | `MEMPOOL_API` | unreachable, on purpose | fixed: `https://hubstub/api`, the bundle's own stub; the hub's default is `https://mempool.space/api`, and its web UI sends channel peers' public keys and funding transaction ids there (getAlby/hub v1.24.7 `api/api.go:1443-1458`) |
 | `BOLTZ_API` | not set | fixed: `https://hubstub`; any non-empty value stops the call to `getalby.com/api/internal/info` that the hub makes at every start to choose its swap provider (`swaps/swaps_service.go:96-103`); swaps do not work |
 | `LDK_LSPS2_ADDRESSES` | not set | fixed: `none`, which parses to no liquidity provider. Empty would leave the hub's built-in third-party node on, and an invoice above the inbound capacity would then connect to it (`lnclient/ldk/ldk.go:174-202, 2949-2966`) |
+| `REBALANCE_SERVICE_URL` | not set | fixed: `https://hubstub`; the hub's default is Megalith's service, called when the operator rebalances (`api/rebalance.go:60-75`) |
+| `LDK_VSS_URL` | not set | fixed: `https://hubstub`; the hub's default is Alby's VSS server, used only if the operator enables VSS (`lnclient/ldk/ldk.go:282-288`) |
 | `HIDE_UPDATE_BANNER` | not set | fixed: `true` (hides the update banner in the web UI) |
 | `SSL_CERT_FILE`, `SSL_CERT_DIR` | not set | fixed: `/etc/satbooth/ca.pem` and `/etc/satbooth/no-roots`: the hub trusts the bundle's own certificate authority and no system root, so a TLS connection from the hub to any real host fails. The bundle does not yet mount the certificate or run `hubstub`: until it does, the hub's TLS calls fail and its health check reports an error |
 | `LDK_ELECTRUM_SERVER` | not set | operator: `HUB_ELECTRUM_SERVER`, `tcp://127.0.0.1:9` or `tcp://fulcrum:50001` (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`) |
@@ -810,8 +812,9 @@ By default the bundle therefore runs **no Electrum server**: `bitcoin.conf` has 
 `HUB_ELECTRUM_SERVER` is `tcp://127.0.0.1:9`, an address nothing listens on. It is set because the hub's own default is
 Alby's server (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`): left unset, those two lookups would go to a
 third party, which would learn the hub's addresses and the host's IP. Pinned to the unreachable address, those address lookups
-call no third party: they fail on the host. (The hub's other calls to third parties, such as its fiat rates and
-`MEMPOOL_API`, are separate: see `docs/design.md`.)
+call no third party: they fail on the host. (The hub's other calls to third parties are separate: the bundle's environment redirects `MEMPOOL_API`, `BOLTZ_API`,
+`REBALANCE_SERVICE_URL` and `LDK_VSS_URL` to its own stub, which wins over `hub.env`; see the hub's environment above
+and `docs/design.md`.)
 
 The prune size is the answer `bitcoind_prune_mib`, 10240 (10 GiB, about five weeks of blocks) to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
 months of blocks, plus bitcoind's chainstate) by default. bitcoind still downloads and checks the whole chain once; it

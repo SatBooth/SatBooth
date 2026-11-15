@@ -110,11 +110,15 @@ services:
       # - LDK_LSPS2_ADDRESSES: "none" parses to no liquidity provider, and the hub then never contacts one when it makes
       #   an invoice (lnclient/ldk/ldk.go:174-202, 2949-2966). Empty would leave its built-in Megalith node on.
       # - LDK_GOSSIP_SOURCE: empty, so no rapid gossip sync server; gossip comes from connected peers only.
+      # - REBALANCE_SERVICE_URL and LDK_VSS_URL: Megalith's rebalance service and Alby's VSS server, redirected to the
+      #   stub as well (api/rebalance.go:60-75; lnclient/ldk/ldk.go:282-288).
       # - HIDE_UPDATE_BANNER: hides the banner; the hub still asks its update check, which the stub answers.
-      # - SSL_CERT_FILE and SSL_CERT_DIR: the hub trusts the bundle's certificate authority and no system root, so a TLS
-      #   connection to any real host fails. The certificate file is mounted by the stub's own setup; until then the hub
-      #   has no root at all.
+      # - SSL_CERT_FILE and SSL_CERT_DIR: the hub trusts one certificate authority, the bundle's, and no system root, so
+      #   a TLS connection to any real host fails. The path is where the authority's certificate (config/hub-ca.pem,
+      #   made by setup) goes in the container; this file does not mount it yet, so the hub has no root at all.
       BOLTZ_API: https://hubstub
+      REBALANCE_SERVICE_URL: https://hubstub
+      LDK_VSS_URL: https://hubstub
       MEMPOOL_API: https://hubstub/api
       LDK_LSPS2_ADDRESSES: none
       LDK_GOSSIP_SOURCE: ""

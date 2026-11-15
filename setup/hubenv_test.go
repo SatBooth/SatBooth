@@ -56,8 +56,10 @@ func TestHubEnvironmentDisablesOutsideDefaults(t *testing.T) {
 	for k, want := range map[string]string{
 		// The swap provider and the mempool API are the bundle's own stub (the hubstub service); a non-empty BOLTZ_API
 		// is also what stops the hub asking getalby.com which swap provider to use.
-		"BOLTZ_API":   "https://hubstub",
-		"MEMPOOL_API": "https://hubstub/api",
+		"BOLTZ_API":             "https://hubstub",
+		"REBALANCE_SERVICE_URL": "https://hubstub",
+		"LDK_VSS_URL":           "https://hubstub",
+		"MEMPOOL_API":           "https://hubstub/api",
 		// An empty value would not disable the hub's built-in liquidity provider; a non-empty one it cannot parse does.
 		"LDK_LSPS2_ADDRESSES": "none",
 		// Empty: no rapid gossip sync server, gossip from connected peers only.
@@ -85,7 +87,7 @@ func TestHubEnvironmentDisablesOutsideDefaults(t *testing.T) {
 // No setting of the hub's environment names a host of Alby's, of mempool.space, of Boltz or of Megalith.
 func TestHubEnvironmentNamesNoAlbyHost(t *testing.T) {
 	for k, v := range hubEnvironment(t, "../deploy/hub/compose.yml") {
-		for _, bad := range []string{"getalby", "getalbypro", "mempool.space", "boltz.exchange", "megalithic"} {
+		for _, bad := range []string{"getalby", "getalbypro", "mempool.space", "boltz", "satsrouting", "megalith", "second.tech", "albylabs", "getalby"} {
 			if strings.Contains(v, bad) {
 				t.Errorf("%s = %q names %s", k, v, bad)
 			}

@@ -141,8 +141,9 @@ From `getAlby/hub` at commit `921003b` (the v1.24.6 release), `SendPaymentSync` 
 **The qualified hub.** `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7`
 (the multi-arch index digest). The tag `v1.24.6` points at commit `921003b`, so the source citations in this
 section and the image are the same code. The hub bundle and the regtest hubs now pin v1.24.7 (§8), which the suite
-has not yet been run against; the citations of this section are v1.24.6's. The qualification suite asserts the facts marked observed below and passed in
-full against this image; the timings and counts quoted are from the earlier v1.24.4 run (`qualify/REPORT.md`).
+has not yet been run against; the citations of this section are v1.24.6's. The qualification suite asserts the facts
+marked observed below and passed in full against the v1.24.6 image; the timings and counts quoted are from the
+earlier v1.24.4 run (`qualify/REPORT.md`).
 
 | Fact the client relies on | Source (`getAlby/hub 921003b`) | Observed (qualification) |
 |---|---|---|
