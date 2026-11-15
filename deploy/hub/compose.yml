@@ -362,7 +362,9 @@ services:
         condition: service_started
 
 networks:
+  # enable_ipv6 is off on the hub and electrum networks whatever the daemon's default: the egress rules are IPv4 only.
   hub:
+    enable_ipv6: false
     ipam:
       config:
         - subnet: ${HUB_SUBNET:?set HUB_SUBNET}
@@ -371,6 +373,7 @@ networks:
   # ELECTRUM_SUBNET is always set.
   electrum:
     internal: true
+    enable_ipv6: false
     ipam:
       config:
         - subnet: ${ELECTRUM_SUBNET:?set ELECTRUM_SUBNET}

@@ -178,6 +178,24 @@ func TestHubStubWiring(t *testing.T) {
 		t.Error("the hub shares netns's hosts file: extra_hosts on it is refused by Docker")
 	}
 
+	// The egress rules are IPv4 only: the two networks the namespace is on must not get IPv6 from the daemon's default.
+	raw, err := os.ReadFile(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"hub", "electrum"} {
+		_, rest, _ := strings.Cut(string(raw), "\nnetworks:\n")
+		_, blk, ok := strings.Cut(rest, "\n  "+n+":\n")
+		if !ok {
+			t.Fatalf("no %s network", n)
+		}
+		blk, _, _ = strings.Cut("\n"+blk, "\n  # ")
+		blk, _, _ = strings.Cut(blk, "\nvolumes:")
+		if !strings.Contains(blk, "\n    enable_ipv6: false\n") {
+			t.Errorf("the %s network does not set enable_ipv6: false", n)
+		}
+	}
+
 	stub := serviceText(t, c, "hubstub")
 	for _, want := range []string{
 		"image: *relay_image", `entrypoint: ["/satbooth-hubstub"]`, "net.ipv4.ip_unprivileged_port_start", "<<: *hardening",
