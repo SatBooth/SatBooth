@@ -179,7 +179,8 @@ flag, an extra argument, or `-host-dir`, `-hub-url`, `-answers`, `-wallet-rpc-pa
    It prints the digest it computed (it matched the one you gave) and these steps, which you do in this order. Below,
    `dc` stands for `docker compose -f deploy/hub/compose.yml --env-file <dir>/compose.env`.
 
-   1. **Start the hub alone:** `dc up -d --build hub`. This starts `volume-init`, `netns`, bitcoind and the hub.
+   1. **Start the hub alone:** `dc up -d --build hub hubproxy`. This starts `volume-init`, `netns`, bitcoind, the stub,
+      the hub and the proxy that serves its admin page on port 8080.
    2. **Open an SSH tunnel to its admin page** from your workstation, with the address of `hub_admin_addr` (loopback by
       default): `ssh -L 8080:<hub_admin_addr>:8080 <hub host>`, then open `http://127.0.0.1:8080`.
    3. **Set the unlock password now, before anything else.** A fresh hub belongs to whoever opens its page first.
@@ -788,11 +789,11 @@ outside Swarm (`docs/running.md`, "Secrets in Docker Compose"), so the bundles d
 ### The hub host
 
 **The first start sets the hub's password before anything else runs.** A fresh hub belongs to whoever opens its setup
-page first. So the first `up` starts only the hub and what it needs (`volume-init`, `netns` and bitcoind), and the
-first act after it is to set the unlock password over the SSH tunnel; only then does the rest start:
+page first. So the first `up` starts only the hub, what it needs (`volume-init`, `netns`, bitcoind and the stub) and
+the proxy that serves its page (`hubproxy`), and the first act after it is to set the unlock password over the SSH tunnel; only then does the rest start:
 
 ```sh
-docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build hub
+docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build hub hubproxy
 ssh -L 8080:127.0.0.1:8080 <hub host>   # open http://127.0.0.1:8080 and set the unlock password now
 docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build
 # or, with Monero on this host:

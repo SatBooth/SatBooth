@@ -471,8 +471,8 @@ for _ in range(3):
   TEST_HUB_ADMIN_PORT=1 TEST_HUB_RELAY_PORT=2 TEST_HUB_RPC_PORT=3 HUB_ADMIN_ADDR=127.0.0.1 docker compose -p "$hub_project" \
     -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml -f dev/regtest/deploy-hub-ports.override.yml \
     --env-file "$hub_root/compose.env" config -q
-  log "up: deploy/hub (volume-init, netns, bitcoind, hub)"
-  hdc up -d --build hub
+  log "up: deploy/hub (volume-init, netns, bitcoind, the stub, hub, the UI proxy), as deploy/README.md's first start"
+  hdc up -d --build hub hubproxy
   local vi
   vi=$(hdc ps -a -q volume-init)
   want_code "volume-init exit code" "$(docker inspect -f '{{.State.ExitCode}}' "$vi")" 0
@@ -583,8 +583,8 @@ deploy_hub_electrum_group() {
     || { echo "deploy/hub: compose.env does not point the hub at fulcrum" >&2; return 1; }
   out=$(deploy/setup.sh "$hub_root" hub pair -invoice-wallet 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 <<< "")
   grep -qF -- '--profile electrum' <<< "$out" || { echo "deploy/hub: setup's hub start command does not name the profile" >&2; return 1; }
-  log "up: deploy/hub with --profile electrum (bitcoind, Fulcrum, the hub)"
-  hdc --profile electrum up -d --build bitcoind fulcrum hub
+  log "up: deploy/hub with --profile electrum (bitcoind, Fulcrum, the hub, the UI proxy)"
+  hdc --profile electrum up -d --build bitcoind fulcrum hub hubproxy
   local cli=(exec -T bitcoind bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/data)
   local deadline=$((SECONDS + 300)) synced=""
   until synced=$(hdc "${cli[@]}" getindexinfo 2> /dev/null | jq -r '.txindex.synced // empty' 2> /dev/null) && [ "$synced" = true ]; do
