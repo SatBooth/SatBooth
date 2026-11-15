@@ -158,8 +158,11 @@ func (lk *Lock) HubPair(invoiceWallet, payoutWallet string) (*Report, error) {
 	}
 	hd := st.Hub.HostDir
 	profile := ""
+	if st.Hub.Electrum {
+		profile += "--profile electrum "
+	}
 	if in.Monero {
-		profile = "--profile monero "
+		profile += "--profile monero "
 	}
 	n := []string{
 		"Give the public host's operator this digest to compare: " + Digest(hb),

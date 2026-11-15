@@ -1,7 +1,8 @@
 # The private hub host (deploy/README.md, "The hub host"): Alby Hub, SatBooth's NWC relay, bitcoind (pruned by default)
 # and, optionally, the hub's Electrum server (Fulcrum, profile electrum), monerod and SatBooth's view-only
 # monero-wallet-rpc (profile monero). Never the host of the public SatBooth service.
-#   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile electrum] [--profile monero] up -d --build
+#   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile electrum]
+#     [--profile monero] up -d --build
 #   The relay is the pinned release image. To build it from source instead, add -f deploy/hub/compose.build.yml after
 #   -f deploy/hub/compose.yml.
 # Every value the operator gives comes from the env file (deploy/hub/example.env: addresses and paths, no secrets).
@@ -9,8 +10,8 @@
 # Published ports: the hub's admin UI on HUB_ADMIN_ADDR (loopback: reached through an SSH tunnel, never from the public
 # host), and on HUB_PRIVATE_ADDR (the private link to the public host) only what SatBooth calls: the relay, bitcoind's
 # RPC and, with the monero profile, wallet-rpc. The electrum profile needs an unpruned bitcoind with txindex=1 (about
-# 900 GB more disk): bitcoin.conf, fulcrum.conf and HUB_ELECTRUM_SERVER (tcp://fulcrum:50001) go with it. The ${VAR:?} form makes an empty or missing address an error: an empty
-# host would publish on every interface.
+# 900 GB more disk): bitcoin.conf, fulcrum.conf and HUB_ELECTRUM_SERVER (tcp://fulcrum:50001) go with it. The ${VAR:?}
+# form makes an empty or missing address an error: an empty host would publish on every interface.
 name: satbooth-hub
 
 x-hardening: &hardening
@@ -101,11 +102,11 @@ services:
       SEND_EVENTS_TO_ALBY: "false"
       AUTO_LINK_ALBY_ACCOUNT: "false"
       RELAY: ws://127.0.0.1:7447
-      # With bitcoind as LDK's chain source, the hub uses an Electrum server only to look up on-chain addresses (rotating
-      # its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
+      # With bitcoind as LDK's chain source, the hub uses an Electrum server only to look up on-chain addresses
+      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
       # chain/address_lookup.go:20-26, lnclient/ldk/ldk.go:217-232). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
-      # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so that
-      # the hub calls no third-party server and those two lookups fail locally.
+      # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so
+      # that the hub calls no third-party server and those two lookups fail locally.
       LDK_ELECTRUM_SERVER: ${HUB_ELECTRUM_SERVER:?set HUB_ELECTRUM_SERVER}
     volumes:
       - hub-data:/data
@@ -161,9 +162,9 @@ services:
       volume-init:
         condition: service_completed_successfully
 
-  # Fulcrum, the hub's Electrum server (optional: docker compose --profile electrum …): it indexes the bundle's bitcoind
-  # (which then must be unpruned, with txindex=1: about 900 GB more disk) and serves the hub only. Without it the hub's
-  # address lookups fail, and nothing of SatBooth's or of the hub's payments depends on them.
+  # Fulcrum, the hub's Electrum server (optional: docker compose --profile electrum …): it indexes the bundle's
+  # bitcoind (which then must be unpruned, with txindex=1: about 900 GB more disk) and serves the hub only. Without
+  # it the hub's address lookups fail, and nothing of SatBooth's or of the hub's payments depends on them.
   # It is on the internal electrum network alone: it can reach bitcoind and the hub can reach it, and it has no route
   # out, so it can neither peer with other servers nor be reached from anywhere else. Not published. Its configuration
   # (fulcrum.conf, 0600: the RPC user's password) is the operator's; the paths and listeners are fixed here.
