@@ -355,18 +355,24 @@ exactly these hosts: `hubstub`, `getalby.com`, `api.getalby.com`, `mempool.space
 `api.satsrouting.exchange`, `megalithic.me`, `electrum.getalbypro.com` and `vss.getalbypro.com`. The hub trusts that
 authority alone (`SSL_CERT_FILE`), so the certificate verifies for those names and for no other. Files, all mode 0600:
 `config/hub-ca.pem` (the authority's certificate, for the hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the
-stub), and `setup/ca-key.pem`, the authority's key: it is in `setup/`, which no service mounts, and is never copied.
-`volume-init` gives `hub-ca.pem` to the hub's user (10003) and the stub's two files to the stub's (65532).
+stub), `setup/ca-cert.pem` (setup's own copy of the authority's certificate) and `setup/ca-key.pem`, the authority's key:
+the last two are in `setup/`, which no service mounts, and the key is never copied. `volume-init` gives `hub-ca.pem` to
+the hub's user (10003) and the stub's two files to the stub's (65532); after that the operator cannot read
+`config/hub-ca.pem`, which is why setup keeps its own copy.
 
 To renew the stub's certificate before it expires, run `deploy/setup.sh <dir> hub renew-cert`, then `volume-init`, then
-restart `hubstub` (it reads its certificate once, at start). The command keeps the authority and every other file; the
-hub and bitcoind do not restart. If it is interrupted, run it again. The authority's certificate ends 10 years after it
+restart `hubstub` (it reads its certificate once, at start). The command reads the authority's certificate from
+`setup/ca-cert.pem`, so it works after `volume-init` has given `config/hub-ca.pem` to the hub; it keeps the authority and
+every other file, and puts `config/hub-ca.pem` back only if it is missing or can be read and differs (if it cannot
+replace it, it says so: copy `setup/ca-cert.pem` over it, then run `volume-init`). The hub and bitcoind do not restart. On a
+host set up before setup kept its own copy there is no `setup/ca-cert.pem`: the command says so and names the fix, run
+once as root, `sudo cat config/hub-ca.pem > setup/ca-cert.pem` (the file is public; the redirect runs as you). If it is interrupted, run it again. The authority's certificate ends 10 years after it
 was made, and the command refuses after that: a new authority means a new setup directory and a new `config/hub-ca.pem`
 for the hub.
 
 **The UI proxy.** The operator's tunnel (`ssh -L 8080:<hub_admin_addr>:8080`) ends at `hubproxy`
 (`satbooth-hubproxy`, from the relay image), not at the hub: the hub listens on 8081 in the namespace it shares with the
-proxy, and only 8080 is published. The proxy forwards every request unchanged, passes websockets and streaming
+proxy, and only 8080 is published. The proxy forwards every request unchanged except that it adds `X-Forwarded-For` with the client's address (the tunnel's end; the hub reads it), passes websockets and streaming
 responses through, and replaces the response's `Content-Security-Policy` with
 `default-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none';
 form-action 'self'`, so the operator's browser, which holds the hub's admin session, loads and contacts nothing but the
@@ -384,15 +390,19 @@ connection to the internet only to a **listed Lightning peer: an address and a p
 on 9735. Everything else the namespace sends is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
 bitcoind is another container with other addresses and is not bound: it needs the internet for its peers. The
 namespace has a second address, on the internal `electrum` network: whatever leaves with that source for a
-destination outside `ELECTRUM_SUBNET` is dropped and logged as well. The
-`electrum` and `monero` options change nothing here. Docker's networks here have no IPv6, so peers are IPv4 addresses.
+destination outside `ELECTRUM_SUBNET` is dropped and logged as well. What the namespace sends to the host itself (the
+hub network's gateway address, `HUB_PRIVATE_ADDR`, any address of the host) takes the input path, not the forward path:
+a second chain there, from the same two source addresses, lets the host's replies to connections made to the namespace
+through (`ct state established,related`) and logs and drops every new connection to the host. The
+`electrum` and `monero` options change nothing here. The bundle sets `enable_ipv6: false` on the `hub` and `electrum`
+networks, whatever the daemon's default, because the rules are IPv4 only, so peers are IPv4 addresses.
 
 **DNS is not one of the things the rules stop.** Docker's embedded resolver answers the bundle's service names and the
 pinned names itself, and sends a query for any other name to its upstream servers **from the host's network namespace,
 not the container's** (measured on Docker Engine 29.4.2: the query appears from the host's own address, through the
 host's resolver, and never crosses the forward path these rules sit on). So the `netns` service sets
 `dns: [HUB_STUB_IP]`: the one upstream the namespace's resolver has is the stub's address, which the host reaches over
-the internal `electrum` network and whose container has no DNS port, so a name nobody pinned is refused at once and
+the internal `electrum` network and whose container has no DNS port, so a name nobody pinned never resolves (each lookup fails after 12 to 13 s, measured) and
 reaches neither the host's resolver nor the internet. Docker's resolver still answers `bitcoind`, `hubstub`, `fulcrum`
 (with the profile) and the pinned names. A container of the bundle without that setting (bitcoind, Fulcrum, the Monero
 services) resolves through the host's resolver; they are not bound by the rules either.
@@ -414,9 +424,10 @@ deploy/setup.sh <dir> hub egress-rules -format iptables > hub-egress.sh      # i
 ```
 
 Apply as root: `nft -f hub-egress.nft` (it rebuilds its chain, and keeps the peer set and what was added to it), or
-`sh hub-egress.sh` (it replaces its two chains `SATBOOTH_HUB_EGRESS` and `SATBOOTH_HUB_ELECTRUM` in one step with
+`sh hub-egress.sh` (it replaces its chains `SATBOOTH_HUB_EGRESS`, `SATBOOTH_HUB_ELECTRUM` and `SATBOOTH_HUB_HOST` in one step with
 `iptables-restore --noflush`, so that a rerun never leaves them empty behind their jumps, keeps the peer chain
-`SATBOOTH_HUB_PEERS`, and adds one jump each from `DOCKER-USER`; `IPT=iptables` names another binary, and its
+`SATBOOTH_HUB_PEERS`, and adds one jump each to the first two from `DOCKER-USER` and two to the third from `INPUT` (one
+for each of the namespace's two source addresses); `IPT=iptables` names another binary, and its
 `-restore` twin must exist). A peer in the iptables set is `ACCEPT`ed, which ends the traversal of `DOCKER-USER`: rules
 of your own that come after the jump do not see the packets to a listed peer (put them before it). If `iptables
 --version` says `nf_tables`, Docker programs nftables: use the nft file, not the iptables one. Add and remove a peer (the files repeat these):
@@ -432,11 +443,17 @@ iptables-legacy -w -S SATBOOTH_HUB_PEERS                                        
 
 They survive a Docker restart: the nftables table is not Docker's, and Docker keeps the contents of `DOCKER-USER`. They
 do not survive a reboot, and peers added by hand are not in the files. Save the current state and load it at boot:
-`nft list table inet satbooth_hub > /etc/satbooth-hub.nft`, then at boot (after the network is up)
-`nft delete table inet satbooth_hub 2>/dev/null; nft -f /etc/satbooth-hub.nft` from a systemd unit or your distribution's
-nftables service; for iptables, `iptables-legacy-save > /etc/satbooth-hub.rules` and `iptables-legacy-restore` after
-`docker.service` has started (Docker must have created `DOCKER-USER` first, so restore only the two chains, or re-run
-`hub-egress.sh` and then add your peers).
+`nft list table inet satbooth_hub > /etc/satbooth-hub.nft`, then at boot
+`nft delete table inet satbooth_hub 2>/dev/null; nft -f /etc/satbooth-hub.nft` from a systemd unit that runs
+`Before=docker.service`, so the rules are in place before any container starts (the nftables file does not need Docker's
+chains). For iptables, `iptables-legacy-save > /etc/satbooth-hub.rules` and `iptables-legacy-restore` after
+`docker.service` has started (Docker must have created `DOCKER-USER` first, so restore only the three chains, or re-run
+`hub-egress.sh` and then add your peers). **That leaves a window**: the containers restart with the daemon
+(`restart: unless-stopped`) and the hub dials out at once, so from the daemon's start until the script finishes (seconds)
+nothing bounds them, and a connection opened in that window is an established flow that the rules let through for as long
+as it lives. To close it, restart the hub's services (`netns`, `hub`, `relay`, `hubproxy`) as the unit's last step, which
+ends those connections, or run `docker compose stop` before a planned reboot (a container stopped by hand stays stopped
+with `unless-stopped`) and start the bundle only after the rules are loaded. The nftables file has no such window.
 Check, from the hub's namespace (`docker compose … exec netns` has no tools; use a throwaway container that joins it):
 
 ```sh
@@ -445,15 +462,15 @@ docker run --rm --network container:<project>-netns-1 debian:13-slim bash -c \
 ```
 
 The drops appear in `journalctl -k | grep satbooth-hub-egress`, and in `nft list chain inet satbooth_hub egress`
-(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v` (and `SATBOOTH_HUB_ELECTRUM`). `scripts/egress-rules-test.sh` applies the printed rules
+(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v` (and `SATBOOTH_HUB_ELECTRUM`; the host chain: `nft list chain inet satbooth_hub host_input` or `SATBOOTH_HUB_HOST`). `scripts/egress-rules-test.sh` applies the printed rules
 to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases,
 including adding and removing a peer and saving and loading the nftables state.
 
 **A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
 `deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), add the
 `HUB_STUB_IP=` line it prints to `compose.env` (the file stage 2 wrote before the stub existed has none), run the
-`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. If the command stops after writing only one of `config/hub-ca.pem` and `setup/ca-key.pem`, it refuses to go on: delete the
-one that exists and run it again. The hub's
+`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. If the command stops after writing only some of `config/hub-ca.pem`, `setup/ca-cert.pem` and `setup/ca-key.pem`, it
+refuses to go on: delete the ones that exist and run it again. The hub's
 environment also changes (`BOLTZ_API`, `MEMPOOL_API` and the others above): `up -d` recreates it.
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
@@ -888,7 +905,7 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | `REBALANCE_SERVICE_URL` | not set | fixed: `https://hubstub`; the hub's default is Megalith's service, called when the operator rebalances (`api/rebalance.go:60-75`) |
 | `LDK_VSS_URL` | not set | fixed: `https://hubstub`; the hub's default is Alby's VSS server, used only if the operator enables VSS (`lnclient/ldk/ldk.go:282-288`) |
 | `HIDE_UPDATE_BANNER` | not set | fixed: `true` (hides the update banner in the web UI) |
-| `SSL_CERT_FILE`, `SSL_CERT_DIR` | not set | fixed: `/etc/satbooth/ca.pem` and `/etc/satbooth/no-roots`: the hub trusts the bundle's own certificate authority and no system root, so a TLS connection from the hub to any real host fails. The bundle does not yet mount the certificate or run `hubstub`: until it does, the hub's TLS calls fail and its health check reports an error |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | not set | fixed: `/etc/satbooth/ca.pem` and `/etc/satbooth/no-roots`: the hub trusts the bundle's own certificate authority and no system root, so a TLS connection from the hub to any real host fails. The bundle mounts the certificate and runs `hubstub`, which answers the pinned names |
 | `LDK_ELECTRUM_SERVER` | not set | operator: `HUB_ELECTRUM_SERVER`, `tcp://127.0.0.1:9` or `tcp://fulcrum:50001` (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`) |
 | `LDK_ESPLORA_SERVER` | not set | left out: set, it would take the address lookups away from the Electrum server (`chain/address_lookup.go:20-26`) |
 | `RELAY` | `ws://127.0.0.1:7447` | fixed: `ws://127.0.0.1:7447` (the relay's hub listener) |

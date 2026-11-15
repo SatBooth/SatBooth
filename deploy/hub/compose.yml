@@ -98,7 +98,7 @@ services:
     # query for any other name to the servers listed here. Measured on Docker Engine 29.4.2: it sends them from the HOST's
     # network namespace, not from this one, so the host's firewall rules for this namespace never see them and the
     # host's own resolver would carry them to the internet. The one server listed is the stub's address: its container
-    # has no DNS port, the host reaches it over the internal electrum network, and the query is refused there at once.
+    # has no DNS port, the host reaches it over the internal electrum network, and the query fails there: the name never resolves (measured at 12 to 13 s a lookup).
     # A container of this bundle without this setting (bitcoind, Fulcrum and the Monero services, which may need the
     # internet) resolves through the host's resolver. The relay, the proxy and the hub share this namespace and its
     # resolver; the stub is on the internal electrum network alone and has no route out.

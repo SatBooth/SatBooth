@@ -1,7 +1,8 @@
-// Package hubproxy is the reverse proxy in front of Alby Hub's web UI. It forwards every request to the hub, and
-// replaces the Content-Security-Policy of every response with one that lets the operator's browser load and contact
-// nothing but the page's own origin: the hub's own policy names Alby's hosts and relays, so a page of the hub could
-// otherwise show images from, and talk to, servers outside the bundle. No other header, and no body, is changed.
+// Package hubproxy is the reverse proxy in front of Alby Hub's web UI. It forwards every request to the hub, adding
+// X-Forwarded-For with the client's address as httputil.ReverseProxy does, and replaces the Content-Security-Policy of
+// every response with one that lets the operator's browser load and contact nothing but the page's own origin: the
+// hub's own policy names Alby's hosts and relays, so a page of the hub could otherwise show images from, and talk to,
+// servers outside the bundle. No other response header, and no body, is changed.
 package hubproxy
 
 import (

@@ -934,7 +934,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
 - As built, the release images are `FROM scratch`, built from the digest-pinned builder
   (`golang:1.27.4-trixie`) with vendored modules and no module download (`GOFLAGS=-mod=vendor GOPROXY=off
   GOTOOLCHAIN=local CGO_ENABLED=0`, `-trimpath -ldflags=-buildid=`). The `satbooth` image holds two files, `/satbooth`
-  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds two, `/satbooth-relay`, `/satbooth-hubstub` (the hub bundle's stub) and `/satbooth-hubproxy` (the proxy in front of the hub's UI); the
+  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds three, `/satbooth-relay`, `/satbooth-hubstub` (the hub bundle's stub) and `/satbooth-hubproxy` (the proxy in front of the hub's UI); the
   `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`. `scripts/image-check.sh` refuses any other file,
   in CI, and `.dockerignore` keeps the build context to the Go sources, `vendor/`, `go.mod`, `go.sum` and the three
   files `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root

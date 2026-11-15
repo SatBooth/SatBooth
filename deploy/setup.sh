@@ -19,7 +19,7 @@ case "${SATBOOTH_BUILD:-}" in
 esac
 
 usage() {
-  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert> [options]" >&2
+  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert|egress-rules> [options]" >&2
   echo "       (options are those of satbooth-setup, except -dir and -host-dir, which are set here)" >&2
   exit 2
 }
