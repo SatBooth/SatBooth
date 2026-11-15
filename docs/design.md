@@ -1891,7 +1891,7 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    service runs with a read-only root, all capabilities dropped and `no-new-privileges`.
    - **The hub host** runs Alby Hub v1.24.6 (the qualified image, pinned by digest), `satbooth-relay` from the release
      image, bitcoind (Bitcoin Core 32.1, pruned to about 50 GB by default), with the `electrum` profile Fulcrum 2.1.4 as the
-     hub's Electrum server (it needs an unpruned bitcoind with `txindex=1`, about 900 GB) and, with the `monero`
+     hub's Electrum server (it needs an unpruned bitcoind with `txindex=1`: the full chain and Fulcrum's own index, not the pruned default) and, with the `monero`
      profile, monerod and SatBooth's view-only monero-wallet-rpc (v0.18.5.4). bitcoind, Fulcrum and the Monero binaries are the
      official release tarballs, checked against pinned SHA-256 hashes, on a digest-pinned `debian:13-slim`, each under
      its own user (bitcoind 10001, monerod and wallet-rpc 10002, the hub 10003, Fulcrum 10004, the relay 65532). A

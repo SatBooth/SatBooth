@@ -9,9 +9,10 @@
 # Secrets are files in HUB_CONFIG_DIR, bind-mounted read-only; none is in an environment: value or in argv.
 # Published ports: the hub's admin UI on HUB_ADMIN_ADDR (loopback: reached through an SSH tunnel, never from the public
 # host), and on HUB_PRIVATE_ADDR (the private link to the public host) only what SatBooth calls: the relay, bitcoind's
-# RPC and, with the monero profile, wallet-rpc. The electrum profile needs an unpruned bitcoind with txindex=1 (about
-# 900 GB more disk): bitcoin.conf, fulcrum.conf and HUB_ELECTRUM_SERVER (tcp://fulcrum:50001) go with it. The ${VAR:?}
-# form makes an empty or missing address an error: an empty host would publish on every interface.
+# RPC and, with the monero profile, wallet-rpc. The electrum profile needs an unpruned bitcoind with txindex=1 (the
+# full chain, not the pruned default, plus Fulcrum's index): bitcoin.conf, fulcrum.conf and HUB_ELECTRUM_SERVER
+# (tcp://fulcrum:50001) go with it. The ${VAR:?} form makes an empty or missing address an error: an empty host would
+# publish on every interface.
 name: satbooth-hub
 
 x-hardening: &hardening
@@ -163,8 +164,9 @@ services:
         condition: service_completed_successfully
 
   # Fulcrum, the hub's Electrum server (optional: docker compose --profile electrum …): it indexes the bundle's
-  # bitcoind (which then must be unpruned, with txindex=1: about 900 GB more disk) and serves the hub only. Without
-  # it the hub's address lookups fail, and nothing of SatBooth's or of the hub's payments depends on them.
+  # bitcoind (which then must be unpruned, with txindex=1: the full chain, plus Fulcrum's own index) and serves the
+  # hub only. Without it the hub's address lookups fail, and nothing of SatBooth's or of the hub's payments depends on
+  # them.
   # It is on the internal electrum network alone: it can reach bitcoind and the hub can reach it, and it has no route
   # out, so it can neither peer with other servers nor be reached from anywhere else. Not published. Its configuration
   # (fulcrum.conf, 0600: the RPC user's password) is the operator's; the paths and listeners are fixed here.

@@ -73,7 +73,7 @@ var hubFields = []field{
 	{name: "hub_subnet", question: "The hub bundle's Docker network", def: "172.30.78.0/25", group: "docker"},
 	{name: "hub_ip", question: "The hub's fixed address on it", def: "172.30.78.10", group: "docker"},
 	{name: "electrum_subnet", question: "The bundle's internal Docker network (needed with or without the Electrum server)", def: "172.30.78.128/25", group: "docker"},
-	{name: "electrum", question: "Run an Electrum server (Fulcrum) for the hub's address lookups? It needs an unpruned node, about 900 GB more disk (yes or no)", def: "no", kind: kBool},
+	{name: "electrum", question: "Run an Electrum server (Fulcrum) for the hub's address lookups? It needs the full, unpruned chain (several hundred GB and growing) and Fulcrum's own index, instead of the pruned default (yes or no)", def: "no", kind: kBool},
 	{name: "bitcoind_prune_mib", question: "Prune the hub's bitcoind to how many MiB? 50000 (about 50 GB, roughly six months of blocks) lets a hub that was off for up to that long catch up", def: "50000", kind: kUint,
 		when: func(v map[string]any) bool { e, _ := v["electrum"].(bool); return !e }},
 }

@@ -102,7 +102,7 @@ carries the public host's copies so that the stage can refuse when the two hosts
 | `hub_subnet` | the hub bundle's Docker network (`HUB_SUBNET`): an IPv4 network of `/16` to `/29` | `172.30.78.0/25` |
 | `hub_ip` | the hub's fixed address in it (`HUB_IP`): not its network, gateway or broadcast address | `172.30.78.10` |
 | `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`), needed with or without the Electrum server; must not overlap `hub_subnet` | `172.30.78.128/25` |
-| `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs an unpruned node with `txindex=1` and about 900 GB more disk (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
+| `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs the full, unpruned chain with `txindex=1` and Fulcrum's own index, instead of the pruned default (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
 | `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 550 to 1048576. Refused with `electrum: true`: leave it out | `50000` |
 
 A minimal answers file for the public host (Lightning only):
@@ -791,7 +791,7 @@ the chain, channel closes and breaches included, from bitcoind alone (`lnclient/
 server, to ask whether an on-chain address has been used (`chain/address_lookup.go:20-26`, Electrum protocol over
 `tcp://` or `ssl://`, `chain/electrum.go`): rotating the deposit address its UI shows (`api/api.go`,
 `GetUnusedOnchainAddress`: on a failed lookup it logs and shows the current address again), and an automatic swap-out
-to an xpub (`swaps/swaps_service.go:1598-1612`). Neither is part of SatBooth's payments or of the relay.
+to an xpub (`swaps/swaps_service.go:1598-1622`). Neither is part of SatBooth's payments or of the relay.
 
 By default the bundle therefore runs **no Electrum server**: `bitcoin.conf` has `prune=50000` and no `txindex`, and
 `HUB_ELECTRUM_SERVER` is `tcp://127.0.0.1:9`, an address nothing listens on. It is set because the hub's own default is
@@ -811,8 +811,8 @@ tcp://fulcrum:50001` and use the files below by hand) **and** start the bundle w
 together. The answer without the profile gives an unpruned node with `txindex=1` and no Fulcrum; the profile without
 the answer leaves Fulcrum with a pruned node and no `fulcrum.conf`, and Compose refuses to start it. (`hub init` and
 `hub pair` print the start commands with the profile when the answer is `true`.) Fulcrum needs bitcoind with
-`txindex=1` and unpruned (about 900 GB for Bitcoin's chain and its index together), its own index on disk (its README
-gives 133 GB as of August 2023, more since) and at least 1 GB of RAM; it builds the index on first start, which takes
+`txindex=1` and unpruned (the full chain: several hundred GB and growing, instead of the prune size plus the chainstate),
+its own index on disk (its README gives 133 GB as of August 2023, more since) and at least 1 GB of RAM; it builds the index on first start, which takes
 hours to days. Until then the hub's lookups fail, and nothing of SatBooth's depends on them. `bitcoind_prune_mib` is
 refused with `electrum: true`: an unpruned node has none.
 
