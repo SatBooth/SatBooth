@@ -87,7 +87,7 @@ func TestHubEnvironmentDisablesOutsideDefaults(t *testing.T) {
 // No setting of the hub's environment names a host of Alby's, of mempool.space, of Boltz or of Megalith.
 func TestHubEnvironmentNamesNoAlbyHost(t *testing.T) {
 	for k, v := range hubEnvironment(t, "../deploy/hub/compose.yml") {
-		for _, bad := range []string{"getalby", "getalbypro", "mempool.space", "boltz", "satsrouting", "megalith", "second.tech", "albylabs", "getalby"} {
+		for _, bad := range []string{"getalby", "mempool.space", "boltz", "satsrouting", "megalith", "second.tech", "albylabs"} {
 			if strings.Contains(v, bad) {
 				t.Errorf("%s = %q names %s", k, v, bad)
 			}

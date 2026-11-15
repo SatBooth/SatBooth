@@ -343,7 +343,13 @@ hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the stub), and `setu
 in `setup/`, which no service mounts, and is never copied; keep it that way. Every file has mode 0600. Before the
 certificate expires, run `deploy/setup.sh <dir> hub renew-cert`: it writes a new certificate and key for the stub from
 the same authority and leaves every other file as it is; restart the stub afterwards. The hub and bitcoind do not
-restart.
+restart. Each file is written as `<name>.new` (mode 0600) and renamed into place, the key first: if the run is
+interrupted, run it again (a `.new` file left behind is replaced; a certificate that does not match its key is repaired).
+The authority's certificate ends 10 years after stage 2 ran, and the command refuses once it has ended; a new authority
+means a new setup directory and a new `config/hub-ca.pem`, which the hub has to be given again. The authority can vouch
+only for the names above (a name constraint in its certificate), so a certificate it signs for any other host fails
+verification. When the stub is added to the bundle, `volume-init` must also give `hub-ca.pem` to the hub's user (10003)
+and the stub's two files to the stub's.
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
 65532 and sets them to 0700, and `etc/`'s files go with it: after the first start you read them as root. On the hub

@@ -70,6 +70,10 @@ func NewCA(rand io.Reader) (certPEM, keyPEM []byte, err error) {
 		IsCA:                  true,
 		MaxPathLen:            0,
 		MaxPathLenZero:        true,
+		// The authority can vouch for these names only (and their subdomains, which a DNS name constraint always
+		// includes): a leaf for any other name fails verification even when it is signed with the CA key.
+		PermittedDNSDomainsCritical: true,
+		PermittedDNSDomains:         StubNames(),
 	}
 	der, err := x509.CreateCertificate(rand, tpl, tpl, &key.PublicKey, key)
 	if err != nil {

@@ -1,8 +1,12 @@
 package setup
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -314,5 +318,55 @@ func TestRenewRefusals(t *testing.T) {
 	}
 	if _, err := renew(t, e.hubDir, 1); err == nil {
 		t.Error("renewed without the CA key")
+	}
+}
+
+// The CA itself refuses to vouch for any other name: a leaf made with its key for a name outside the list fails
+// verification, alone or beside listed names, and every listed name still verifies.
+func TestCAIsConstrainedToTheNames(t *testing.T) {
+	caPEM, keyPEM, goodPEM, _ := newPair(t, 12)
+	ca := parseCert(t, caPEM)
+	_, caKey, err := loadCA(caPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ca.PermittedDNSDomains) != len(StubNames()) || !ca.PermittedDNSDomainsCritical {
+		t.Fatalf("constraints: %v critical %v", ca.PermittedDNSDomains, ca.PermittedDNSDomainsCritical)
+	}
+	for i, n := range StubNames() {
+		if ca.PermittedDNSDomains[i] != n {
+			t.Errorf("permitted[%d] = %q, want %q", i, ca.PermittedDNSDomains[i], n)
+		}
+	}
+	for _, n := range StubNames() {
+		if err := verifyName(ca, parseCert(t, goodPEM), n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	rogue := func(names ...string) *x509.Certificate {
+		key, _ := ecdsa.GenerateKey(elliptic.P256(), detRand(3))
+		tpl := &x509.Certificate{SerialNumber: big.NewInt(77), Subject: pkix.Name{CommonName: names[0]}, DNSNames: names,
+			NotBefore: clock().Add(-time.Hour), NotAfter: clock().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature,
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+		der, err := x509.CreateCertificate(detRand(4), tpl, ca, &key.PublicKey, caKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := x509.ParseCertificate(der)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	for _, names := range [][]string{{"evil.example"}, {"blockstream.info"}, {"relay.example.org"}, {"hubstub", "evil.example"}} {
+		leaf := rogue(names...)
+		for _, n := range names {
+			if err := verifyName(ca, leaf, n); err == nil {
+				t.Errorf("a leaf for %v verified for %q", names, n)
+			}
+		}
+	}
+	if err := verifyName(ca, rogue("getalby.com"), "getalby.com"); err != nil {
+		t.Errorf("a leaf for a listed name: %v", err)
 	}
 }

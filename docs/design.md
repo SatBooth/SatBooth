@@ -159,7 +159,7 @@ Facts that shape the design (getAlby/hub main, read 2026-10-26 to 10-30):
   - No LSPs, Boltz or swaps.
   - As built in the hub bundle (plan 10, §3): with bitcoind as LDK's chain source, the hub still sends two on-chain
     address lookups (rotating the deposit address its UI shows, auto swap-out to an xpub) to an Electrum server, Alby's
-    by default (getAlby/hub v1.24.6 `chain/address_lookup.go:20-26`, `config/models.go:34`). By default the bundle runs
+    by default (getAlby/hub v1.24.7 `chain/address_lookup.go:22-28`, `config/models.go:34`). By default the bundle runs
     no Electrum server and points `LDK_ELECTRUM_SERVER` at `tcp://127.0.0.1:9`, where nothing listens: those lookups
     fail on the host and these lookups call no third party, Alby included. With the opt-in `electrum` profile it points at its own Fulcrum.
     The bundle sets `MEMPOOL_API` to its own local stub (`https://hubstub/api`) in the hub's environment, which wins
