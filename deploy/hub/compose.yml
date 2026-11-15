@@ -189,7 +189,7 @@ services:
     <<: *hardening
     # The one pin line of the relay image (scripts/release-pins.sh): the stub and the other binaries of the image use
     # the anchor, so a release changes one line.
-    image: &relay_image ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
+    image: &relay_image ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.2@sha256:f72f212ca1a75d0811ccd68a38520eb03f930813b337c8f54e9eb663ae7b5cc1
     network_mode: service:netns
     command: ["-config", "/etc/satbooth-relay/relay.json"]
     volumes:
