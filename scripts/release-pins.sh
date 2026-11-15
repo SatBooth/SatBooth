@@ -16,7 +16,7 @@
 #   check-tag     exits 0 iff <tag> is a release tag (RELEASE_TAG_RE of scripts/release-lib.sh); reads no site
 #   check-bundles exits 0 iff each base bundle, rendered by `docker compose` with every profile on and its example.env,
 #                 runs exactly the pinned refs: the effective image of `satbooth` and `satbooth-oneoff` (deploy/public)
-#                 and of `relay` and of the services that run the relay image (`hubstub`, deploy/hub) equals the ref
+#                 and of `relay` and of the services that run the relay image (`hubstub`, `hubproxy`; deploy/hub) equals the ref
 #                 `show` prints, and every other service's image is outside
 #                 the namespace and is pinned by digest or is a local build (`:local`). It reads what Compose resolves,
 #                 not the text of the files, so an `image:` that overrides the pinned one is seen. Needs `docker
@@ -218,7 +218,7 @@ case $cmd in
         fail "check-bundles: $dir/compose.yml does not render without interpolation"
       case $host in
         public) want=$(jq -n --arg r "${SITE_REFS[0]}" '{satbooth: $r, "satbooth-oneoff": $r}') ;;
-        hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r, hubstub: $r}') ;;
+        hub) want=$(jq -n --arg r "${SITE_REFS[1]}" '{relay: $r, hubstub: $r, hubproxy: $r}') ;;
       esac
       # Another service's image is accepted when it is pinned by digest, or when it is built here: a service with a
       # `build`, a name without registry or namespace, tag `local`, and no `pull_policy: always`. No image of another

@@ -32,7 +32,7 @@ jobs:
       - run: docker build -f deploy/image/Dockerfile --target satbooth-relay -t satbooth-relay:ci .
       - run: docker build -f deploy/image/Dockerfile --target satbooth-tools -t satbooth-tools:ci .
       - run: scripts/image-check.sh satbooth:ci /satbooth /etc/ssl/certs/ca-certificates.crt
-      - run: scripts/image-check.sh satbooth-relay:ci /satbooth-relay /satbooth-hubstub
+      - run: scripts/image-check.sh satbooth-relay:ci /satbooth-relay /satbooth-hubstub /satbooth-hubproxy
       - run: scripts/image-check.sh satbooth-tools:ci /satbooth-setup /satbooth-pair
       - run: scripts/image-run-test.sh satbooth:ci satbooth-relay:ci satbooth-tools:ci
       # Each bundle's volume-init twice on operator-like directories: Linux keeps real owners, Docker Desktop does not.

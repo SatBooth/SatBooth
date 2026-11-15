@@ -377,6 +377,11 @@ it minus what it has paid out (`db/queries/get_isolated_balance.go`).
     `SYSTEM_CALLS`, `ARBITRARY_EXECUTION`, `UNSAFE_POINTER` and `UNANALYZED`, the artefacts `net/http` and `crypto/tls`
     carry for every server in the module. It answers with fixed strings rather than `encoding/json`, so the encoder's
     writer over-approximation (above) adds nothing to it.
+  - Adding `hubproxy` and `cmd/satbooth-hubproxy` (the reverse proxy in front of the hub's UI, shipped in the relay
+    image; standard library only: `net/http/httputil`) adds one package entry to `docs/capslock.json` with the same
+    capabilities as `hubstub` (it serves and dials HTTP, and reads nothing but its flags), and no other package changed.
+    The proxy uses the default transport with its proxy setting removed and refuses any upstream that is not an `http`
+    URL on a loopback address.
   - `service` and `cmd/satbooth` gain `MODIFY_SYSTEM_STATE` under the label `LOGGING` (plan 13): `service.Run` sets the
     standard logger's flags and output (`log.SetFlags`, `log.SetOutput`) once, to a writer that logs a fixed line. The
     standard logger is where `net/http` writes on its own (a client logs the first bytes a server sent on a connection

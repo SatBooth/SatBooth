@@ -204,6 +204,27 @@ func TestHubStubWiring(t *testing.T) {
 		t.Error("the hub is given more than the authority's certificate")
 	}
 
+	proxy := serviceText(t, c, "hubproxy")
+	for _, want := range []string{"image: *relay_image", `entrypoint: ["/satbooth-hubproxy"]`, "network_mode: service:netns",
+		`"-listen", ":8080", "-upstream", "http://127.0.0.1:8081"`, "<<: *hardening"} {
+		if !strings.Contains(proxy, want) {
+			t.Errorf("the proxy service lacks %q", want)
+		}
+	}
+	if strings.Contains(proxy, "ports:") || strings.Contains(proxy, "cap_add") {
+		t.Error("the proxy publishes a port or adds a capability")
+	}
+	// The hub moves off the published port: the proxy is the only thing on it.
+	if env := hubEnvironment(t, c); env["PORT"] != "8081" {
+		t.Errorf("the hub's PORT is %q, want 8081", env["PORT"])
+	}
+	if !strings.Contains(netns, `"${HUB_ADMIN_ADDR:?set HUB_ADMIN_ADDR}:8080:8080"`) {
+		t.Error("netns no longer publishes 8080 on HUB_ADMIN_ADDR")
+	}
+	if b := serviceText(t, "../deploy/hub/compose.build.yml", "hubproxy"); !strings.Contains(b, "target: satbooth-relay") {
+		t.Error("compose.build.yml does not build the proxy")
+	}
+
 	vi := serviceText(t, c, "volume-init")
 	for _, want := range []string{
 		"chown 10003:10003 /config/hub-ca.pem", "chown 65532:65532 /config/stub-cert.pem /config/stub-key.pem"} {

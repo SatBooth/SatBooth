@@ -864,10 +864,14 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   impersonate only the nine names, and only to a client that is on this host's network and trusts it, which is the hub;
   **pinning names in `/etc/hosts` is not a firewall**: a name the hub resolves that is not in the list goes out to the
   internet and fails only at the TLS handshake, after the connection and the DNS query. The egress rules of the hub
-  host are what stop that, and they are not part of the bundle until they are added.
+  host are what stop that, and they are not part of the bundle until they are added. In the operator's browser,
+  `satbooth-hubproxy` stands on the tunnel's port and replaces the hub's content policy (which allows Alby's hosts and
+  relays) with a self-only one; a page of the hub can then load and contact nothing outside its own origin. Residual: the
+  policy does not stop a link the operator clicks, and the hub's own listener (8081) is still reachable from the
+  bundle's other containers, as the listener always was (below).
 - The per-host bundles (plan 10, as built; `deploy/README.md`, `design.md` §3 "Operations, as built (plan 10)").
   The hub host publishes on its private-link address only the three things SatBooth calls: the relay's client listener (7448),
-  bitcoind's RPC (8332) and, with the `monero` profile, wallet-rpc (18083). The hub's admin UI and API (8080) is
+  bitcoind's RPC (8332) and, with the `monero` profile, wallet-rpc (18083). The hub's admin UI and API (8080, the proxy's port: the hub itself listens on 8081) is
   published on a separate address, loopback in the example, reached through an SSH tunnel, so a compromised public
   host cannot reach it over the link. The public host publishes only the checkout page. Every published address is a
   required value, so an empty one is an error, never every interface (`scripts/check.sh`). Inside the hub host,
@@ -880,7 +884,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   host's IP. With the opt-in `electrum` profile, Fulcrum is on an internal network with only bitcoind and the hub's
   namespace, with no route out, and the example `bitcoin.conf` confines Fulcrum's bitcoind user by `rpcwhitelist` to
   the 15 calls Fulcrum 2.1.4 makes. Accepted residuals:
-  - **bitcoind (and, with the `electrum` profile, Fulcrum) can reach the hub's API on 8080.** The hub's HTTP listener binds every address of its
+  - **bitcoind (and, with the `electrum` profile, Fulcrum) can reach the hub's API on 8081.** The hub's HTTP listener binds every address of its
     namespace and has no setting for the address (getAlby/hub v1.24.6 `cmd/http/main.go:59`), and a published port
     reaches the container's address, not its loopback, so the hub's listener cannot be narrowed to the tunnel without
     a forwarder or firewall rules inside the namespace. So a compromised bitcoind (on the `hub` network) or, with the profile, Fulcrum (a
@@ -920,7 +924,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
 - As built, the release images are `FROM scratch`, built from the digest-pinned builder
   (`golang:1.27.4-trixie`) with vendored modules and no module download (`GOFLAGS=-mod=vendor GOPROXY=off
   GOTOOLCHAIN=local CGO_ENABLED=0`, `-trimpath -ldflags=-buildid=`). The `satbooth` image holds two files, `/satbooth`
-  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds two, `/satbooth-relay` and `/satbooth-hubstub` (the hub bundle's stub); the
+  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds two, `/satbooth-relay`, `/satbooth-hubstub` (the hub bundle's stub) and `/satbooth-hubproxy` (the proxy in front of the hub's UI); the
   `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`. `scripts/image-check.sh` refuses any other file,
   in CI, and `.dockerignore` keeps the build context to the Go sources, `vendor/`, `go.mod`, `go.sum` and the three
   files `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root

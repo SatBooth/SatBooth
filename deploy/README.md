@@ -363,6 +363,15 @@ hub and bitcoind do not restart. If it is interrupted, run it again. The authori
 was made, and the command refuses after that: a new authority means a new setup directory and a new `config/hub-ca.pem`
 for the hub.
 
+**The UI proxy.** The operator's tunnel (`ssh -L 8080:<hub_admin_addr>:8080`) ends at `hubproxy`
+(`satbooth-hubproxy`, from the relay image), not at the hub: the hub listens on 8081 in the namespace it shares with the
+proxy, and only 8080 is published. The proxy forwards every request unchanged, passes websockets and streaming
+responses through, and replaces the response's `Content-Security-Policy` with
+`default-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none';
+form-action 'self'`, so the operator's browser, which holds the hub's admin session, loads and contacts nothing but the
+hub's own origin (the hub's own policy lets its pages show images from, and talk to, Alby's hosts and relays). It
+changes no other header and no body. With the pinned rc.1 image it is missing like the stub: build from source.
+
 **A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
 `deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), then the
 `volume-init` command it prints, and start the bundle from source until the release pin holds the stub. The hub's
@@ -573,7 +582,7 @@ too. The qualification suite runs the bundles this way.
 |---|---|---|
 | `satbooth` | `/satbooth` | The binary, built with `CGO_ENABLED=0 go build -trimpath -ldflags=-buildid=` from the vendored modules. |
 | `satbooth` | `/etc/ssl/certs/ca-certificates.crt` | The CA bundle, copied from the pinned Go image (the `certs` stage, which always runs for `linux/amd64`, so the bytes do not depend on the build host). SatBooth makes outbound TLS connections: rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc. |
-| `satbooth-relay` | `/satbooth-relay`, `/satbooth-hubstub` | The two binaries, built the same way: the relay, and the hub bundle's stub (`cmd/satbooth-hubstub`), which answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally. |
+| `satbooth-relay` | `/satbooth-relay`, `/satbooth-hubstub`, `/satbooth-hubproxy` | The three binaries, built the same way: the relay, and the hub bundle's stub (`cmd/satbooth-hubstub`), which answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally, and the proxy in front of the hub's web UI (`cmd/satbooth-hubproxy`). |
 | `satbooth-tools` | `/satbooth-setup` | The setup command, built the same way. It has no `ENTRYPOINT`: `deploy/setup.sh` names the command. |
 | `satbooth-tools` | `/satbooth-pair` | The pairing tool, built the same way. No CA bundle: neither tool uses the network. |
 
@@ -610,7 +619,7 @@ docker build -f deploy/image/Dockerfile --target satbooth -t satbooth:local .
 docker build -f deploy/image/Dockerfile --target satbooth-relay -t satbooth-relay:local .
 docker build -f deploy/image/Dockerfile --target satbooth-tools -t satbooth-tools:local .
 scripts/image-check.sh satbooth:local /satbooth /etc/ssl/certs/ca-certificates.crt
-scripts/image-check.sh satbooth-relay:local /satbooth-relay /satbooth-hubstub
+scripts/image-check.sh satbooth-relay:local /satbooth-relay /satbooth-hubstub /satbooth-hubproxy
 scripts/image-check.sh satbooth-tools:local /satbooth-setup /satbooth-pair
 scripts/image-run-test.sh satbooth:local satbooth-relay:local satbooth-tools:local
 ```
@@ -705,7 +714,7 @@ is not started until stage 3 has written `relay.json`, so the loop does not aris
 
 **What can reach the hub's API.** The hub's HTTP listener binds every address of its namespace (getAlby/hub v1.24.6
 `cmd/http/main.go:59`, `":"` and the port, with no setting for the address). So besides the tunnel, bitcoind (on the
-`hub` network) and, with the `electrum` profile, Fulcrum (on the `electrum` network) can connect to its API on 8080. That API still needs the
+`hub` network) and, with the `electrum` profile, Fulcrum (on the `electrum` network) can connect to its API on 8081. That API still needs the
 unlock password or a token, and the hub limits unlock attempts; nothing else of the hub is reachable from them, and the
 relay's client listener binds `HUB_IP` only. A compromised bitcoind (or Fulcrum) can therefore try the API, and on a hub
 that has not been set up yet, take it: hence the order above.
@@ -784,7 +793,7 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | Key | Regtest | Bundle |
 |---|---|---|
 | `WORK_DIR` | `/data` | fixed: `/data` (the `hub-data` volume) |
-| `PORT` | `8080` | fixed: `8080` |
+| `PORT` | `8080` | fixed: `8081` (the hub's own listener; `hubproxy` holds the published port 8080 in front of it) |
 | `NETWORK` | `regtest` | operator: `HUB_NETWORK` |
 | `LOG_LEVEL` | `4` | fixed: `4` |
 | `LDK_BITCOIND_RPC_HOST` | `172.30.78.2` | fixed: `bitcoind` (the bundle's service) |

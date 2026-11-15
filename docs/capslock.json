@@ -5512,6 +5512,133 @@
 			"packageName":  "main",
 			"capabilityName":  "FILES",
 			"capability":  "CAPABILITY_FILES",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*os.File).Write",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*os.File).Write",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "321",
+						"column":  "21"
+					},
+					"package":  "os"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "FILES",
+			"capability":  "CAPABILITY_FILES",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*os.File).Write",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*os.File).Write",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "321",
+						"column":  "21"
+					},
+					"package":  "os"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "FILES",
+			"capability":  "CAPABILITY_FILES",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run github.com/satbooth/satbooth/hubstub.NewServer crypto/tls.LoadX509KeyPair os.ReadFile",
 			"path":  [
 				{
@@ -5540,7 +5667,7 @@
 					"name":  "crypto/tls.LoadX509KeyPair",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "153",
+						"line":  "156",
 						"column":  "34"
 					},
 					"package":  "crypto/tls"
@@ -5581,7 +5708,7 @@
 					"name":  "crypto/tls.LoadX509KeyPair",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "153",
+						"line":  "156",
 						"column":  "34"
 					},
 					"package":  "crypto/tls"
@@ -6596,6 +6723,65 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "FILES",
+			"capability":  "CAPABILITY_FILES",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*os.File).Write",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*os.File).Write",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "321",
+						"column":  "21"
+					},
+					"package":  "os"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "FILES",
 			"capability":  "CAPABILITY_FILES",
@@ -6609,7 +6795,7 @@
 					"name":  "crypto/tls.LoadX509KeyPair",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "153",
+						"line":  "156",
 						"column":  "34"
 					},
 					"package":  "crypto/tls"
@@ -6641,7 +6827,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -33226,7 +33412,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -33555,7 +33741,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -34931,7 +35117,7 @@
 					"name":  "(*os.Root).Remove",
 					"site":  {
 						"filename":  "ca.go",
-						"line":  "240",
+						"line":  "254",
 						"column":  "25"
 					},
 					"package":  "os"
@@ -54812,6 +54998,84 @@
 			"packageName":  "main",
 			"capabilityName":  "NETWORK",
 			"capability":  "CAPABILITY_NETWORK",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*net.ListenConfig).Listen",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*net.ListenConfig).Listen",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "54",
+						"column":  "22"
+					},
+					"package":  "net"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "NETWORK",
+			"capability":  "CAPABILITY_NETWORK",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*net.ListenConfig).Listen",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*net.ListenConfig).Listen",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "54",
+						"column":  "22"
+					},
+					"package":  "net"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "NETWORK",
+			"capability":  "CAPABILITY_NETWORK",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run$1 (*net/http.Server).Serve",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run$1",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*net/http.Server).Serve",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "62",
+						"column":  "31"
+					},
+					"package":  "net/http"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "NETWORK",
+			"capability":  "CAPABILITY_NETWORK",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run (*github.com/satbooth/satbooth/hubstub.Server).Listen net.Listen",
 			"path":  [
 				{
@@ -54840,7 +55104,7 @@
 					"name":  "net.Listen",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "170",
+						"line":  "173",
 						"column":  "23"
 					},
 					"package":  "net"
@@ -54872,7 +55136,7 @@
 					"name":  "net.Listen",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "170",
+						"line":  "173",
 						"column":  "23"
 					},
 					"package":  "net"
@@ -54904,7 +55168,7 @@
 					"name":  "(*net/http.Server).Serve",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "178",
+						"line":  "181",
 						"column":  "67"
 					},
 					"package":  "net/http"
@@ -56221,6 +56485,52 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "NETWORK",
+			"capability":  "CAPABILITY_NETWORK",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.Handler (*net/http.Transport).Clone",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.Handler",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*net/http.Transport).Clone",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "38",
+						"column":  "53"
+					},
+					"package":  "net/http"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "NETWORK",
+			"capability":  "CAPABILITY_NETWORK",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*net/http.response).Header",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*net/http.response).Header",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "58",
+						"column":  "11"
+					},
+					"package":  "net/http"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "NETWORK",
 			"capability":  "CAPABILITY_NETWORK",
@@ -56234,7 +56544,7 @@
 					"name":  "(*net/http.response).Header",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "122",
+						"line":  "125",
 						"column":  "10"
 					},
 					"package":  "net/http"
@@ -56257,7 +56567,7 @@
 					"name":  "(*net/http.Server).Close",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "181",
+						"line":  "184",
 						"column":  "52"
 					},
 					"package":  "net/http"
@@ -56280,7 +56590,7 @@
 					"name":  "net.Listen",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "170",
+						"line":  "173",
 						"column":  "23"
 					},
 					"package":  "net"
@@ -56303,7 +56613,7 @@
 					"name":  "(*net/http.Server).Serve",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "178",
+						"line":  "181",
 						"column":  "67"
 					},
 					"package":  "net/http"
@@ -56326,7 +56636,7 @@
 					"name":  "(*net/http.Server).Shutdown",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "184",
+						"line":  "187",
 						"column":  "77"
 					},
 					"package":  "net/http"
@@ -56349,7 +56659,7 @@
 					"name":  "(*net/http.response).Header",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "61",
+						"line":  "64",
 						"column":  "10"
 					},
 					"package":  "net/http"
@@ -84361,7 +84671,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -84667,7 +84977,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -107874,6 +108184,159 @@
 			"packageName":  "main",
 			"capabilityName":  "RUNTIME",
 			"capability":  "CAPABILITY_RUNTIME",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run context.WithCancel$1 (*context.cancelCtx).cancel (*context.afterFuncCtx).cancel (*context.afterFuncCtx).cancel$1 (*github.com/coder/websocket.Conn).setupReadTimeout$1 (*github.com/coder/websocket.Conn).close runtime.SetFinalizer",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "context.WithCancel$1",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "70",
+						"column":  "2"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.cancelCtx).cancel",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "243",
+						"column":  "29"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.afterFuncCtx).cancel",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "572",
+						"column":  "15"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.afterFuncCtx).cancel$1",
+					"package":  "context"
+				},
+				{
+					"name":  "(*github.com/coder/websocket.Conn).setupReadTimeout$1",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "359",
+						"column":  "3"
+					},
+					"package":  "github.com/coder/websocket"
+				},
+				{
+					"name":  "(*github.com/coder/websocket.Conn).close",
+					"site":  {
+						"filename":  "conn.go",
+						"line":  "195",
+						"column":  "10"
+					},
+					"package":  "github.com/coder/websocket"
+				},
+				{
+					"name":  "runtime.SetFinalizer",
+					"site":  {
+						"filename":  "conn.go",
+						"line":  "158",
+						"column":  "22"
+					},
+					"package":  "runtime"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "RUNTIME",
+			"capability":  "CAPABILITY_RUNTIME",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run context.WithCancel$1 (*context.cancelCtx).cancel (*context.afterFuncCtx).cancel (*context.afterFuncCtx).cancel$1 (*github.com/coder/websocket.Conn).setupReadTimeout$1 (*github.com/coder/websocket.Conn).close runtime.SetFinalizer",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "context.WithCancel$1",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "70",
+						"column":  "2"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.cancelCtx).cancel",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "243",
+						"column":  "29"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.afterFuncCtx).cancel",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "572",
+						"column":  "15"
+					},
+					"package":  "context"
+				},
+				{
+					"name":  "(*context.afterFuncCtx).cancel$1",
+					"package":  "context"
+				},
+				{
+					"name":  "(*github.com/coder/websocket.Conn).setupReadTimeout$1",
+					"site":  {
+						"filename":  "context.go",
+						"line":  "359",
+						"column":  "3"
+					},
+					"package":  "github.com/coder/websocket"
+				},
+				{
+					"name":  "(*github.com/coder/websocket.Conn).close",
+					"site":  {
+						"filename":  "conn.go",
+						"line":  "195",
+						"column":  "10"
+					},
+					"package":  "github.com/coder/websocket"
+				},
+				{
+					"name":  "runtime.SetFinalizer",
+					"site":  {
+						"filename":  "conn.go",
+						"line":  "158",
+						"column":  "22"
+					},
+					"package":  "runtime"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "RUNTIME",
+			"capability":  "CAPABILITY_RUNTIME",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run context.WithCancel$1 (*context.cancelCtx).cancel (*context.afterFuncCtx).cancel (*context.afterFuncCtx).cancel$1 (*github.com/coder/websocket.Conn).setupReadTimeout$1 (*github.com/coder/websocket.Conn).close runtime.SetFinalizer",
 			"path":  [
 				{
@@ -109501,6 +109964,240 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "RUNTIME",
+			"capability":  "CAPABILITY_RUNTIME",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_free (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_final_wrapper$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_final_wrapper (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_value (github.com/ncruces/go-sqlite3.env).Xgo_value (*github.com/ncruces/go-sqlite3.aggregateFunc).Close iter.Pull[struct{}]$3 runtime.Goexit",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_free",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1536",
+						"column":  "18"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_final_wrapper$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1517",
+						"column":  "31"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_final_wrapper",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_value",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "47520",
+						"column":  "13"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(github.com/ncruces/go-sqlite3.env).Xgo_value",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "161",
+						"column":  "18"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.aggregateFunc).Close",
+					"site":  {
+						"filename":  "func.go",
+						"line":  "213",
+						"column":  "17"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "iter.Pull[struct{}]$3",
+					"site":  {
+						"filename":  "func.go",
+						"line":  "305",
+						"column":  "8"
+					},
+					"package":  "iter"
+				},
+				{
+					"name":  "runtime.Goexit",
+					"site":  {
+						"filename":  "iter.go",
+						"line":  "344",
+						"column":  "20"
+					},
+					"package":  "runtime"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "RUNTIME",
 			"capability":  "CAPABILITY_RUNTIME",
@@ -109514,7 +110211,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -149510,7 +150207,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -149852,7 +150549,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -171840,7 +172537,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.checkDir",
 					"site":  {
 						"filename":  "ca.go",
-						"line":  "199",
+						"line":  "201",
 						"column":  "20"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -172147,6 +172844,38 @@
 		},
 		{
 			"packageName":  "main",
+			"capabilityName":  "MODIFY_SYSTEM_STATE/SIGNALS",
+			"capability":  "CAPABILITY_MODIFY_SYSTEM_STATE",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth.main github.com/satbooth/satbooth/service.Notify os/signal.Notify",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/service.Notify",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "24",
+						"column":  "16"
+					},
+					"package":  "github.com/satbooth/satbooth/service"
+				},
+				{
+					"name":  "os/signal.Notify",
+					"site":  {
+						"filename":  "service.go",
+						"line":  "165",
+						"column":  "15"
+					},
+					"package":  "os/signal"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
 			"capabilityName":  "MODIFY_SYSTEM_STATE/LOGGING",
 			"capability":  "CAPABILITY_MODIFY_SYSTEM_STATE",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth.main github.com/satbooth/satbooth/cmd/satbooth.run github.com/satbooth/satbooth/service.Run log.SetFlags",
@@ -172188,38 +172917,6 @@
 		},
 		{
 			"packageName":  "main",
-			"capabilityName":  "MODIFY_SYSTEM_STATE/SIGNALS",
-			"capability":  "CAPABILITY_MODIFY_SYSTEM_STATE",
-			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth.main github.com/satbooth/satbooth/service.Notify os/signal.Notify",
-			"path":  [
-				{
-					"name":  "github.com/satbooth/satbooth/cmd/satbooth.main",
-					"package":  "github.com/satbooth/satbooth/cmd/satbooth"
-				},
-				{
-					"name":  "github.com/satbooth/satbooth/service.Notify",
-					"site":  {
-						"filename":  "main.go",
-						"line":  "24",
-						"column":  "16"
-					},
-					"package":  "github.com/satbooth/satbooth/service"
-				},
-				{
-					"name":  "os/signal.Notify",
-					"site":  {
-						"filename":  "service.go",
-						"line":  "165",
-						"column":  "15"
-					},
-					"package":  "os/signal"
-				}
-			],
-			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth",
-			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
-		},
-		{
-			"packageName":  "main",
 			"capabilityName":  "MODIFY_SYSTEM_STATE/LOGGING",
 			"capability":  "CAPABILITY_MODIFY_SYSTEM_STATE",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth.run github.com/satbooth/satbooth/service.Run log.SetFlags",
@@ -172249,6 +172946,29 @@
 			],
 			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth",
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "MODIFY_SYSTEM_STATE/SIGNALS",
+			"capability":  "CAPABILITY_MODIFY_SYSTEM_STATE",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main os/signal.NotifyContext",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "os/signal.NotifyContext",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "29",
+						"column":  "35"
+					},
+					"package":  "os/signal"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
 		},
 		{
 			"packageName":  "main",
@@ -178844,6 +179564,447 @@
 			"packageName":  "main",
 			"capabilityName":  "SYSTEM_CALLS",
 			"capability":  "CAPABILITY_SYSTEM_CALLS",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate golang.org/x/sys/unix.Getpagesize",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1544",
+						"column":  "43"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "151815",
+						"column":  "17"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "5294",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "24",
+						"column":  "13"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "golang.org/x/sys/unix.Getpagesize",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "43",
+						"column":  "32"
+					},
+					"package":  "golang.org/x/sys/unix"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "SYSTEM_CALLS",
+			"capability":  "CAPABILITY_SYSTEM_CALLS",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate golang.org/x/sys/unix.Getpagesize",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1544",
+						"column":  "43"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "151815",
+						"column":  "17"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "5294",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "24",
+						"column":  "13"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "golang.org/x/sys/unix.Getpagesize",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "43",
+						"column":  "32"
+					},
+					"package":  "golang.org/x/sys/unix"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "SYSTEM_CALLS",
+			"capability":  "CAPABILITY_SYSTEM_CALLS",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate golang.org/x/sys/unix.Getpagesize",
 			"path":  [
 				{
@@ -180705,6 +181866,222 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "SYSTEM_CALLS",
+			"capability":  "CAPABILITY_SYSTEM_CALLS",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate golang.org/x/sys/unix.Getpagesize",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1544",
+						"column":  "43"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3MemMalloc",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._malloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "151815",
+						"column":  "17"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).Grow",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "5294",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Memory).allocate",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "24",
+						"column":  "13"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "golang.org/x/sys/unix.Getpagesize",
+					"site":  {
+						"filename":  "mem_unix.go",
+						"line":  "43",
+						"column":  "32"
+					},
+					"package":  "golang.org/x/sys/unix"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "SYSTEM_CALLS",
 			"capability":  "CAPABILITY_SYSTEM_CALLS",
@@ -180718,7 +182095,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -224606,7 +225983,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -224944,7 +226321,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -252698,6 +254075,419 @@
 			"packageName":  "main",
 			"capabilityName":  "ARBITRARY_EXECUTION",
 			"capability":  "CAPABILITY_ARBITRARY_EXECUTION",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock (github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1586",
+						"column":  "53"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "311",
+						"column":  "39"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+					"site":  {
+						"filename":  "wrap_vfs.go",
+						"line":  "117",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "ARBITRARY_EXECUTION",
+			"capability":  "CAPABILITY_ARBITRARY_EXECUTION",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock (github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1586",
+						"column":  "53"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "311",
+						"column":  "39"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+					"site":  {
+						"filename":  "wrap_vfs.go",
+						"line":  "117",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "ARBITRARY_EXECUTION",
+			"capability":  "CAPABILITY_ARBITRARY_EXECUTION",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock (github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
 			"path":  [
 				{
@@ -254651,6 +256441,208 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "ARBITRARY_EXECUTION",
+			"capability":  "CAPABILITY_ARBITRARY_EXECUTION",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock (github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock$bound",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1586",
+						"column":  "53"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._go_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(github.com/ncruces/go-sqlite3.env).Xgo_check_reserved_lock",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "311",
+						"column":  "39"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Xgo_check_reserved_lock",
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.vfsCheckReservedLock",
+					"site":  {
+						"filename":  "wrap_vfs.go",
+						"line":  "117",
+						"column":  "29"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "ARBITRARY_EXECUTION",
 			"capability":  "CAPABILITY_ARBITRARY_EXECUTION",
@@ -254664,7 +256656,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -300891,7 +302883,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -301382,7 +303374,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -302457,7 +304449,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.IssueStubCert",
 					"site":  {
 						"filename":  "ca.go",
-						"line":  "230",
+						"line":  "244",
 						"column":  "33"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -328940,6 +330932,61 @@
 			"packageName":  "main",
 			"capabilityName":  "UNANALYZED",
 			"capability":  "CAPABILITY_UNANALYZED",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run errors.Is",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "errors.Is",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "71",
+						"column":  "56"
+					},
+					"package":  "errors"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "UNANALYZED",
+			"capability":  "CAPABILITY_UNANALYZED",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run errors.Is",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "errors.Is",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "71",
+						"column":  "56"
+					},
+					"package":  "errors"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "UNANALYZED",
+			"capability":  "CAPABILITY_UNANALYZED",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run errors.Is",
 			"path":  [
 				{
@@ -329769,6 +331816,51 @@
 			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "UNANALYZED",
+			"capability":  "CAPABILITY_UNANALYZED",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (net/http.http2ResponseWriter).Write (*net/http/internal/http2.responseWriter).Write (*net/http/internal/http2.responseWriter).write (*bufio.Writer).Write",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(net/http.http2ResponseWriter).Write",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "61",
+						"column":  "10"
+					},
+					"package":  "net/http/internal/http2"
+				},
+				{
+					"name":  "(*net/http/internal/http2.responseWriter).Write",
+					"package":  "net/http/internal/http2"
+				},
+				{
+					"name":  "(*net/http/internal/http2.responseWriter).write",
+					"site":  {
+						"filename":  "server.go",
+						"line":  "2914",
+						"column":  "16"
+					},
+					"package":  "net/http/internal/http2"
+				},
+				{
+					"name":  "(*bufio.Writer).Write",
+					"site":  {
+						"filename":  "server.go",
+						"line":  "2940",
+						"column":  "22"
+					},
+					"package":  "bufio"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "UNANALYZED",
 			"capability":  "CAPABILITY_UNANALYZED",
@@ -329782,7 +331874,7 @@
 					"name":  "(net/http.http2ResponseWriter).Write",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "124",
+						"line":  "127",
 						"column":  "9"
 					},
 					"package":  "net/http/internal/http2"
@@ -329827,7 +331919,7 @@
 					"name":  "(net/http.http2ResponseWriter).Write",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "80",
+						"line":  "83",
 						"column":  "11"
 					},
 					"package":  "net/http/internal/http2"
@@ -344247,6 +346339,38 @@
 			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
 		},
 		{
+			"packageName":  "ratestest",
+			"capabilityName":  "UNANALYZED",
+			"capability":  "CAPABILITY_UNANALYZED",
+			"depPath":  "(github.com/satbooth/satbooth/rates/ratestest.reroute).RoundTrip (net/http/internal/http2.transportResponseBody).Close (*bufio.Writer).Flush",
+			"path":  [
+				{
+					"name":  "(github.com/satbooth/satbooth/rates/ratestest.reroute).RoundTrip",
+					"package":  "github.com/satbooth/satbooth/rates/ratestest"
+				},
+				{
+					"name":  "(net/http/internal/http2.transportResponseBody).Close",
+					"site":  {
+						"filename":  "fake.go",
+						"line":  "410",
+						"column":  "18"
+					},
+					"package":  "net/http/internal/http2"
+				},
+				{
+					"name":  "(*bufio.Writer).Flush",
+					"site":  {
+						"filename":  "transport.go",
+						"line":  "2476",
+						"column":  "14"
+					},
+					"package":  "bufio"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/rates/ratestest",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
 			"packageName":  "refund",
 			"capabilityName":  "UNANALYZED",
 			"capability":  "CAPABILITY_UNANALYZED",
@@ -349614,7 +351738,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -350056,7 +352180,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -351092,7 +353216,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.checkDir",
 					"site":  {
 						"filename":  "ca.go",
-						"line":  "199",
+						"line":  "201",
 						"column":  "20"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -364979,6 +367103,367 @@
 			"packageName":  "main",
 			"capabilityName":  "UNSAFE_POINTER",
 			"capability":  "CAPABILITY_UNSAFE_POINTER",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1543",
+						"column":  "21"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "UNSAFE_POINTER",
+			"capability":  "CAPABILITY_UNSAFE_POINTER",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Info",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "60",
+						"column":  "13"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "213",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1543",
+						"column":  "21"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "UNSAFE_POINTER",
+			"capability":  "CAPABILITY_UNSAFE_POINTER",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run (*log/slog.Logger).Info (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
 			"path":  [
 				{
@@ -366584,6 +369069,182 @@
 			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "UNSAFE_POINTER",
+			"capability":  "CAPABILITY_UNSAFE_POINTER",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json/v2.marshalEncode encoding/json/v2.makeBoolArshaler$1 (*encoding/json/jsontext.encoderState).Flush (*github.com/ncruces/go-sqlite3.bytesWriter).Write (*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc (*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64 (*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.marshalEncode",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "220",
+						"column":  "21"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json/v2.makeBoolArshaler$1",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "248",
+						"column":  "19"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "(*encoding/json/jsontext.encoderState).Flush",
+					"site":  {
+						"filename":  "arshal_default.go",
+						"line":  "146",
+						"column":  "20"
+					},
+					"package":  "encoding/json/jsontext"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3.bytesWriter).Write",
+					"site":  {
+						"filename":  "encode.go",
+						"line":  "195",
+						"column":  "22"
+					},
+					"package":  "github.com/ncruces/go-sqlite3"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3/internal/sqlite3_wrap.Wrapper).Realloc",
+					"site":  {
+						"filename":  "json_v2.go",
+						"line":  "110",
+						"column":  "24"
+					},
+					"package":  "github.com/ncruces/go-sqlite3/internal/sqlite3_wrap"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module).Xsqlite3_realloc64",
+					"site":  {
+						"filename":  "alloc.go",
+						"line":  "21",
+						"column":  "34"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "(*github.com/ncruces/go-sqlite3-wasm/v6.Module)._sqlite3Realloc",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1614",
+						"column":  "26"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				},
+				{
+					"name":  "github.com/ncruces/go-sqlite3-wasm/v6.load32[uint32]",
+					"site":  {
+						"filename":  "sqlite3.go",
+						"line":  "1543",
+						"column":  "21"
+					},
+					"package":  "github.com/ncruces/go-sqlite3-wasm/v6"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_TRANSITIVE"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "UNSAFE_POINTER",
 			"capability":  "CAPABILITY_UNSAFE_POINTER",
@@ -366597,7 +369258,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -402762,7 +405423,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -402988,7 +405649,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -424515,6 +427176,205 @@
 			"packageName":  "main",
 			"capabilityName":  "REFLECT",
 			"capability":  "CAPABILITY_REFLECT",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*flag.FlagSet).Parse (*flag.FlagSet).parseOne (*flag.FlagSet).usage (*flag.FlagSet).defaultUsage (*flag.FlagSet).PrintDefaults (*flag.FlagSet).VisitAll (*flag.FlagSet).PrintDefaults$1 flag.isZeroValue reflect.New",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.main",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "31",
+						"column":  "13"
+					},
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*flag.FlagSet).Parse",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "40",
+						"column":  "20"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).parseOne",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1157",
+						"column":  "26"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).usage",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1112",
+						"column":  "11"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).defaultUsage",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1068",
+						"column":  "17"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).PrintDefaults",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "690",
+						"column":  "17"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).VisitAll",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "609",
+						"column":  "12"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).PrintDefaults$1",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "458",
+						"column":  "5"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "flag.isZeroValue",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "630",
+						"column":  "32"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "reflect.New",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "545",
+						"column":  "18"
+					},
+					"package":  "reflect"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "REFLECT",
+			"capability":  "CAPABILITY_REFLECT",
+			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run (*flag.FlagSet).Parse (*flag.FlagSet).parseOne (*flag.FlagSet).usage (*flag.FlagSet).defaultUsage (*flag.FlagSet).PrintDefaults (*flag.FlagSet).VisitAll (*flag.FlagSet).PrintDefaults$1 flag.isZeroValue reflect.New",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy.run",
+					"package":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+				},
+				{
+					"name":  "(*flag.FlagSet).Parse",
+					"site":  {
+						"filename":  "main.go",
+						"line":  "40",
+						"column":  "20"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).parseOne",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1157",
+						"column":  "26"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).usage",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1112",
+						"column":  "11"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).defaultUsage",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "1068",
+						"column":  "17"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).PrintDefaults",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "690",
+						"column":  "17"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).VisitAll",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "609",
+						"column":  "12"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "(*flag.FlagSet).PrintDefaults$1",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "458",
+						"column":  "5"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "flag.isZeroValue",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "630",
+						"column":  "32"
+					},
+					"package":  "flag"
+				},
+				{
+					"name":  "reflect.New",
+					"site":  {
+						"filename":  "flag.go",
+						"line":  "545",
+						"column":  "18"
+					},
+					"package":  "reflect"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
+			"packageName":  "main",
+			"capabilityName":  "REFLECT",
+			"capability":  "CAPABILITY_REFLECT",
 			"depPath":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub.main github.com/satbooth/satbooth/cmd/satbooth-hubstub.run (*flag.FlagSet).Parse (*flag.FlagSet).parseOne (*flag.FlagSet).usage (*flag.FlagSet).defaultUsage (*flag.FlagSet).PrintDefaults (*flag.FlagSet).VisitAll (*flag.FlagSet).PrintDefaults$1 flag.isZeroValue reflect.New",
 			"path":  [
 				{
@@ -425501,6 +428361,119 @@
 			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
 		},
 		{
+			"packageName":  "hubproxy",
+			"capabilityName":  "REFLECT",
+			"capability":  "CAPABILITY_REFLECT",
+			"depPath":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2 (*log/slog.Logger).Warn (*log/slog.Logger).log (*log/slog.JSONHandler).Handle (*log/slog.commonHandler).handle (*log/slog.handleState).appendAttr (*log/slog.handleState).appendValue log/slog.appendJSONValue log/slog.appendJSONMarshal (*encoding/json.Encoder).Encode encoding/json/v2.MarshalEncode encoding/json.transformMarshalError",
+			"path":  [
+				{
+					"name":  "github.com/satbooth/satbooth/hubproxy.NewProxy$2",
+					"package":  "github.com/satbooth/satbooth/hubproxy"
+				},
+				{
+					"name":  "(*log/slog.Logger).Warn",
+					"site":  {
+						"filename":  "hubproxy.go",
+						"line":  "57",
+						"column":  "11"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.Logger).log",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "225",
+						"column":  "7"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.JSONHandler).Handle",
+					"site":  {
+						"filename":  "logger.go",
+						"line":  "264",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.commonHandler).handle",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "90",
+						"column":  "31"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendAttr",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "287",
+						"column":  "20"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*log/slog.handleState).appendValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "527",
+						"column":  "16"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONValue",
+					"site":  {
+						"filename":  "handler.go",
+						"line":  "604",
+						"column":  "24"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "log/slog.appendJSONMarshal",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "118",
+						"column":  "30"
+					},
+					"package":  "log/slog"
+				},
+				{
+					"name":  "(*encoding/json.Encoder).Encode",
+					"site":  {
+						"filename":  "json_handler.go",
+						"line":  "171",
+						"column":  "25"
+					},
+					"package":  "encoding/json"
+				},
+				{
+					"name":  "encoding/json/v2.MarshalEncode",
+					"site":  {
+						"filename":  "v2_stream.go",
+						"line":  "143",
+						"column":  "32"
+					},
+					"package":  "encoding/json/v2"
+				},
+				{
+					"name":  "encoding/json.transformMarshalError",
+					"site":  {
+						"filename":  "arshal.go",
+						"line":  "222",
+						"column":  "40"
+					},
+					"package":  "encoding/json"
+				}
+			],
+			"packageDir":  "github.com/satbooth/satbooth/hubproxy",
+			"capabilityType":  "CAPABILITY_TYPE_DIRECT"
+		},
+		{
 			"packageName":  "hubstub",
 			"capabilityName":  "REFLECT",
 			"capability":  "CAPABILITY_REFLECT",
@@ -425514,7 +428487,7 @@
 					"name":  "(*log/slog.Logger).Info",
 					"site":  {
 						"filename":  "hubstub.go",
-						"line":  "59",
+						"line":  "62",
 						"column":  "12"
 					},
 					"package":  "log/slog"
@@ -453133,7 +456106,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "224",
+						"line":  "237",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -453433,7 +456406,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.encodeJSON",
 					"site":  {
 						"filename":  "render.go",
-						"line":  "371",
+						"line":  "384",
 						"column":  "19"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -454238,7 +457211,7 @@
 					"name":  "github.com/satbooth/satbooth/setup.parseState",
 					"site":  {
 						"filename":  "ca.go",
-						"line":  "206",
+						"line":  "208",
 						"column":  "23"
 					},
 					"package":  "github.com/satbooth/satbooth/setup"
@@ -467216,6 +470189,9 @@
 			"path":  "github.com/satbooth/satbooth/cmd/satbooth-approve"
 		},
 		{
+			"path":  "github.com/satbooth/satbooth/cmd/satbooth-hubproxy"
+		},
+		{
 			"path":  "github.com/satbooth/satbooth/cmd/satbooth-hubstub"
 		},
 		{
@@ -467232,6 +470208,9 @@
 		},
 		{
 			"path":  "github.com/satbooth/satbooth/docs"
+		},
+		{
+			"path":  "github.com/satbooth/satbooth/hubproxy"
 		},
 		{
 			"path":  "github.com/satbooth/satbooth/hubstub"

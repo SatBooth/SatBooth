@@ -111,7 +111,9 @@ services:
     working_dir: /etc/albyhub
     environment:
       WORK_DIR: /data
-      PORT: "8080"
+      # The hub listens on 8081, in the namespace it shares with hubproxy, which holds the published port 8080: the
+      # operator reaches the UI through the proxy only (deploy/README.md, "The UI proxy").
+      PORT: "8081"
       NETWORK: ${HUB_NETWORK:?set HUB_NETWORK}
       LOG_LEVEL: "4"
       LDK_BITCOIND_RPC_HOST: bitcoind
@@ -190,6 +192,21 @@ services:
     depends_on:
       volume-init:
         condition: service_completed_successfully
+      netns:
+        condition: service_started
+
+  # The proxy in front of the hub's web UI (satbooth-hubproxy, in the relay image): it listens on 8080, the port the
+  # netns container publishes on HUB_ADMIN_ADDR, forwards to the hub on 127.0.0.1:8081 and replaces the response's
+  # content policy with one that allows the page's own origin and nothing else, so the operator's browser never loads
+  # or calls anything outside the bundle. Same pin as the relay (after it: the anchor is defined there), and the same note as the stub: the pinned rc.1 image
+  # does not hold it yet, build from source until the pin moves.
+  hubproxy:
+    <<: *hardening
+    image: *relay_image
+    entrypoint: ["/satbooth-hubproxy"]
+    command: ["-listen", ":8080", "-upstream", "http://127.0.0.1:8081"]
+    network_mode: service:netns
+    depends_on:
       netns:
         condition: service_started
 

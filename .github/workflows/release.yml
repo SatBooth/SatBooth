@@ -63,7 +63,7 @@ jobs:
       - name: Check the contents of the loaded images
         run: |
           scripts/image-check.sh satbooth:release-test /satbooth /etc/ssl/certs/ca-certificates.crt
-          scripts/image-check.sh satbooth-relay:release-test /satbooth-relay /satbooth-hubstub
+          scripts/image-check.sh satbooth-relay:release-test /satbooth-relay /satbooth-hubstub /satbooth-hubproxy
           scripts/image-check.sh satbooth-tools:release-test /satbooth-setup /satbooth-pair
       - name: Run the loaded images
         run: scripts/image-run-test.sh satbooth:release-test satbooth-relay:release-test satbooth-tools:release-test
