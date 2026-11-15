@@ -4,96 +4,98 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"slices"
-	"strconv"
 	"strings"
 )
 
 // The hub, the relay and the UI proxy share one network namespace, the one of the netns container, whose address on
 // the bundle's hub network is HUB_IP. Everything that leaves that namespace towards the internet crosses the host's
 // forward path with HUB_IP as its source, and these rules bound it there: the hub's outside calls that are not pinned
-// to the stub fail at the firewall, not only at the TLS handshake. bitcoind is another container (other addresses)
-// and is not bound: it needs the internet for its peers.
+// to the stub fail at the firewall, not only at the TLS handshake. The one thing it may open to the internet is a TCP
+// connection to a listed Lightning peer, an address and a port (peers do not all listen on 9735). bitcoind is another
+// container (other addresses) and is not bound: it needs the internet for its peers.
 const (
-	lnPort     = 9735
-	logPrefix  = "satbooth-hub-egress: "
-	nftTable   = "satbooth_hub"
-	iptChain   = "SATBOOTH_HUB_EGRESS"
-	maxPeerLen = 64
+	logPrefix = "satbooth-hub-egress: "
+	nftTable  = "satbooth_hub"
+	nftSet    = "satbooth_hub_peers"
+	iptChain  = "SATBOOTH_HUB_EGRESS"
+	iptPeers  = "SATBOOTH_HUB_PEERS"
 )
 
-// EgressPorts is the sorted list of TCP ports the hub's namespace may reach on the internet: 9735 (Lightning) and the
-// peer ports the operator names. A port outside 1 to 65535, or 53 (DNS is never allowed out), is refused.
-func EgressPorts(peerPorts []int) ([]int, error) {
-	ports := []int{lnPort}
-	if len(peerPorts) > maxPeerLen {
-		return nil, fmt.Errorf("setup: at most %d peer ports", maxPeerLen)
+// nftElements is "a . p, b . q" for peers already checked by ParseLightningPeers.
+func nftElements(peers []string) string {
+	var e []string
+	for _, s := range peers {
+		ap := netip.MustParseAddrPort(s)
+		e = append(e, fmt.Sprintf("%s . %d", ap.Addr(), ap.Port()))
 	}
-	for _, p := range peerPorts {
-		switch {
-		case p < 1 || p > 65535:
-			return nil, fmt.Errorf("setup: peer port %d is not between 1 and 65535", p)
-		case p == 53:
-			return nil, errors.New("setup: port 53 is DNS: the hub never reaches an outside resolver")
-		}
-		if !slices.Contains(ports, p) {
-			ports = append(ports, p)
-		}
-	}
-	slices.Sort(ports)
-	return ports, nil
+	return strings.Join(e, ", ")
 }
 
-func joinInts(ports []int, sep string) string {
-	s := make([]string, len(ports))
-	for i, p := range ports {
-		s[i] = strconv.Itoa(p)
-	}
-	return strings.Join(s, sep)
-}
-
-// EgressNft is the nftables rule set for the answers: a table of its own with a forward chain before Docker's, which
-// only drops (what it accepts, Docker's own rules still judge). Loading the file replaces the table, so it can be
-// loaded again.
-func EgressNft(a *HubAnswers, ports []int) string {
+// EgressNft is the nftables rule set for the answers: a table of its own, a set of peers (address . port), and a
+// forward chain before Docker's that only drops (what it accepts, Docker's own rules still judge). The file can be
+// loaded again: it rebuilds the chain, keeps the set and its elements, and adds the answers' peers if they are missing.
+func EgressNft(a *HubAnswers) string {
 	ip := a.HubIP
-	return fmt.Sprintf(`# SatBooth hub host: what the hub's network namespace may send out. Load as root: nft -f <this file>
-# The namespace (hub, relay, UI proxy) has the address %[1]s. It may reach the bundle's own two networks, answer
-# connections made to it, and open TCP connections to Lightning peers on port(s) %[2]s. Everything else, outside DNS
-# included, is logged and dropped. bitcoind is another container and is not bound.
-add table inet %[3]s
-delete table inet %[3]s
-table inet %[3]s {
-	chain egress {
-		type filter hook forward priority -10; policy accept;
-		ip saddr %[1]s ct state established,related accept
-		ip saddr %[1]s ip daddr { %[4]s, %[5]s } accept
-		ip saddr %[1]s tcp dport { %[6]s } accept
-		ip saddr %[1]s limit rate 5/minute burst 5 packets log prefix "%[7]s"
-		ip saddr %[1]s counter drop
+	var b strings.Builder
+	w := func(f string, args ...any) { fmt.Fprintf(&b, f+"\n", args...) }
+	w("# SatBooth hub host: what the hub's network namespace may send out. Load as root: nft -f <this file>")
+	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", ip)
+	w("# connections made to it, and open TCP connections to the Lightning peers in the set %s, and nothing else:", nftSet)
+	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
+	w("#   nft add element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
+	w("#   nft delete element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
+	w("# List them: nft list set inet %s %s", nftTable, nftSet)
+	w("add table inet %s", nftTable)
+	w("add set inet %s %s { type ipv4_addr . inet_service; }", nftTable, nftSet)
+	if len(a.LightningPeers) > 0 {
+		w("add element inet %s %s { %s }", nftTable, nftSet, nftElements(a.LightningPeers))
 	}
-}
-`, ip, joinInts(ports, ", "), nftTable, a.HubSubnet, a.ElectrumSubnet, joinInts(ports, ", "), logPrefix)
+	w("add chain inet %s egress { type filter hook forward priority -10; policy accept; }", nftTable)
+	w("flush chain inet %s egress", nftTable)
+	for _, r := range []string{
+		"ct state established,related accept",
+		fmt.Sprintf("ip daddr { %s, %s } accept", a.HubSubnet, a.ElectrumSubnet),
+		fmt.Sprintf("ip daddr . tcp dport @%s accept", nftSet),
+		fmt.Sprintf(`limit rate 5/minute burst 5 packets log prefix "%s"`, logPrefix),
+		"counter drop",
+	} {
+		w("add rule inet %s egress ip saddr %s %s", nftTable, ip, r)
+	}
+	return b.String()
 }
 
 // EgressIptables is the same policy for a host whose Docker uses iptables-legacy: a chain of its own that DOCKER-USER
-// jumps to for the namespace's address. Allowed packets RETURN, so Docker's own rules still judge them. IPT names the
-// binary (iptables-legacy by default). Running it again rebuilds the chain and adds the jump once.
-func EgressIptables(a *HubAnswers, ports []int) string {
+// jumps to for the namespace's address, and a chain of peers (SATBOOTH_HUB_PEERS) that holds one ACCEPT rule for each
+// peer. Allowed packets to the two networks RETURN, so Docker's own rules still judge them; a packet to a listed peer
+// is accepted there, which it would be anyway on its way out to the internet. IPT names the binary (iptables-legacy by
+// default). Running the script again rebuilds the egress chain, keeps the peers chain and adds the answers' peers that
+// are missing, and adds the jump once.
+func EgressIptables(a *HubAnswers) string {
 	var b strings.Builder
 	w := func(f string, args ...any) { fmt.Fprintf(&b, f+"\n", args...) }
 	w("#!/bin/sh")
 	w("# SatBooth hub host: what the hub's network namespace may send out. Run as root: sh <this file>")
 	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", a.HubIP)
-	w("# connections made to it, and open TCP connections to Lightning peers on port(s) %s. Everything else, outside DNS", joinInts(ports, ", "))
-	w("# included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# connections made to it, and open TCP connections to the Lightning peers in the chain %s, and nothing else:", iptPeers)
+	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
+	w("#   iptables-legacy -w -A %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
+	w("#   iptables-legacy -w -D %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
+	w("# List them: iptables-legacy -w -S %s", iptPeers)
 	w("set -eu")
 	w(`IPT=${IPT:-iptables-legacy}`)
+	w(`"$IPT" -w -N %s 2>/dev/null || true`, iptPeers)
+	for _, s := range a.LightningPeers {
+		ap := netip.MustParseAddrPort(s)
+		w(`"$IPT" -w -C %[1]s -d %[2]s -p tcp --dport %[3]d -j ACCEPT 2>/dev/null || "$IPT" -w -A %[1]s -d %[2]s -p tcp --dport %[3]d -j ACCEPT`,
+			iptPeers, ap.Addr(), ap.Port())
+	}
 	w(`"$IPT" -w -N %s 2>/dev/null || "$IPT" -w -F %s`, iptChain, iptChain)
 	w(`"$IPT" -w -A %s -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN`, iptChain)
 	w(`"$IPT" -w -A %s -d %s -j RETURN`, iptChain, a.HubSubnet)
 	w(`"$IPT" -w -A %s -d %s -j RETURN`, iptChain, a.ElectrumSubnet)
-	w(`"$IPT" -w -A %s -p tcp -m multiport --dports %s -j RETURN`, iptChain, joinInts(ports, ","))
+	w(`"$IPT" -w -A %s -p tcp -j %s`, iptChain, iptPeers)
 	w(`"$IPT" -w -A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptChain, logPrefix)
 	w(`"$IPT" -w -A %s -j DROP`, iptChain)
 	w(`"$IPT" -w -C DOCKER-USER -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s %[1]s -j %[2]s`, a.HubIP, iptChain)
@@ -101,11 +103,7 @@ func EgressIptables(a *HubAnswers, ports []int) string {
 }
 
 // HubEgressRules reads the hub host's answers and returns both rule sets. It writes nothing and runs nothing.
-func (l *Lock) HubEgressRules(peerPorts []int) (nft, iptables string, err error) {
-	ports, err := EgressPorts(peerPorts)
-	if err != nil {
-		return "", "", err
-	}
+func (l *Lock) HubEgressRules() (nft, iptables string, err error) {
 	st, err := l.hubState()
 	if err != nil {
 		return "", "", err
@@ -119,5 +117,8 @@ func (l *Lock) HubEgressRules(peerPorts []int) (nft, iptables string, err error)
 	if _, err := netip.ParseAddr(a.HubIP); err != nil {
 		return "", "", errors.New("setup: hub_ip in setup/state.json is not an address")
 	}
-	return EgressNft(a, ports), EgressIptables(a, ports), nil
+	if _, err := ParseLightningPeers(a.LightningPeers); err != nil {
+		return "", "", errors.New("setup: lightning_peers in setup/state.json: " + err.Error())
+	}
+	return EgressNft(a), EgressIptables(a), nil
 }

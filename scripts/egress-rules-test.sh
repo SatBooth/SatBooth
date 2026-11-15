@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Applies the printed egress rules (the golden files of setup/testdata/lightning-only, which use the default addresses)
+# Applies the printed egress rules (the golden files egress-several of setup/testdata/lightning-only: the default
+# addresses and the peers 203.0.113.5:10009, 198.51.100.7:9735 and 198.51.100.8:9736)
 # to a router in a privileged Linux container, with four network namespaces behind it: the hub's (172.30.78.10),
 # bitcoind (172.30.78.20), the stub (172.30.78.254) and "the internet" (203.0.113.5), and checks which connections
 # succeed, first with no rules, then with nftables, then with iptables-legacy. Needs Docker with privileged containers
@@ -11,7 +12,7 @@ if [ "${1:-}" != inside ]; then
   cd "$(dirname "$0")/.."
   rules=$(mktemp -d)
   trap 'rm -rf "$rules"' EXIT
-  cp setup/testdata/lightning-only/egress.nft setup/testdata/lightning-only/egress.sh "$rules/"
+  cp setup/testdata/lightning-only/egress-several.nft setup/testdata/lightning-only/egress-several.sh "$rules/"
   exec docker run --rm --privileged -v "$rules:/rules:ro" -v "$PWD/scripts/egress-rules-test.sh:/test.sh:ro" \
     debian:13-slim bash /test.sh inside
 fi
@@ -33,7 +34,7 @@ mk hub 172.30.78.10 172.30.78.1      # the hub's namespace (HUB_IP)
 mk btc 172.30.78.20 172.30.78.2      # bitcoind, hub network
 mk stub 172.30.78.254 172.30.78.129  # the stub, electrum network
 mk net 203.0.113.5 203.0.113.1       # "the internet"
-for ns in btc stub net; do for p in 443 9735 53 8332 8080 50001; do (ip netns exec $ns nc -l -k -p $p >/dev/null 2>&1 &) ; done; done
+for ns in btc stub net; do for p in 443 9735 10009 53 8332 8080 50001; do (ip netns exec $ns nc -l -k -p $p >/dev/null 2>&1 &) ; done; done
 (ip netns exec hub nc -l -k -p 8080 >/dev/null 2>&1 &)
 sleep 1
 probe() { # label ns dst port expect
@@ -45,7 +46,8 @@ probe() { # label ns dst port expect
 FAILED=0
 suite() {
   echo "--- $1"
-  probe "hub -> internet 9735 (Lightning)" hub 203.0.113.5 9735 connects
+  probe "hub -> listed peer 203.0.113.5:10009" hub 203.0.113.5 10009 connects
+  probe "hub -> 203.0.113.5:9735 (same address, port not listed)" hub 203.0.113.5 9735 blocked
   probe "hub -> internet 443" hub 203.0.113.5 443 blocked
   probe "hub -> internet tcp 53" hub 203.0.113.5 53 blocked
   probe "hub -> stub 172.30.78.254:443 (electrum network)" hub 172.30.78.254 443 connects
@@ -54,19 +56,41 @@ suite() {
   probe "bitcoind -> internet 443 (not bound)" btc 203.0.113.5 443 connects
   probe "bitcoind -> internet 8080 (not bound either)" btc 203.0.113.5 8080 connects
 }
-echo "=== no rules: the baseline connects everywhere (the WRONG lines below are expected)"; suite "baseline"
+echo "=== no rules: the baseline connects everywhere (the WRONG lines below are expected: 9735, 443 and 53 are not blocked)"; suite "baseline"
 FAILED=0
-nft -f /rules/egress.nft || { echo nft load failed; exit 1; }
+nft -f /rules/egress-several.nft || { echo nft load failed; exit 1; }
 suite "nftables"
 nft list chain inet satbooth_hub egress | grep counter
-nft -f /rules/egress.nft && echo "nft reload ok (idempotent)"; nft list tables
+echo "--- nftables: add and remove a peer at run time"
+nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.5 . 9735 }
+probe "after add element: hub -> 203.0.113.5:9735" hub 203.0.113.5 9735 connects
+nft -f /rules/egress-several.nft
+probe "after reloading the file: the added peer is kept" hub 203.0.113.5 9735 connects
+nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.5 . 9735 }
+probe "after delete element: hub -> 203.0.113.5:9735" hub 203.0.113.5 9735 blocked
+nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.5 . 9735 }
+nft list table inet satbooth_hub > /saved.nft
+nft delete table inet satbooth_hub
+nft -f /saved.nft
+probe "after saving the listing, deleting the table and loading the listing" hub 203.0.113.5 9735 connects
+probe "  ... and an unlisted port stays blocked" hub 203.0.113.5 443 blocked
+nft delete table inet satbooth_hub; nft -f /rules/egress-several.nft
+nft -f /rules/egress-several.nft && echo "nft reload ok (idempotent)"; nft list tables
 nft delete table inet satbooth_hub
 echo "=== iptables-legacy"
 update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1
 iptables-legacy -N DOCKER-USER; iptables-legacy -A DOCKER-USER -j RETURN; iptables-legacy -A FORWARD -j DOCKER-USER
-IPT=iptables-legacy sh /rules/egress.sh || { echo legacy load failed; exit 1; }
-IPT=iptables-legacy sh /rules/egress.sh && echo "script rerun ok"
+IPT=iptables-legacy sh /rules/egress-several.sh || { echo legacy load failed; exit 1; }
+IPT=iptables-legacy sh /rules/egress-several.sh && echo "script rerun ok"
 echo "jump count in DOCKER-USER: $(iptables-legacy -S DOCKER-USER | grep -c SATBOOTH_HUB_EGRESS) (want 1)"
 suite "iptables-legacy"
+echo "--- iptables-legacy: add and remove a peer at run time"
+iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.5 -p tcp --dport 9735 -j ACCEPT
+probe "after -A: hub -> 203.0.113.5:9735" hub 203.0.113.5 9735 connects
+IPT=iptables-legacy sh /rules/egress-several.sh
+probe "after rerunning the script: the added peer is kept" hub 203.0.113.5 9735 connects
+iptables-legacy -w -D SATBOOTH_HUB_PEERS -d 203.0.113.5 -p tcp --dport 9735 -j ACCEPT
+probe "after -D: hub -> 203.0.113.5:9735" hub 203.0.113.5 9735 blocked
+echo "peer rules after the rerun: $(iptables-legacy -S SATBOOTH_HUB_PEERS | grep -c -- '-A') (want 3)"
 iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v | tail -3
 exit $FAILED

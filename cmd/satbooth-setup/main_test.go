@@ -859,8 +859,8 @@ func TestEgressRulesThroughTheCommand(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.errOut)
 	}
 	before := tree(t, hubDir)
-	r := do("", "hub", "egress-rules", "-dir", hubDir, "-format", "nft", "-peer-ports", "10009,9736")
-	if r.code != 0 || !strings.Contains(r.out, "table inet satbooth_hub") || !strings.Contains(r.out, "9735, 9736, 10009") {
+	r := do("", "hub", "egress-rules", "-dir", hubDir, "-format", "nft")
+	if r.code != 0 || !strings.Contains(r.out, "table inet satbooth_hub") || !strings.Contains(r.out, "satbooth_hub_peers") {
 		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
 	}
 	r = do("", "hub", "egress-rules", "-dir", hubDir, "-format", "iptables")
@@ -870,7 +870,7 @@ func TestEgressRulesThroughTheCommand(t *testing.T) {
 	sameTree(t, "egress-rules", before, tree(t, hubDir))
 	for name, args := range map[string][]string{
 		"no format": {"-dir", hubDir}, "bad format": {"-dir", hubDir, "-format", "pf"},
-		"bad port": {"-dir", hubDir, "-format", "nft", "-peer-ports", "x"}, "dns port": {"-dir", hubDir, "-format", "nft", "-peer-ports", "53"},
+		"old flag": {"-dir", hubDir, "-format", "nft", "-peer-ports", "9735"},
 	} {
 		r := do("", append([]string{"hub", "egress-rules"}, args...)...)
 		if r.code == 0 || r.out != "" {

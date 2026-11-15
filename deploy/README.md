@@ -102,6 +102,7 @@ carries the public host's copies so that the stage can refuse when the two hosts
 | `hub_subnet` | the hub bundle's Docker network (`HUB_SUBNET`): an IPv4 network of `/16` to `/29` | `172.30.78.0/25` |
 | `hub_ip` | the hub's fixed address in it (`HUB_IP`): not its network, gateway or broadcast address | `172.30.78.10` |
 | `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`), needed with or without the Electrum server; must not overlap `hub_subnet` | `172.30.78.128/25` |
+| `lightning_peers` | the Lightning peers the hub's namespace may connect to on the internet, each `a.b.c.d:port` (IPv4 literal, port 1 to 65535; answers file only, at most 256); more are added to the firewall by hand ("The hub host's egress rules") | none |
 | `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs the full, unpruned chain with `txindex=1` and Fulcrum's own index, instead of the pruned default (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
 | `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 10240 (10 GiB, about five weeks of blocks) to 1048576. Refused with `electrum: true`: leave it out | `50000` |
 
@@ -376,39 +377,59 @@ connection is closed after 120 seconds. With the pinned rc.1 image it is missing
 **The hub host's egress rules.** Naming the stub's hosts in `/etc/hosts` is not a firewall: a name the hub resolves that is
 not in the list still goes out and fails only at the TLS handshake. The rules close that. They bound one thing, the
 network namespace of the hub, the relay and the UI proxy (the address `HUB_IP` on the hub network), and nothing else
-on the host: that namespace may reach the bundle's own two networks (`HUB_SUBNET`, `ELECTRUM_SUBNET`: bitcoind, the
-stub, Fulcrum), may answer connections made to it (the tunnel to 8080, the relay's 7448 and everything the public
-host calls), and may open TCP connections to port 9735 and to the peer ports you name. Everything else, outside DNS
-included, is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped. bitcoind is another container with
-other addresses and is not bound: it needs the internet for its peers. The `electrum` and `monero` options change
-nothing here (Fulcrum is inside `ELECTRUM_SUBNET`; wallet-rpc is reached from the public host, not from this
-namespace). Docker's networks here have no IPv6; if you enabled it, the same rules are needed for it.
+on the host. That namespace may reach the bundle's own two networks (`HUB_SUBNET`, `ELECTRUM_SUBNET`: bitcoind, the
+stub, Fulcrum), may answer connections made to it (the tunnel to 8080, the relay's 7448, everything the public host
+calls, and any connection a Lightning peer makes to the hub's own listener if you publish it), and may open a TCP
+connection to the internet only to a **listed Lightning peer: an address and a port**, since peers do not all listen
+on 9735. Everything else, outside DNS included, is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
+bitcoind is another container with other addresses and is not bound: it needs the internet for its peers. The
+`electrum` and `monero` options change nothing here. Docker's networks here have no IPv6, so peers are IPv4 addresses.
 
-Setup prints the rules and never applies them. Print the nftables set on a host with `nft` (it is
-independent of how Docker programs its own rules, including through `iptables-nft`), and the iptables set only where
-Docker uses iptables-legacy (`iptables --version` says which):
+The list starts with the answers' `lightning_peers` (answers file only: `"lightning_peers": ["203.0.113.7:9735"]`;
+IPv4 literals with a port from 1 to 65535, no hostname; empty by default). **Add a peer before you connect to it or open
+a channel with it**, and remove it when it is gone. A hub that tries a peer that is not listed gets a connection that
+never opens.
+
+Setup prints the rules and never applies them. Print the nftables set on a host with `nft` (it is independent of how
+Docker programs its own rules, including through `iptables-nft`), and the iptables set only where Docker uses
+iptables-legacy (`iptables --version` says which):
 
 ```sh
-deploy/setup.sh <dir> hub egress-rules -format nft -peer-ports 10009 > hub-egress.nft         # nftables
-deploy/setup.sh <dir> hub egress-rules -format iptables -peer-ports 10009 > hub-egress.sh     # iptables-legacy
+deploy/setup.sh <dir> hub egress-rules -format nft > hub-egress.nft          # nftables
+deploy/setup.sh <dir> hub egress-rules -format iptables > hub-egress.sh      # iptables-legacy
 ```
 
-`-peer-ports` is a comma-separated list of the ports your channel peers listen on besides 9735; port 53 is refused.
-Apply as root: `nft -f hub-egress.nft` (it replaces its own table, `inet satbooth_hub`, so it can be loaded again), or
-`sh hub-egress.sh` (it rebuilds its own chain `SATBOOTH_HUB_EGRESS` and adds one jump from `DOCKER-USER`; `IPT=iptables`
-names another binary). They survive a Docker restart: the nftables table is not Docker's, and Docker keeps the
-contents of `DOCKER-USER`. They do not survive a reboot: load the nftables file from `/etc/nftables.conf` (`include`)
-with the `nftables` service enabled, or run the shell script from a systemd unit with `After=docker.service`.
+Apply as root: `nft -f hub-egress.nft` (it rebuilds its chain, and keeps the peer set and what was added to it), or
+`sh hub-egress.sh` (it rebuilds its chain `SATBOOTH_HUB_EGRESS`, keeps the peer chain `SATBOOTH_HUB_PEERS`, and adds
+one jump from `DOCKER-USER`; `IPT=iptables` names another binary). Add and remove a peer (the files repeat these):
+
+```sh
+nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }       # nftables: add
+nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }    #           remove
+nft list set inet satbooth_hub satbooth_hub_peers                                  #           list
+iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT   # iptables: add
+iptables-legacy -w -D SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT   #           remove
+iptables-legacy -w -S SATBOOTH_HUB_PEERS                                                #           list
+```
+
+They survive a Docker restart: the nftables table is not Docker's, and Docker keeps the contents of `DOCKER-USER`. They
+do not survive a reboot, and peers added by hand are not in the files. Save the current state and load it at boot:
+`nft list table inet satbooth_hub > /etc/satbooth-hub.nft`, then at boot (after the network is up)
+`nft delete table inet satbooth_hub 2>/dev/null; nft -f /etc/satbooth-hub.nft` from a systemd unit or your distribution's
+nftables service; for iptables, `iptables-legacy-save > /etc/satbooth-hub.rules` and `iptables-legacy-restore` after
+`docker.service` has started (Docker must have created `DOCKER-USER` first, so restore only the two chains, or re-run
+`hub-egress.sh` and then add your peers).
 Check, from the hub's namespace (`docker compose … exec netns` has no tools; use a throwaway container that joins it):
 
 ```sh
 docker run --rm --network container:<project>-netns-1 debian:13-slim bash -c \
-  'exec 3<>/dev/tcp/<a Lightning peer>/9735 && echo 9735 connects; exec 4<>/dev/tcp/1.1.1.1/443 || echo 443 blocked'
+  'exec 3<>/dev/tcp/<a listed peer>/<its port> && echo peer connects; exec 4<>/dev/tcp/1.1.1.1/443 || echo 443 blocked'
 ```
 
-and the drops appear in `journalctl -k | grep satbooth-hub-egress` and in `nft list chain inet satbooth_hub egress`
+The drops appear in `journalctl -k | grep satbooth-hub-egress`, and in `nft list chain inet satbooth_hub egress`
 (counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v`. `scripts/egress-rules-test.sh` applies the printed rules
-to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases.
+to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases,
+including adding and removing a peer and saving and loading the nftables state.
 
 **A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
 `deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), add the

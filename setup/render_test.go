@@ -84,9 +84,13 @@ func newFixture(t *testing.T, name string, pub PublicAnswers, in *PublicToHub, o
 	f.files["monerod.conf"] = MonerodConf()
 	f.files["rpc-login"] = WalletRPCLogin("satbooth", f.secrets["wallet"])
 	f.files["hub-compose.env"] = HubComposeEnv(&hub)
-	ports, _ := EgressPorts(nil)
-	f.files["egress.nft"] = []byte(EgressNft(&hub, ports))
-	f.files["egress.sh"] = []byte(EgressIptables(&hub, ports))
+	for name, peers := range map[string][]string{"egress": nil, "egress-one": {"203.0.113.5:10009"},
+		"egress-several": {"203.0.113.5:10009", "198.51.100.7:9735", "198.51.100.8:9736"}} {
+		h := hub
+		h.LightningPeers = peers
+		f.files[name+".nft"] = []byte(EgressNft(&h))
+		f.files[name+".sh"] = []byte(EgressIptables(&h))
+	}
 	f.files["public-compose.env"] = PublicComposeEnv(&pub)
 	f.files["api-keys.json"] = apiKeys
 	f.files["satbooth.json"] = SatboothJSON(&pub, out)

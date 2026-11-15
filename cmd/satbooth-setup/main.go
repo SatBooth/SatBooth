@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -37,7 +36,7 @@ const usageText = `usage:
   satbooth-setup hub init      -dir <dir> [-host-dir <path>] -handoff <file> [-digest <digest>] [-answers <file>]
   satbooth-setup hub pair      -dir <dir> [-invoice-wallet <hex>] [-payout-wallet <hex>]
   satbooth-setup public finish -dir <dir> -handoff <file> [-digest <digest>] [-wallet-rpc-pass <file>]
-  satbooth-setup hub egress-rules -dir <dir> -format nft|iptables [-peer-ports 10009,9736]   (prints the hub host's firewall rules)
+  satbooth-setup hub egress-rules -dir <dir> -format nft|iptables   (prints the hub host's firewall rules)
   satbooth-setup hub renew-cert -dir <dir>   (a new certificate for the stub, from the same CA)
   any stage: -discard-incomplete (remove what an unfinished run of the stage left)
              -source-build (the images are built from this repository: the start commands name compose.build.yml)`
@@ -62,7 +61,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var answers, hubURL, hostDir, handoff, digest, invoiceW, payoutW, walletPass *string
 	var st setup.Stage
 	renew, egress := false, false
-	var format, peerPorts *string
+	var format *string
 	str := func(name string) *string { return fs.String(name, "", "") }
 	switch host + " " + stage {
 	case "public init":
@@ -81,7 +80,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		renew = true
 	case "hub egress-rules":
 		egress = true
-		format, peerPorts = str("format"), str("peer-ports")
+		format = str("format")
 	default:
 		return usage("unknown stage")
 	}
@@ -103,18 +102,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if egress {
 		if *discard || *sourceBuild || (*format != "nft" && *format != "iptables") {
-			return usage("hub egress-rules takes -dir, -format nft|iptables and, optionally, -peer-ports")
-		}
-		ports, err := parsePorts(*peerPorts)
-		if err != nil {
-			return usage(err.Error())
+			return usage("hub egress-rules takes -dir and -format nft|iptables")
 		}
 		lock, err := setup.LockDir(*dir)
 		if err != nil {
 			return fail(stderr, err)
 		}
 		defer lock.Close()
-		nft, ipt, err := lock.HubEgressRules(ports)
+		nft, ipt, err := lock.HubEgressRules()
 		if err != nil {
 			return fail(stderr, err)
 		}
@@ -366,20 +361,4 @@ func (p *prompter) digest() (string, error) {
 		}
 		fmt.Fprintln(p.out, "  Refused: a digest is 64 lowercase hex characters, in groups or not.")
 	}
-}
-
-// parsePorts is a comma-separated list of ports ("" for none).
-func parsePorts(s string) ([]int, error) {
-	if s == "" {
-		return nil, nil
-	}
-	var out []int
-	for _, f := range strings.Split(s, ",") {
-		n, err := strconv.Atoi(f)
-		if err != nil {
-			return nil, fmt.Errorf("-peer-ports is a comma-separated list of ports, not %q", f)
-		}
-		out = append(out, n)
-	}
-	return out, nil
 }

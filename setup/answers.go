@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,9 @@ type HubAnswers struct {
 	HubIP             string `json:"hub_ip"`          // default 172.30.78.10, inside HubSubnet
 	ElectrumSubnet    string `json:"electrum_subnet"` // default 172.30.78.128/25, not overlapping HubSubnet
 	Electrum          bool   `json:"electrum"`        // default false: a pruned node and no Electrum server (Fulcrum)
+	// LightningPeers are the peers the hub's namespace may connect to on the internet, each "a.b.c.d:port" (an IPv4
+	// literal: no hostname, no IPv6). Empty by default; more are added to the firewall by hand (EgressNft).
+	LightningPeers []string `json:"lightning_peers,omitempty"`
 	// BitcoindPruneMiB is bitcoind's prune target in MiB: default 50000, at least 10240, and absent (0) with Electrum,
 	// whose node is unpruned.
 	BitcoindPruneMiB int `json:"bitcoind_prune_mib,omitempty"`
@@ -269,7 +273,7 @@ func ParsePublicAnswers(b []byte) (*PublicAnswers, error) {
 // ParseHubAnswers parses and validates the stage 2 answers.
 func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 	var a HubAnswers
-	seen, err := strictAnswers(b, &a, "network", "hub_private_addr", "public_private_addr", "host_dir", "hub_admin_addr", "hub_subnet", "hub_ip", "electrum_subnet", "electrum", "bitcoind_prune_mib")
+	seen, err := strictAnswers(b, &a, "network", "hub_private_addr", "public_private_addr", "host_dir", "hub_admin_addr", "hub_subnet", "hub_ip", "electrum_subnet", "electrum", "bitcoind_prune_mib", "lightning_peers")
 	if err != nil {
 		return nil, err
 	}
@@ -285,6 +289,11 @@ func ParseHubAnswers(b []byte) (*HubAnswers, error) {
 	if !seen["electrum_subnet"] {
 		a.ElectrumSubnet = defElectrumSubnet
 	}
+	peers, err := ParseLightningPeers(a.LightningPeers)
+	if err != nil {
+		return nil, answerErr("lightning_peers", err.Error())
+	}
+	a.LightningPeers = peers
 	givenPrune := seen["bitcoind_prune_mib"] && !seen["bitcoind_prune_mib"+nullSuffix]
 	switch {
 	case a.Electrum && givenPrune:
@@ -582,4 +591,48 @@ func strictAnswers(b []byte, v any, keys ...string) (map[string]bool, error) {
 		return nil, shape
 	}
 	return seen, nil
+}
+
+// maxLightningPeers bounds the peers an answers file lists.
+const maxLightningPeers = 256
+
+// ParseLightningPeers checks a list of "a.b.c.d:port" entries and returns it sorted by address, then port. Each is an
+// IPv4 literal (a hostname would need DNS, which the hub host's firewall refuses, and the bundle's network has no
+// IPv6) and a port from 1 to 65535, written the canonical way; a repeated entry, or an address no peer has (this
+// network, loopback, multicast, link-local, reserved), is refused.
+func ParseLightningPeers(in []string) ([]string, error) {
+	if len(in) > maxLightningPeers {
+		return nil, fmt.Errorf("at most %d peers", maxLightningPeers)
+	}
+	var ap []netip.AddrPort
+	for _, s := range in {
+		p, err := netip.ParseAddrPort(s)
+		switch {
+		case err != nil || p.String() != s:
+			return nil, errors.New("each peer must be an IPv4 address and a port, such as 203.0.113.7:9735 (no hostname)")
+		case !p.Addr().Is4():
+			return nil, errors.New("each peer must be an IPv4 address: the bundle's network has no IPv6")
+		case p.Port() == 0:
+			return nil, errors.New("a peer's port must be from 1 to 65535")
+		case reservedV4(p.Addr()) || p.Addr().IsLoopback():
+			return nil, errors.New("a peer's address must be a unicast address of the internet")
+		}
+		for _, q := range ap {
+			if q == p {
+				return nil, errors.New("a peer is listed twice")
+			}
+		}
+		ap = append(ap, p)
+	}
+	slices.SortFunc(ap, func(x, y netip.AddrPort) int {
+		if c := x.Addr().Compare(y.Addr()); c != 0 {
+			return c
+		}
+		return int(x.Port()) - int(y.Port())
+	})
+	var out []string
+	for _, p := range ap {
+		out = append(out, p.String())
+	}
+	return out, nil
 }

@@ -864,7 +864,11 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   impersonate only the nine names, and only to a client that is on this host's network and trusts it, which is the hub;
   **pinning names in `/etc/hosts` is not a firewall**: a name the hub resolves that is not in the list goes out to the
   internet and fails only at the TLS handshake, after the connection and the DNS query. The egress rules of the hub
-  host are what stop that, and they are not part of the bundle until they are added. In the operator's browser,
+  host are what stop that: setup prints them (`hub egress-rules`, nftables or iptables-legacy) and the operator applies
+  them as root. They bound the namespace of the hub, the relay and the UI proxy to the bundle's own networks, answers to
+  connections made to it, and TCP connections to listed Lightning peers (address and port); everything else,
+  outside DNS included, is logged and dropped. Residuals: a peer must be listed before the hub can reach it; the rules
+  are the operator's to apply and persist, and the bundle does not check that they are loaded; bitcoind is not bound. In the operator's browser,
   `satbooth-hubproxy` stands on the tunnel's port and replaces the hub's content policy (which allows Alby's hosts and
   relays) with a self-only one; a page of the hub can then load and contact nothing outside its own origin. Residual: the
   policy does not stop a link the operator clicks; the operator's own host can reach the hub's listener (HUB_IP, port
