@@ -214,7 +214,8 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 		if caCert, caKey, err = NewCA(rand); err != nil {
 			return nil, err
 		}
-		for _, f := range []file{{caKeyFile, caKey}, {caCertFile, caCert}} {
+		// The certificate first, as stage 2 writes them: a stop between the two leaves a certificate without its key.
+		for _, f := range []file{{caCertFile, caCert}, {caKeyFile, caKey}} {
 			if err := writeNew(root, f.name, f.data); err != nil {
 				return nil, fmt.Errorf("setup: cannot write %s", f.name)
 			}
