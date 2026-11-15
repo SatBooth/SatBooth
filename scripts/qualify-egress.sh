@@ -400,6 +400,8 @@ for _ in range(3):
   sleep 1
   r=$(egress_probe tcp "$host_ip" 4446)
   if [ "$r" = connects ]; then egress_ok "control, rules off: a new connection from the hub's namespace to the host's $host_ip:4446 connects"; else egress_bad "control: the host listener $host_ip:4446 is not reachable from the namespace with the rules off"; fi
+  r=$(egress_probe tcp "$host_ip" 4446 "$egress_electrum_ip")
+  if [ "$r" = connects ]; then egress_ok "control, rules off: a new connection from the electrum-network address to the host's $host_ip:4446 connects"; else egress_bad "control: the host listener $host_ip:4446 is not reachable from the electrum-network address with the rules off"; fi
   egress_probe dnsctl "$ctl_name" > /dev/null
   r=$(egress_probe dns "$off_name")
   egress_note "DNS probe, rules off: $off_name from the namespace: $r"
@@ -428,10 +430,18 @@ for _ in range(3):
   if [ "$r" = blocked ]; then egress_ok "canary tcp 203.0.113.9:4445 from the electrum-network address: blocked"; else egress_bad "canary from the electrum-network address connected"; fi
   r=$(egress_probe tcp "$peer_ip" 9735)
   if [ "$r" = blocked ]; then egress_ok "the peer $peer_ip:9735 before it is listed: blocked"; else egress_bad "the unlisted peer connected"; fi
+  # Each host canary is judged by its own counter rise: the counters are those of the drop rules of every chain, and
+  # nothing else sends to the host's listener during the probe.
+  local h0 h1
+  h0=$(egress_drops)
   r=$(egress_probe tcp "$host_ip" 4446)
   if [ "$r" = blocked ]; then egress_ok "canary tcp $host_ip:4446 (the host itself, input path) from the hub's address: blocked"; else egress_bad "a new connection from the hub's namespace to the host itself connected with the rules on"; fi
+  h1=$(egress_drops)
+  if [ "$h1" -gt "$h0" ]; then egress_ok "the drop counters rose from $h0 to $h1 over the hub-address host canary"; else egress_bad "the drop counters did not rise over the hub-address host canary ($h0 to $h1)"; fi
   r=$(egress_probe tcp "$host_ip" 4446 "$egress_electrum_ip")
   if [ "$r" = blocked ]; then egress_ok "canary tcp $host_ip:4446 (the host itself) from the electrum-network address: blocked"; else egress_bad "a new connection from the electrum-network address to the host itself connected with the rules on"; fi
+  h0=$(egress_drops)
+  if [ "$h0" -gt "$h1" ]; then egress_ok "the drop counters rose from $h1 to $h0 over the electrum-address host canary"; else egress_bad "the drop counters did not rise over the electrum-address host canary ($h1 to $h0)"; fi
   d1=$(egress_drops)
   if [ "$d1" -gt "$d0" ]; then egress_ok "the drop counters rose from $d0 to $d1 over the canaries"; else egress_bad "the drop counters did not rise over the canaries ($d0 to $d1)"; fi
   # The printed add command lists the peer; then it connects.

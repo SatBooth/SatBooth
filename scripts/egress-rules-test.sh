@@ -70,7 +70,7 @@ suite() {
   probe "bitcoind -> internet 443 (not bound)" btc 203.0.113.5 443 connects
   probe "bitcoind -> internet 8080 (not bound either)" btc 203.0.113.5 8080 connects
 }
-echo "=== no rules: the baseline connects everywhere (the WRONG lines below are expected: 9735, 443 and 53 are not blocked)"; suite "baseline"
+echo "=== no rules: the baseline connects everywhere (the WRONG lines below are expected: 9735, 443 and 53 are not blocked, nor are the two lines to the host itself)"; suite "baseline"
 FAILED=0
 nft -f /rules/egress-several.nft || { echo nft load failed; exit 1; }
 suite "nftables"
@@ -97,6 +97,8 @@ iptables-legacy -N DOCKER-USER; iptables-legacy -A DOCKER-USER -j RETURN; iptabl
 IPT=iptables-legacy sh /rules/egress-several.sh || { echo legacy load failed; exit 1; }
 IPT=iptables-legacy sh /rules/egress-several.sh && echo "script rerun ok"
 echo "jump count in DOCKER-USER: $(iptables-legacy -S DOCKER-USER | grep -c SATBOOTH_HUB_EGRESS) (want 1), electrum: $(iptables-legacy -S DOCKER-USER | grep -c SATBOOTH_HUB_ELECTRUM) (want 1)"
+echo "jump count in INPUT: $(iptables-legacy -S INPUT | grep -c SATBOOTH_HUB_HOST) (want 2)"
+[ "$(iptables-legacy -S INPUT | grep -c SATBOOTH_HUB_HOST)" -eq 2 ] || { echo "WRONG  INPUT jumps to SATBOOTH_HUB_HOST after the reruns"; FAILED=1; }
 suite "iptables-legacy"
 echo "--- iptables-legacy: add and remove a peer at run time"
 iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.5 -p tcp --dport 9735 -j ACCEPT

@@ -376,6 +376,22 @@ func TestRenewWithoutSetupsCopy(t *testing.T) {
 	}
 }
 
+// A leftover config/hub-ca.pem with neither setup file is named as such, not reported as an unreadable pair.
+func TestRenewWithOnlyTheConfigCopy(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	for _, n := range []string{caCopyFile, caKeyFile} {
+		if err := os.Remove(filepath.Join(d, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := renew(t, d, 9)
+	if err == nil || !strings.Contains(err.Error(), "only config/hub-ca.pem exists") || !strings.Contains(err.Error(), "delete config/hub-ca.pem") {
+		t.Fatalf("error: %v", err)
+	}
+}
+
 // The CA itself refuses to vouch for any other name: a leaf made with its key for a name outside the list fails
 // verification, alone or beside listed names, and every listed name still verifies.
 func TestCAIsConstrainedToTheNames(t *testing.T) {
