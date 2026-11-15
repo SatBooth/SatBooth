@@ -6,6 +6,7 @@ import (
 	"flag"
 	"go/parser"
 	"go/token"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -49,9 +50,12 @@ func newFixture(t *testing.T, name string, pub PublicAnswers, in *PublicToHub, o
 	if err != nil {
 		t.Fatal(err)
 	}
-	fulAuth, err := RPCAuthLine(fixedReader(0x22), "fulcrum", f.secrets["fulcrum"])
-	if err != nil {
-		t.Fatal(err)
+	fulAuth := ""
+	if hub.Electrum {
+		fulAuth, err = RPCAuthLine(fixedReader(0x22), "fulcrum", f.secrets["fulcrum"])
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if in.SatboothRPCAuth != "" {
 		in.SatboothRPCAuth, err = RPCAuthLine(fixedReader(0x33), "satbooth", f.secrets["satbooth"])
@@ -74,7 +78,9 @@ func newFixture(t *testing.T, name string, pub PublicAnswers, in *PublicToHub, o
 	f.files["relay.json"] = RelayJSON(&hub, in, out)
 	f.files["bitcoin.conf"] = BitcoinConf(&hub, in, hubAuth, fulAuth)
 	f.files["hub.env"] = HubEnv(f.secrets["hub"])
-	f.files["fulcrum.conf"] = FulcrumConf(f.secrets["fulcrum"])
+	if hub.Electrum {
+		f.files["fulcrum.conf"] = FulcrumConf(f.secrets["fulcrum"])
+	}
 	f.files["monerod.conf"] = MonerodConf()
 	f.files["rpc-login"] = WalletRPCLogin("satbooth", f.secrets["wallet"])
 	f.files["hub-compose.env"] = HubComposeEnv(&hub)
@@ -85,21 +91,39 @@ func newFixture(t *testing.T, name string, pub PublicAnswers, in *PublicToHub, o
 }
 
 // hubFor is the hub host's answers for a public host's: the same network and addresses, typed again.
-func hubFor(pub PublicAnswers) HubAnswers {
+func hubFor(pub PublicAnswers, electrum bool) HubAnswers {
 	h := baseHub()
 	h.Network, h.HubPrivateAddr, h.PublicPrivateAddr = pub.Network, pub.HubPrivateAddr, pub.PublicPrivateAddr
+	if electrum {
+		h.Electrum, h.BitcoindPruneMiB = true, 0
+	}
 	return h
 }
 
-func fxLightning(t *testing.T) *fixture {
+// fixtureName is the golden directory of a case: the files of a hub with an Electrum server are in <name>-electrum.
+func fixtureName(name string, electrum bool) string {
+	if electrum {
+		return name + "-electrum"
+	}
+	return name
+}
+
+// fxLightning and fxEveryRail are the cases with an Electrum server (unpruned, Fulcrum): the files every stage test
+// follows. fxLightningPruned and fxEveryRailPruned are the default hub: a pruned node and no Fulcrum.
+func fxLightning(t *testing.T) *fixture       { return lightningCase(t, true) }
+func fxLightningPruned(t *testing.T) *fixture { return lightningCase(t, false) }
+func fxEveryRail(t *testing.T) *fixture       { return everyRailCase(t, true) }
+func fxEveryRailPruned(t *testing.T) *fixture { return everyRailCase(t, false) }
+
+func lightningCase(t *testing.T, electrum bool) *fixture {
 	pub := baseAnswers()
 	pub.Network = "regtest"
 	pub.HubPrivateAddr, pub.PublicPrivateAddr = "192.0.2.20", "192.0.2.10"
 	in := &PublicToHub{Version: 1, Network: "regtest", HubPrivateAddr: "192.0.2.20", PublicPrivateAddr: "192.0.2.10", InvoiceClient: curveKeys[0]}
-	return newFixture(t, "lightning-only", pub, in, fxHubToPublic(false), hubFor(pub))
+	return newFixture(t, fixtureName("lightning-only", electrum), pub, in, fxHubToPublic(false), hubFor(pub, electrum))
 }
 
-func fxEveryRail(t *testing.T) *fixture {
+func everyRailCase(t *testing.T, electrum bool) *fixture {
 	pub := baseAnswers()
 	pub.Network = "mainnet"
 	pub.HubPrivateAddr, pub.PublicPrivateAddr = "192.0.2.20", "192.0.2.10"
@@ -110,7 +134,7 @@ func fxEveryRail(t *testing.T) *fixture {
 	pub.Currencies = []string{"USD", "EUR"}
 	in := &PublicToHub{Version: 1, Network: "mainnet", HubPrivateAddr: "192.0.2.20", PublicPrivateAddr: "192.0.2.10",
 		InvoiceClient: curveKeys[0], PayoutClient: curveKeys[1], SatboothRPCAuth: "rpcauth=satbooth:placeholder", Monero: true, MoneroRPCUser: "satbooth"}
-	return newFixture(t, "every-rail", pub, in, fxHubToPublic(true), hubFor(pub))
+	return newFixture(t, fixtureName("every-rail", electrum), pub, in, fxHubToPublic(true), hubFor(pub, electrum))
 }
 
 // check parses the answers and handoffs the way the stages do, so a fixture the parsers refuse fails here.
@@ -249,6 +273,76 @@ func TestRenderEveryRail(t *testing.T) {
 	}
 	if !strings.Contains(string(f.files["hub-compose.env"]), "HUB_NETWORK=bitcoin\n") {
 		t.Error("mainnet is HUB_NETWORK=bitcoin")
+	}
+}
+
+// The default hub: a pruned node, and nothing of Fulcrum anywhere.
+func TestRenderPrunedDefault(t *testing.T) {
+	for _, f := range []*fixture{fxLightningPruned(t), fxEveryRailPruned(t)} {
+		f.check(t)
+		f.golden(t)
+		conf := string(f.files["bitcoin.conf"])
+		if !strings.Contains(conf, "\nprune=50000\n") {
+			t.Errorf("%s: bitcoin.conf lacks prune=50000:\n%s", f.name, conf)
+		}
+		for _, bad := range []string{"txindex", "fulcrum", "172.30.78.128/25"} {
+			if strings.Contains(conf, bad) {
+				t.Errorf("%s: bitcoin.conf holds %q", f.name, bad)
+			}
+		}
+		if _, ok := f.files["fulcrum.conf"]; ok {
+			t.Errorf("%s: a fulcrum.conf is rendered", f.name)
+		}
+		if !strings.Contains(string(f.files["hub-compose.env"]), "\nHUB_ELECTRUM_SERVER=tcp://127.0.0.1:9\n") {
+			t.Errorf("%s: the hub env does not point the Electrum URL at the unreachable address", f.name)
+		}
+		if strings.Contains(conf, "rpcallowip=172.30.78.0/25\n") != true {
+			t.Errorf("%s: the hub subnet is not allowed", f.name)
+		}
+	}
+	// The same fixture with a chosen size.
+	f := fxLightningPruned(t)
+	f.hub.BitcoindPruneMiB = 12345
+	if !strings.Contains(string(BitcoinConf(&f.hub, f.in, "rpcauth=hub:x", "")), "\nprune=12345\n") {
+		t.Error("a chosen prune size is not rendered as given")
+	}
+}
+
+// With an Electrum server the node is unpruned with txindex and the hub points at Fulcrum.
+func TestRenderElectrum(t *testing.T) {
+	f := fxEveryRail(t)
+	conf := string(f.files["bitcoin.conf"])
+	if !strings.Contains(conf, "\ntxindex=1\n") || strings.Contains(conf, "prune") {
+		t.Errorf("bitcoin.conf of an Electrum hub:\n%s", conf)
+	}
+	if !strings.Contains(string(f.files["hub-compose.env"]), "\nHUB_ELECTRUM_SERVER=tcp://fulcrum:50001\n") {
+		t.Error("the Electrum hub's env does not point at fulcrum")
+	}
+	if _, ok := f.files["fulcrum.conf"]; !ok {
+		t.Error("no fulcrum.conf")
+	}
+}
+
+// Whatever the answers, prune and txindex never appear together, and exactly one of them does.
+func TestPruneAndTxindexAreExclusive(t *testing.T) {
+	rng := rand.New(rand.NewSource(20261116))
+	for i := 0; i < 2000; i++ {
+		h := baseHub()
+		h.Electrum = rng.Intn(2) == 0
+		h.BitcoindPruneMiB = []int{0, 10239, 10240, 10241, 50000, rng.Intn(1 << 40)}[rng.Intn(6)]
+		in := &PublicToHub{Version: 1, Network: h.Network, HubPrivateAddr: h.HubPrivateAddr, PublicPrivateAddr: h.PublicPrivateAddr, InvoiceClient: curveKeys[0]}
+		fulAuth := ""
+		if h.Electrum {
+			fulAuth = "rpcauth=fulcrum:y"
+		}
+		conf := string(BitcoinConf(&h, in, "rpcauth=hub:x", fulAuth))
+		tx, pr := strings.Contains(conf, "txindex=1\n"), strings.Contains(conf, "prune=")
+		if tx == pr || tx != h.Electrum {
+			t.Fatalf("electrum=%v: txindex=%v prune=%v:\n%s", h.Electrum, tx, pr, conf)
+		}
+		if strings.Contains(conf, "fulcrum") != h.Electrum || strings.Contains(conf, h.ElectrumSubnet) != h.Electrum {
+			t.Fatalf("electrum=%v: fulcrum lines in:\n%s", h.Electrum, conf)
+		}
 	}
 }
 
@@ -442,7 +536,7 @@ func TestRenderedPayoutCaps(t *testing.T) {
 }
 
 func TestRenderersHoldNoSecretTheyShouldNot(t *testing.T) {
-	for _, f := range []*fixture{fxLightning(t), fxEveryRail(t)} {
+	for _, f := range allFixtures(t) {
 		mayHold := map[string][]string{ // the files that must hold a secret, and which
 			"hub.env": {"hub"}, "fulcrum.conf": {"fulcrum"}, "rpc-login": {"wallet"},
 		}
@@ -458,7 +552,7 @@ func TestRenderersHoldNoSecretTheyShouldNot(t *testing.T) {
 			}
 		}
 		for _, name := range []string{"hub.env", "fulcrum.conf", "rpc-login"} {
-			if len(mayHold[name]) == 1 && !strings.Contains(string(f.files[name]), f.secrets[mayHold[name][0]]) {
+			if _, ok := f.files[name]; ok && len(mayHold[name]) == 1 && !strings.Contains(string(f.files[name]), f.secrets[mayHold[name][0]]) {
 				t.Errorf("%s/%s lacks its secret", f.name, name)
 			}
 		}
@@ -486,7 +580,7 @@ func TestAPIKeysJSONRefusesUnequalLists(t *testing.T) {
 // Every renderer is pure and total over parsed inputs: the same inputs give the same bytes, every JSON file is
 // followed by exactly one newline, and no file holds a carriage return or a NUL.
 func TestRenderedFilesAreWellFormed(t *testing.T) {
-	for _, f := range []*fixture{fxLightning(t), fxEveryRail(t)} {
+	for _, f := range allFixtures(t) {
 		for name, b := range f.files {
 			if len(b) == 0 || b[len(b)-1] != '\n' || (len(b) > 1 && b[len(b)-2] == '\n') || bytes.ContainsAny(b, "\r\x00") {
 				t.Errorf("%s/%s is not newline-terminated text", f.name, name)
@@ -502,11 +596,18 @@ func TestRenderedFilesAreWellFormed(t *testing.T) {
 	}
 }
 
+func allFixtures(t *testing.T) []*fixture {
+	return []*fixture{fxLightning(t), fxEveryRail(t), fxLightningPruned(t), fxEveryRailPruned(t)}
+}
+
 func fxByName(t *testing.T, name string) *fixture {
-	if name == "lightning-only" {
-		return fxLightning(t)
+	for _, f := range allFixtures(t) {
+		if f.name == name {
+			return f
+		}
 	}
-	return fxEveryRail(t)
+	t.Fatalf("no fixture %s", name)
+	return nil
 }
 
 // The setup binary must stay free of network and database capabilities: the non-test files of this package import
@@ -539,7 +640,7 @@ func TestImportsAreTheAllowedLeaves(t *testing.T) {
 // satbooth.json carries nwc.network equal to the answers' network, and the configuration the service reads from it
 // holds the same network in every block that has one.
 func TestSatboothJSONNWCNetwork(t *testing.T) {
-	for _, name := range []string{"lightning-only", "every-rail"} {
+	for _, name := range []string{"lightning-only", "every-rail", "lightning-only-electrum", "every-rail-electrum"} {
 		f := fxByName(t, name)
 		var v struct {
 			NWC     struct{ Network string }

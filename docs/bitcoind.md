@@ -91,7 +91,14 @@ talks to the mainnet port and wallet directory.
    A rebuilt wallet knows no transactions until it is rescanned, and step 5's `"timestamp":"now"` scans none: import
    with a `"timestamp"` (Unix seconds) at or before the creation of the oldest order that can still be paid (its
    expiry plus 7 days not yet passed) and of every output the store still tracks, so that bitcoind rescans the
-   payments the restored store will look for; when in doubt, the time the descriptor was first imported.
+   payments the restored store will look for. On a pruned node (the hub bundle's default, `prune=`), the rescan reaches back
+   only to the oldest block the node keeps (`pruneheight` in `getblockchaininfo`): bitcoind still imports the descriptor,
+   scans the blocks that remain and then reports `"success": false` with "... could be caused by pruning" (Bitcoin Core
+   32.1 `src/wallet/rpc/backup.cpp`, `src/wallet/wallet.cpp` `ScanForWalletTransactions`). The descriptor is already in
+   the wallet then: do not import it again in a loop. A payment in a block that was pruned is not found, and its order
+   never reads paid, so size `bitcoind_prune_mib` well above the payment watch window (the longest order expiry plus 7
+   days). When in doubt about the timestamp, use the time the descriptor was first imported, or the time of the oldest
+   block the node keeps if that is later.
 
    **After SatBooth's own store was restored from a backup (see [Backup and restore](backup-and-restore.md)), do not use that plus 1.** The
    restored store's highest index is the backup's: addresses of orders made after the backup were shown to customers

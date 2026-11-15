@@ -1075,3 +1075,46 @@ channel's outputs, and a fee bump (anchor or RBF) of the hub's own transactions.
 gossip checks (`getblockhash`, `gettxout`) are likely not exercised: the regtest channel is private and the two hubs
 have no other peers, so no channel announcement reaches either hub. Those paths use only methods in the list
 (`docs/dependencies.md` §8: every broadcast is `sendrawtransaction`), but that is read in the source, not observed.
+
+## The pruned node and the electrum profile
+
+The hub bundle's bitcoind is pruned by default (`prune=50000`, no `txindex`) and the Electrum server (Fulcrum) is the
+opt-in profile `electrum`. The regtest bitcoind is pruned the same way (`dev/regtest/bitcoind/bitcoin.conf`: manual
+pruning, `prune=1`, with `fastprune=1` so that small block files fill after a few hundred blocks), and the regtest hubs
+run with `LDK_ELECTRUM_SERVER=tcp://127.0.0.1:9`, as the bundle does.
+
+What the suite does on it:
+
+- **Early blocks are really gone.** `TestBootstrap`, after the channel and the top-up (the hubs have followed the chain
+  over the early blocks by then), mines 600 blocks and calls `pruneblockchain` up to the newest 288. It checks that
+  `getblockchaininfo` reports `pruned` with a `pruneheight` above 0 and that `getblock` of block 1 is refused. Every
+  later phase (the Lightning suite, the on-chain, fiat, Monero, refund and image phases) runs against a node that
+  cannot serve those blocks. Measured: pruned to height 253.
+- **Importing a descriptor on the pruned node.** The wallet's `timestamp: "now"` reaches back 7200 s to read blocks, and
+  every regtest block is minutes old, so after the prune `importdescriptors` with `"now"` failed with "Rescan failed ...
+  error reading a block ... could be caused by pruning". On mainnet the blocks 7200 s back are never pruned (a pruned
+  node keeps at least 288). The suite's imports (`importDescriptorOpts`) therefore pass a timestamp three hours ahead,
+  which finds no block to rescan, the meaning "now" has there.
+- **The hub's address lookup fails locally and softly.** `TestHubAddressLookup` (in the hub group, after `TestQualify`):
+  `POST /api/wallet/new-address` is not used; `GET /api/wallet/address` makes the first address, and two more calls
+  return the same address while the lookup fails (getAlby/hub v1.24.6 `api/api.go`, `GetUnusedOnchainAddress`).
+  `scripts/qualify.sh` then requires `hub-satbooth`'s log to hold "Failed to get current address transactions" with
+  `127.0.0.1:9` in the line, and, at the end of every mode, no hub log to name `getalbypro` (the hub's default server).
+  The hubs' network has no route out as well.
+- **`--profile electrum` and the upgrade.** After the pruned bundle, `deploy_hub_electrum_group` runs stage 2 with
+  `electrum: true`: the `bitcoin.conf` is unpruned with `txindex=1`, `fulcrum.conf` exists, the start command that
+  `hub pair` prints names `--profile electrum`; with the profile, bitcoind builds its txindex and Fulcrum answers
+  `server.version` (Electrum protocol 1.4) from the hub's namespace holder. A regtest chain at its genesis block is in
+  initial block download and Fulcrum waits for it to end, so the group mines three blocks first. Then the steps of
+  `deploy/README.md`, "Upgrading a hub that ran unpruned with Fulcrum", are run as written: stop, edit `bitcoin.conf`
+  (as root: after the first start the file belongs to bitcoind's user), set `HUB_ELECTRUM_SERVER`, delete
+  `fulcrum.conf` and the Fulcrum volume, start. bitcoind starts pruned, Fulcrum does not exist, and the txindex
+  directory is removed.
+  Observed: after the first start the files of `config/` belong to the users that read them, so the `bitcoin.conf` edit
+  needs root; the txindex directory is in the chain's own directory (`/data/regtest/indexes/txindex`,
+  `/data/signet/...`; only mainnet's is `/data/indexes/txindex`); and bitcoind does not remove the old index by itself.
+
+Targeted local runs (Docker Desktop, macOS), all green: `--only deploy` (pruned bundle, electrum profile, upgrade),
+`--only hub` (`TestQualify` and `TestHubAddressLookup`) and `--only onchain` (every on-chain phase of the full run, with
+the three bitcoind kills, `TestOnchainIndexAfter` re-importing descriptors, and the stuck pair, on the pruned node). The
+full run, with the Monero, refund and image groups on the pruned node, is the repository's `qualify.yml` dispatch.

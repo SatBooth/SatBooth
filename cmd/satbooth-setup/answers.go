@@ -21,6 +21,7 @@ const (
 	kString = iota
 	kUint
 	kList
+	kBool
 )
 
 type field struct {
@@ -71,7 +72,10 @@ var hubFields = []field{
 	{name: "hub_admin_addr", question: "The address the hub's admin page is published on", def: "127.0.0.1", group: "docker"},
 	{name: "hub_subnet", question: "The hub bundle's Docker network", def: "172.30.78.0/25", group: "docker"},
 	{name: "hub_ip", question: "The hub's fixed address on it", def: "172.30.78.10", group: "docker"},
-	{name: "electrum_subnet", question: "The bundle's internal Docker network", def: "172.30.78.128/25", group: "docker"},
+	{name: "electrum_subnet", question: "The bundle's internal Docker network (needed with or without the Electrum server)", def: "172.30.78.128/25", group: "docker"},
+	{name: "electrum", question: "Run an Electrum server (Fulcrum) for the hub's address lookups? It needs the full, unpruned chain (several hundred GB and growing) and Fulcrum's own index, instead of the pruned default (yes or no)", def: "no", kind: kBool},
+	{name: "bitcoind_prune_mib", question: "Prune the hub's bitcoind to how many MiB? 50000 (about 50 GB, roughly six months of blocks) lets a hub that was off for up to that long catch up", def: "50000", kind: kUint,
+		when: func(v map[string]any) bool { e, _ := v["electrum"].(bool); return !e }},
 }
 
 // Valid values for the questions not yet asked (documentation addresses, as the project's examples use).
@@ -162,6 +166,8 @@ func (p *prompter) ask(fields []field, preset, template map[string]any, parse fu
 					vals[f.name] = ""
 				case kUint:
 					vals[f.name] = uint64(0)
+				case kBool:
+					vals[f.name] = false
 				case kList:
 					vals[f.name] = []string{}
 				}
@@ -180,6 +186,16 @@ func (p *prompter) ask(fields []field, preset, template map[string]any, parse fu
 					continue
 				}
 				vals[f.name] = n
+			case kBool:
+				switch strings.ToLower(s) {
+				case "yes", "y", "true":
+					vals[f.name] = true
+				case "no", "n", "false":
+					vals[f.name] = false
+				default:
+					fmt.Fprintln(p.out, "  Refused: yes or no is required.")
+					continue
+				}
 			case kList:
 				l := []string{}
 				for _, x := range strings.Split(s, ",") {

@@ -55,7 +55,7 @@ func TestStartCommandsFollowTheBuildMode(t *testing.T) {
 			{2, "docker compose -f " + hubB + " --env-file " + e.hub.HostDir + "/compose.env up -d --build hub"},
 			{2, "docker compose -f " + hubB + " --env-file " + e.hub.HostDir + "/compose.env exec bitcoind"},
 			{2, "docker compose -f " + hubB + " --env-file " + e.hub.HostDir + "/compose.env --profile monero run"},
-			{3, "docker compose -f " + hubB + " --env-file " + e.hub.HostDir + "/compose.env --profile monero up -d --build"},
+			{3, "docker compose -f " + hubB + " --env-file " + e.hub.HostDir + "/compose.env --profile electrum --profile monero up -d --build"},
 			{4, "docker compose -f " + pubB + " --env-file " + e.pub.HostDir + "/compose.env up -d --build"},
 		} {
 			if !strings.Contains(next[c.stage-1], c.want) {
@@ -66,6 +66,38 @@ func TestStartCommandsFollowTheBuildMode(t *testing.T) {
 			if got := strings.Contains(s, "compose.build.yml"); got != sourceBuild {
 				t.Errorf("source build %v, stage %d: compose.build.yml named: %v", sourceBuild, i+2, got)
 			}
+		}
+	}
+}
+
+// The command that starts the rest of the hub host names the electrum profile exactly when the answers ask for an
+// Electrum server, and the monero profile exactly when the handoff has Monero.
+func TestStartCommandNamesTheProfilesOfTheAnswers(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		fx   func(*testing.T) *fixture
+		want string
+	}{
+		{"electrum and Monero", fxEveryRail, "compose.env --profile electrum --profile monero up -d --build"},
+		{"neither", fxLightningPruned, "compose.env up -d --build"},
+		{"electrum only", fxLightning, "compose.env --profile electrum up -d --build"},
+		{"Monero only", fxEveryRailPruned, "compose.env --profile monero up -d --build"},
+	} {
+		e := newEnv(t, c.fx(t))
+		var rep *Report
+		for n := 1; n <= 3; n++ {
+			r, err := e.run(n, 1)
+			if err != nil {
+				t.Fatalf("%s, stage %d: %v", c.name, n, err)
+			}
+			rep = r
+		}
+		next := strings.Join(rep.Next, "\n")
+		if !strings.Contains(next, c.want) {
+			t.Errorf("%s: no %q in\n%s", c.name, c.want, next)
+		}
+		if got := strings.Contains(next, "--profile electrum"); got != strings.Contains(c.want, "--profile electrum") {
+			t.Errorf("%s: electrum profile named: %v", c.name, got)
 		}
 	}
 }

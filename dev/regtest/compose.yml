@@ -18,6 +18,9 @@ x-hub-env: &hub-env
   AUTO_LINK_ALBY_ACCOUNT: "false"
   # Unreachable on purpose: the hub must not need a block explorer.
   MEMPOOL_API: http://127.0.0.1:9/api
+  # As the bundle's default: no Electrum server, an address nothing listens on, so the hub's address lookups fail on the
+  # host (its own default is a third party's server).
+  LDK_ELECTRUM_SERVER: tcp://127.0.0.1:9
   RELAY: ws://127.0.0.1:7447
   # A restarted hub unlocks by itself once it has started once (service/service.go:105-115, 158-166).
   AUTO_UNLOCK_PASSWORD: regtest-only-unlock

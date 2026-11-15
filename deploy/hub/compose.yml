@@ -1,14 +1,18 @@
-# The private hub host (deploy/README.md, "The hub host"): Alby Hub, SatBooth's NWC relay, bitcoind, the hub's Electrum
-# server (Fulcrum), monerod and SatBooth's view-only monero-wallet-rpc. Never the host of the public SatBooth service.
-#   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile monero] up -d --build
+# The private hub host (deploy/README.md, "The hub host"): Alby Hub, SatBooth's NWC relay, bitcoind (pruned by default)
+# and, optionally, the hub's Electrum server (Fulcrum, profile electrum), monerod and SatBooth's view-only
+# monero-wallet-rpc (profile monero). Never the host of the public SatBooth service.
+#   docker compose -f deploy/hub/compose.yml --env-file <your copy of example.env> [--profile electrum]
+#     [--profile monero] up -d --build
 #   The relay is the pinned release image. To build it from source instead, add -f deploy/hub/compose.build.yml after
 #   -f deploy/hub/compose.yml.
 # Every value the operator gives comes from the env file (deploy/hub/example.env: addresses and paths, no secrets).
 # Secrets are files in HUB_CONFIG_DIR, bind-mounted read-only; none is in an environment: value or in argv.
 # Published ports: the hub's admin UI on HUB_ADMIN_ADDR (loopback: reached through an SSH tunnel, never from the public
 # host), and on HUB_PRIVATE_ADDR (the private link to the public host) only what SatBooth calls: the relay, bitcoind's
-# RPC and, with the monero profile, wallet-rpc. The ${VAR:?} form makes an empty or missing address an error: an empty
-# host would publish on every interface.
+# RPC and, with the monero profile, wallet-rpc. The electrum profile needs an unpruned bitcoind with txindex=1 (the
+# full chain, not the pruned default, plus Fulcrum's index): bitcoin.conf, fulcrum.conf and HUB_ELECTRUM_SERVER
+# (tcp://fulcrum:50001) go with it. The ${VAR:?} form makes an empty or missing address an error: an empty host would
+# publish on every interface.
 name: satbooth-hub
 
 x-hardening: &hardening
@@ -25,8 +29,9 @@ services:
   # up; no write), no network: each container's files go to its own user, directories 0700. Named volumes start owned
   # by root; bind-mounted files keep the host's owner. Modes of files are left alone, so a loose secret file is still
   # refused by whatever reads it. relay.json is given to 65532 only if it exists (the relay service itself does not
-  # start without it). The Monero files are optional (the monero profile, or monerod and wallet-rpc on a third host):
-  # only those present are given to 10002.
+  # start without it). fulcrum.conf (the electrum profile) is given to 10004 only if it exists; the Fulcrum volume is
+  # prepared either way, and stays empty without the profile. The Monero files are optional (the monero profile, or
+  # monerod and wallet-rpc on a third host): only those present are given to 10002.
   volume-init:
     image: debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     network_mode: none
@@ -41,10 +46,11 @@ services:
       - |
         chown 10003:10003 /vol/hub /config/hub.env
         chown 10001:10001 /vol/bitcoind /config/bitcoin.conf
-        chown 10004:10004 /vol/fulcrum /config/fulcrum.conf
+        chown 10004:10004 /vol/fulcrum
         chown 10002:10002 /vol/monerod
         chown -R 10002:10002 /wallet
         chmod 0700 /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /wallet
+        if [ -e /config/fulcrum.conf ]; then chown 10004:10004 /config/fulcrum.conf; fi
         if [ -e /config/relay.json ]; then chown 65532:65532 /config/relay.json; fi
         if [ -e /config/monerod.conf ]; then chown 10002:10002 /config/monerod.conf; fi
         if [ -e /config/wallet-rpc ]; then chown -R 10002:10002 /config/wallet-rpc; chmod 0700 /config/wallet-rpc; fi
@@ -97,10 +103,12 @@ services:
       SEND_EVENTS_TO_ALBY: "false"
       AUTO_LINK_ALBY_ACCOUNT: "false"
       RELAY: ws://127.0.0.1:7447
-      # With bitcoind as LDK's chain source, the hub still looks up on-chain addresses (its address-lookup API and
-      # swaps) on an Electrum server, Alby's by default (getAlby/hub v1.24.6 chain/address_lookup.go:20-26,
-      # lnclient/ldk/ldk.go:217-232): here the bundle's own Fulcrum, on the internal electrum network.
-      LDK_ELECTRUM_SERVER: tcp://fulcrum:50001
+      # With bitcoind as LDK's chain source, the hub uses an Electrum server only to look up on-chain addresses
+      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
+      # chain/address_lookup.go:20-26, lnclient/ldk/ldk.go:217-232). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
+      # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so
+      # that the hub's address lookups call no third party and fail locally.
+      LDK_ELECTRUM_SERVER: ${HUB_ELECTRUM_SERVER:?set HUB_ELECTRUM_SERVER}
     volumes:
       - hub-data:/data
       - type: bind
@@ -155,13 +163,16 @@ services:
       volume-init:
         condition: service_completed_successfully
 
-  # Fulcrum, the hub's Electrum server: it indexes the bundle's bitcoind (which needs txindex=1) and serves the hub
-  # only.
+  # Fulcrum, the hub's Electrum server (optional: docker compose --profile electrum …): it indexes the bundle's
+  # bitcoind (which then must be unpruned, with txindex=1: the full chain, plus Fulcrum's own index) and serves the
+  # hub only. Without it the hub's address lookups fail, and nothing of SatBooth's or of the hub's payments depends on
+  # them.
   # It is on the internal electrum network alone: it can reach bitcoind and the hub can reach it, and it has no route
   # out, so it can neither peer with other servers nor be reached from anywhere else. Not published. Its configuration
   # (fulcrum.conf, 0600: the RPC user's password) is the operator's; the paths and listeners are fixed here.
   fulcrum:
     <<: *hardening
+    profiles: [electrum]
     build: ./fulcrum
     image: satbooth-hub-fulcrum:local
     command: ["--datadir", "/data", "--bitcoind", "bitcoind:8332", "--tcp", "0.0.0.0:50001",
@@ -242,7 +253,9 @@ networks:
     ipam:
       config:
         - subnet: ${HUB_SUBNET:?set HUB_SUBNET}
-  # netns (the hub), bitcoind and Fulcrum, with no route out: Fulcrum's only network.
+  # netns (the hub), bitcoind and Fulcrum, with no route out: Fulcrum's only network. It exists without the electrum
+  # profile too (the hub and bitcoind are always on it, and Compose cannot attach them conditionally), unused, so
+  # ELECTRUM_SUBNET is always set.
   electrum:
     internal: true
     ipam:

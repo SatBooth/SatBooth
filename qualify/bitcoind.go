@@ -178,14 +178,20 @@ func (b *bitcoindRPC) listDescriptors(wallet string) ([]descriptorRow, error) {
 	return r.Descriptors, err
 }
 
-// importDescriptor imports desc as the wallet's active external descriptor, "now" (no rescan).
+// noRescan is the timestamp of the suite's descriptor imports: no rescan of old blocks. The wallet's "now" reaches back
+// 7200 s to read blocks, and every regtest block is minutes old, so on the pruned node "now" would read into the blocks
+// pruneEarlyBlocks removed and the import would fail (on mainnet the blocks that far back are never pruned: a pruned
+// node keeps at least 288). A time past that window finds no block to rescan, which is what "now" means here.
+func noRescan() int64 { return time.Now().Add(3 * time.Hour).Unix() }
+
+// importDescriptor imports desc as the wallet's active external descriptor, without a rescan.
 func (b *bitcoindRPC) importDescriptor(wallet, desc string) error {
 	return b.importDescriptorOpts(wallet, desc, nil)
 }
 
 // importDescriptorOpts is importDescriptor with extra request members (range, next_index).
 func (b *bitcoindRPC) importDescriptorOpts(wallet, desc string, extra map[string]any) error {
-	req := map[string]any{"desc": desc, "active": true, "internal": false, "timestamp": "now"}
+	req := map[string]any{"desc": desc, "active": true, "internal": false, "timestamp": noRescan()}
 	for k, v := range extra {
 		req[k] = v
 	}
@@ -259,6 +265,64 @@ func (b *bitcoindRPC) getAddressInfo(wallet, addr string) (addressInfo, error) {
 	var a addressInfo
 	err := b.call(wallet, "getaddressinfo", map[string]any{"address": addr}, &a)
 	return a, err
+}
+
+// importWithNow makes a blank watch-only wallet and imports a descriptor into it the way deploy/README.md does, with
+// "timestamp": "now". It runs before pruneEarlyBlocks: after it, "now" reaches into pruned regtest blocks (see noRescan).
+func (b *bitcoindRPC) importWithNow(wallet string) error {
+	if err := b.createWalletWatch(wallet); err != nil {
+		return err
+	}
+	var di struct {
+		Descriptor string `json:"descriptor"`
+	}
+	const d = "wpkh(tpubDCkSAnZvmxjBougv4pPk4oajoNK7cC96msLQHRzDe8zvxM1sbNTJwnxxvfmmeUuB2jzrGwXnt1vFcebpLRUgGFLKuemhi81jCUSFodqMwaY/0/*)"
+	if err := b.call("", "getdescriptorinfo", []any{d}, &di); err != nil {
+		return err
+	}
+	return b.importDescriptorOpts(wallet, di.Descriptor, map[string]any{"timestamp": "now"})
+}
+
+// pruneEarlyBlocks mines enough blocks that the early block files are older than the 288 blocks bitcoind always keeps,
+// prunes them (manual pruning, dev/regtest/bitcoind/bitcoin.conf), and checks that they are gone: the node reports a
+// prune height above 0 and refuses the data of block 1. It returns the prune height.
+func (b *bitcoindRPC) pruneEarlyBlocks() (int, error) {
+	// A fastprune block file holds 64 KiB; a regtest block is a few hundred bytes. 600 blocks leave the first file
+	// far below the newest 288.
+	for i := 0; i < 6; i++ {
+		if err := b.mine(100); err != nil {
+			return 0, err
+		}
+	}
+	tip, err := b.getBlockCount()
+	if err != nil {
+		return 0, err
+	}
+	var pruned int
+	if err := b.call("", "pruneblockchain", []any{tip - 288}, &pruned); err != nil {
+		return 0, err
+	}
+	var info struct {
+		Pruned      bool `json:"pruned"`
+		PruneHeight int  `json:"pruneheight"`
+	}
+	if err := b.call("", "getblockchaininfo", nil, &info); err != nil {
+		return 0, err
+	}
+	if !info.Pruned || info.PruneHeight < 1 {
+		return 0, fmt.Errorf("the node is not pruned: pruned=%v pruneheight=%d", info.Pruned, info.PruneHeight)
+	}
+	h, err := b.getBlockHash(1)
+	if err != nil {
+		return 0, err
+	}
+	var raw string
+	err = b.call("", "getblock", []any{h, 0}, &raw)
+	var re *rpcError
+	if !errors.As(err, &re) {
+		return 0, fmt.Errorf("block 1 can still be read after pruning (%v)", err == nil)
+	}
+	return info.PruneHeight, nil
 }
 
 // mine mines n blocks to a fresh address of the miner wallet.

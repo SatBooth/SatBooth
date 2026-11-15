@@ -1,0 +1,11 @@
+{
+  "hub_listen": "127.0.0.1:7447",
+  "client_listen": "172.30.78.10:7448",
+  "client_relay_url": "ws://192.0.2.20:7448",
+  "pairs": [
+    {
+      "wallet": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "client": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    }
+  ]
+}

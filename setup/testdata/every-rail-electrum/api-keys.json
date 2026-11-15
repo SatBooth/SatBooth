@@ -1,0 +1,24 @@
+{
+  "keys": [
+    {
+      "id": "orders-write",
+      "capability": "orders:write",
+      "sha256": "c0b6304bd6ce9b3e65150392c91a3aa76803a59c29e46f9fb2b9aac235e58386"
+    },
+    {
+      "id": "orders-read",
+      "capability": "orders:read",
+      "sha256": "b6014ac4130be89cbfa3f14daba903aadb0910531ecf3f783ca92e377f2b3287"
+    },
+    {
+      "id": "refunds-write",
+      "capability": "refunds:write",
+      "sha256": "06dcb600d5beaa7a4dbbbbda6b1247b2dfd5a68cd16312bd588783332f3dc57b"
+    },
+    {
+      "id": "refunds-read",
+      "capability": "refunds:read",
+      "sha256": "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"
+    }
+  ]
+}
