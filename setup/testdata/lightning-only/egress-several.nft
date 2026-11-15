@@ -4,6 +4,7 @@
 # everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:
 # Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.
 # What leaves with an address on the electrum network (172.30.78.128/25) for anywhere outside it is dropped too.
+# A new connection from either address to the host itself (input path) is logged and dropped; replies are let through.
 # Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:
 #   nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
 #   nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
@@ -22,3 +23,11 @@ add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ct state established
 add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ip daddr 172.30.78.128/25 accept
 add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
 add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 counter drop
+add chain inet satbooth_hub host_input { type filter hook input priority -10; policy accept; }
+flush chain inet satbooth_hub host_input
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 ct state established,related accept
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 counter drop
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 ct state established,related accept
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 counter drop

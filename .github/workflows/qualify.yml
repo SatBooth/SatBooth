@@ -38,6 +38,11 @@ jobs:
       # has Chrome, jq, nsenter and Docker already).
       - if: inputs.only == '' || inputs.only == 'full' || inputs.only == 'egress'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tcpdump conntrack nftables
+      # The printed rules, both the nftables and the iptables-legacy file, applied to a router and four network namespaces
+      # inside one privileged container: that container has its own network namespace, so the runner's own firewall and
+      # Docker's rules are not touched (the runner's Docker uses nftables, so the group below runs only the nftables file).
+      - if: inputs.only == '' || inputs.only == 'full' || inputs.only == 'egress'
+        run: scripts/egress-rules-test.sh
       # The scheduled run has no input and is the full run. The input reaches the shell through the environment.
       - run: |
           case "$ONLY" in

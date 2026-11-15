@@ -6,7 +6,7 @@
 # loaded through the UI proxy in headless Chrome. Without root it prints "not run" and stops: nothing is claimed.
 #
 # Needs: Linux, Docker, root by sudo without a password (or QUALIFY_ROOT: a command prefix that runs its arguments as
-# root in the host's network namespace, for a rehearsal on Docker Desktop: see qualify/REPORT.md), and the tools
+# root in the host's network namespace, for a rehearsal on Docker Desktop), and the tools
 # tcpdump, conntrack, nft or iptables, nsenter, ip (installed with apt on the runner).
 # The pure parsers at the top are tested by scripts/qualify-egress-test.sh.
 
@@ -198,10 +198,10 @@ egress_probe() {
 egress_drops() {
   local out
   if [ "$egress_fw" = nft ]; then
-    out=$(egress_rr nft list chain inet satbooth_hub egress 2> /dev/null || true)
+    out=$({ egress_rr nft list chain inet satbooth_hub egress; egress_rr nft list chain inet satbooth_hub host_input; } 2> /dev/null || true)
     awk '/counter packets/ { for (i = 1; i <= NF; i++) if ($i == "packets") s += $(i + 1) } END { print s + 0 }' <<< "$out"
   else
-    out=$({ egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_EGRESS -n -v -x; egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_ELECTRUM -n -v -x; } 2> /dev/null || true)
+    out=$({ egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_EGRESS -n -v -x; egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_ELECTRUM -n -v -x; egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_HOST -n -v -x; } 2> /dev/null || true)
     awk '$3 == "DROP" { s += $1 } END { print s + 0 }' <<< "$out"
   fi
 }
@@ -222,14 +222,16 @@ egress_cleanup() {
     else
       egress_rr "$egress_ipt" -w -D DOCKER-USER -s "$egress_hub_ip" -j SATBOOTH_HUB_EGRESS > /dev/null 2>&1 || true
       egress_rr "$egress_ipt" -w -D DOCKER-USER -s "$egress_electrum_subnet" -j SATBOOTH_HUB_ELECTRUM > /dev/null 2>&1 || true
-      for n in SATBOOTH_HUB_EGRESS SATBOOTH_HUB_ELECTRUM SATBOOTH_HUB_PEERS; do
+      egress_rr "$egress_ipt" -w -D INPUT -s "$egress_hub_ip" -j SATBOOTH_HUB_HOST > /dev/null 2>&1 || true
+      egress_rr "$egress_ipt" -w -D INPUT -s "$egress_electrum_subnet" -j SATBOOTH_HUB_HOST > /dev/null 2>&1 || true
+      for n in SATBOOTH_HUB_EGRESS SATBOOTH_HUB_ELECTRUM SATBOOTH_HUB_HOST SATBOOTH_HUB_PEERS; do
         egress_rr "$egress_ipt" -w -F "$n" > /dev/null 2>&1 || true
         egress_rr "$egress_ipt" -w -X "$n" > /dev/null 2>&1 || true
       done
     fi
     egress_fw=""
   fi
-  docker rm -f satbooth-egress-peer satbooth-egress-relay > /dev/null 2>&1 || true
+  docker rm -f satbooth-egress-peer satbooth-egress-relay satbooth-egress-host > /dev/null 2>&1 || true
   egress_rr ip link del vpeer-h > /dev/null 2>&1 || true
 }
 
@@ -391,6 +393,13 @@ for _ in range(3):
   on_name="sbdns-on-$RANDOM$RANDOM.example.net"
   ctl_name="sbdns-ctl-$RANDOM$RANDOM.example.net"
   egress_probe tcp 203.0.113.9 4440 > /dev/null
+  # A listener on the host itself, on the hub network's gateway address: a new connection to it takes the input path.
+  local host_ip
+  host_ip=$(docker network inspect -f '{{(index .IPAM.Config 0).Gateway}}' "${hub_project}_hub")
+  docker run -d --name satbooth-egress-host --network host "$egress_tools_image" socat "TCP-LISTEN:4446,bind=$host_ip,fork,reuseaddr" /dev/null > /dev/null
+  sleep 1
+  r=$(egress_probe tcp "$host_ip" 4446)
+  if [ "$r" = connects ]; then egress_ok "control, rules off: a new connection from the hub's namespace to the host's $host_ip:4446 connects"; else egress_bad "control: the host listener $host_ip:4446 is not reachable from the namespace with the rules off"; fi
   egress_probe dnsctl "$ctl_name" > /dev/null
   r=$(egress_probe dns "$off_name")
   egress_note "DNS probe, rules off: $off_name from the namespace: $r"
@@ -419,6 +428,10 @@ for _ in range(3):
   if [ "$r" = blocked ]; then egress_ok "canary tcp 203.0.113.9:4445 from the electrum-network address: blocked"; else egress_bad "canary from the electrum-network address connected"; fi
   r=$(egress_probe tcp "$peer_ip" 9735)
   if [ "$r" = blocked ]; then egress_ok "the peer $peer_ip:9735 before it is listed: blocked"; else egress_bad "the unlisted peer connected"; fi
+  r=$(egress_probe tcp "$host_ip" 4446)
+  if [ "$r" = blocked ]; then egress_ok "canary tcp $host_ip:4446 (the host itself, input path) from the hub's address: blocked"; else egress_bad "a new connection from the hub's namespace to the host itself connected with the rules on"; fi
+  r=$(egress_probe tcp "$host_ip" 4446 "$egress_electrum_ip")
+  if [ "$r" = blocked ]; then egress_ok "canary tcp $host_ip:4446 (the host itself) from the electrum-network address: blocked"; else egress_bad "a new connection from the electrum-network address to the host itself connected with the rules on"; fi
   d1=$(egress_drops)
   if [ "$d1" -gt "$d0" ]; then egress_ok "the drop counters rose from $d0 to $d1 over the canaries"; else egress_bad "the drop counters did not rise over the canaries ($d0 to $d1)"; fi
   # The printed add command lists the peer; then it connects.
@@ -519,9 +532,9 @@ for _ in range(3):
   # Stop the recorders, read the kernel's log, and judge.
   egress_rr dmesg > "$egress_ev/dmesg.txt" 2>&1 || egress_rr journalctl -k --no-pager > "$egress_ev/dmesg.txt" 2>&1 || true
   if [ "$egress_fw" = nft ]; then
-    egress_rr nft list chain inet satbooth_hub egress > "$egress_ev/counters.txt" 2>&1 || true
+    { egress_rr nft list chain inet satbooth_hub egress; egress_rr nft list chain inet satbooth_hub host_input; } > "$egress_ev/counters.txt" 2>&1 || true
   else
-    egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_EGRESS -n -v -x > "$egress_ev/counters.txt" 2>&1 || true
+    { egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_EGRESS -n -v -x; egress_rr "$egress_ipt" -w -L SATBOOTH_HUB_HOST -n -v -x; } > "$egress_ev/counters.txt" 2>&1 || true
   fi
   for r in hubnet peer dns-any dns-lo dns-ns conntrack; do egress_stop "$r"; done
   sleep 2

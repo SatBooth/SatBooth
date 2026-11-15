@@ -5,6 +5,7 @@
 # everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:
 # Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.
 # What leaves with an address on the electrum network (172.30.78.128/25) for anywhere outside it is dropped too.
+# A new connection from either address to the host itself (INPUT) is logged and dropped; replies are let through.
 # Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:
 #   iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT
 #   iptables-legacy -w -D SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT
@@ -28,7 +29,14 @@ IPT=${IPT:-iptables-legacy}
 -A SATBOOTH_HUB_ELECTRUM -d 172.30.78.128/25 -j RETURN
 -A SATBOOTH_HUB_ELECTRUM -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "satbooth-hub-egress: "
 -A SATBOOTH_HUB_ELECTRUM -j DROP
+:SATBOOTH_HUB_HOST - [0:0]
+-F SATBOOTH_HUB_HOST
+-A SATBOOTH_HUB_HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+-A SATBOOTH_HUB_HOST -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "satbooth-hub-egress: "
+-A SATBOOTH_HUB_HOST -j DROP
 COMMIT
 RULES
 "$IPT" -w -C DOCKER-USER -s 172.30.78.10 -j SATBOOTH_HUB_EGRESS 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s 172.30.78.10 -j SATBOOTH_HUB_EGRESS
 "$IPT" -w -C DOCKER-USER -s 172.30.78.128/25 -j SATBOOTH_HUB_ELECTRUM 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s 172.30.78.128/25 -j SATBOOTH_HUB_ELECTRUM
+"$IPT" -w -C INPUT -s 172.30.78.10 -j SATBOOTH_HUB_HOST 2>/dev/null || "$IPT" -w -I INPUT 1 -s 172.30.78.10 -j SATBOOTH_HUB_HOST
+"$IPT" -w -C INPUT -s 172.30.78.128/25 -j SATBOOTH_HUB_HOST 2>/dev/null || "$IPT" -w -I INPUT 1 -s 172.30.78.128/25 -j SATBOOTH_HUB_HOST

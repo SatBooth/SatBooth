@@ -16,14 +16,19 @@ import (
 // connection to a listed Lightning peer, an address and a port (peers do not all listen on 9735). bitcoind is another
 // container (other addresses) and is not bound: it needs the internet for its peers. The namespace has a second
 // address, on the internal electrum network; a process that bound to it would leave by the default route with that
-// source, so the rules also drop what comes from the electrum network and is not for it.
+// source, so the rules also drop what comes from the electrum network and is not for it. What the namespace sends to
+// the host itself (the bridge's gateway address, the host's private address) takes the input path, not the forward
+// path: a second chain there lets the host's replies to connections made to the namespace through and logs and drops
+// every new connection from the namespace or from the electrum network to the host.
 const (
 	logPrefix = "satbooth-hub-egress: "
 	nftTable  = "satbooth_hub"
 	nftSet    = "satbooth_hub_peers"
+	nftHost   = "host_input"
 	iptChain  = "SATBOOTH_HUB_EGRESS"
 	iptElec   = "SATBOOTH_HUB_ELECTRUM"
 	iptPeers  = "SATBOOTH_HUB_PEERS"
+	iptHost   = "SATBOOTH_HUB_HOST"
 )
 
 // nftElements is "a . p, b . q" for peers already checked by ParseLightningPeers.
@@ -49,6 +54,7 @@ func EgressNft(a *HubAnswers) string {
 	w("# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:")
 	w("# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.")
 	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
+	w("# A new connection from either address to the host itself (input path) is logged and dropped; replies are let through.")
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   nft add element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
 	w("#   nft delete element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
@@ -77,6 +83,17 @@ func EgressNft(a *HubAnswers) string {
 	} {
 		w("add rule inet %s egress ip saddr %s %s", nftTable, a.ElectrumSubnet, r)
 	}
+	w("add chain inet %s %s { type filter hook input priority -10; policy accept; }", nftTable, nftHost)
+	w("flush chain inet %s %s", nftTable, nftHost)
+	for _, src := range []string{ip, a.ElectrumSubnet} {
+		for _, r := range []string{
+			"ct state established,related accept",
+			fmt.Sprintf(`limit rate 5/minute burst 5 packets log prefix "%s"`, logPrefix),
+			"counter drop",
+		} {
+			w("add rule inet %s %s ip saddr %s %s", nftTable, nftHost, src, r)
+		}
+	}
 	return b.String()
 }
 
@@ -86,7 +103,8 @@ func EgressNft(a *HubAnswers) string {
 // is accepted there, which it would be anyway on its way out to the internet. IPT names the binary (iptables-legacy by
 // default). Running the script again replaces the egress chains in one step (never an empty chain behind the jump),
 // keeps the peers chain, adds the answers' peers that are missing, and adds each jump once. A second chain
-// (SATBOOTH_HUB_ELECTRUM) holds what comes from the electrum network. A peer is ACCEPTed in its chain, which ends the
+// (SATBOOTH_HUB_ELECTRUM) holds what comes from the electrum network, a third (SATBOOTH_HUB_HOST) what either address
+// sends to the host itself, jumped to from INPUT. A peer is ACCEPTed in its chain, which ends the
 // traversal of DOCKER-USER: rules of the operator's after the jump do not see the packets to a listed peer.
 func EgressIptables(a *HubAnswers) string {
 	var b strings.Builder
@@ -98,6 +116,7 @@ func EgressIptables(a *HubAnswers) string {
 	w("# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:")
 	w("# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.")
 	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
+	w("# A new connection from either address to the host itself (INPUT) is logged and dropped; replies are let through.")
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   iptables-legacy -w -A %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
 	w("#   iptables-legacy -w -D %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
@@ -128,10 +147,17 @@ func EgressIptables(a *HubAnswers) string {
 	w("-A %s -d %s -j RETURN", iptElec, a.ElectrumSubnet)
 	w(`-A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptElec, logPrefix)
 	w("-A %s -j DROP", iptElec)
+	w(":%s - [0:0]", iptHost)
+	w("-F %s", iptHost)
+	w("-A %s -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN", iptHost)
+	w(`-A %s -m limit --limit 5/minute --limit-burst 5 -j LOG --log-prefix "%s"`, iptHost, logPrefix)
+	w("-A %s -j DROP", iptHost)
 	w("COMMIT")
 	w("RULES")
 	w(`"$IPT" -w -C DOCKER-USER -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s %[1]s -j %[2]s`, a.HubIP, iptChain)
 	w(`"$IPT" -w -C DOCKER-USER -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I DOCKER-USER 1 -s %[1]s -j %[2]s`, a.ElectrumSubnet, iptElec)
+	w(`"$IPT" -w -C INPUT -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I INPUT 1 -s %[1]s -j %[2]s`, a.HubIP, iptHost)
+	w(`"$IPT" -w -C INPUT -s %[1]s -j %[2]s 2>/dev/null || "$IPT" -w -I INPUT 1 -s %[1]s -j %[2]s`, a.ElectrumSubnet, iptHost)
 	return b.String()
 }
 

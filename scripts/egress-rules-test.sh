@@ -40,9 +40,12 @@ ip netns exec hub ip addr add 172.30.78.130/32 dev vhub
 ip route add 172.30.78.130/32 dev rhub
 for ns in btc stub net; do for p in 443 9735 10009 53 8332 8080 50001; do (ip netns exec $ns nc -l -k -p $p >/dev/null 2>&1 &) ; done; done
 (ip netns exec hub nc -l -k -p 8080 >/dev/null 2>&1 &)
+# Listeners on the router itself: its addresses on the hub's and the electrum network's side are "the host".
+(nc -l -k -p 4446 >/dev/null 2>&1 &)
 sleep 1
-probe() { # label ns dst port expect [source address]
-  if ip netns exec $2 nc ${6:+-s $6} -z -w 2 $3 $4 2>/dev/null; then got=connects; else got=blocked; fi
+probe() { # label ns dst port expect [source address]; ns "-" is the router itself (the host)
+  if [ "$2" = - ]; then run=; else run="ip netns exec $2"; fi
+  if $run nc ${6:+-s $6} -z -w 2 $3 $4 2>/dev/null; then got=connects; else got=blocked; fi
   [ $got = $5 ] && r=ok || r=WRONG
   printf '%-6s %-62s %-9s (want %s)\n' $r "$1" $got $5
   [ $r = ok ] || FAILED=1
@@ -60,6 +63,10 @@ suite() {
   probe "hub, electrum-network source -> internet 443" hub 203.0.113.5 443 blocked 172.30.78.130
   probe "hub, electrum-network source -> listed peer 203.0.113.5:10009 (not for this source)" hub 203.0.113.5 10009 blocked 172.30.78.130
   probe "hub, electrum-network source -> stub 172.30.78.254:443" hub 172.30.78.254 443 connects 172.30.78.130
+  probe "hub -> the host itself 172.30.78.1:4446 (input path, new connection)" hub 172.30.78.1 4446 blocked
+  probe "hub, electrum-network source -> the host itself 172.30.78.1:4446" hub 172.30.78.1 4446 blocked 172.30.78.130
+  probe "host -> hub 172.30.78.10:8080 (connection made to the namespace, replies pass the input path)" - 172.30.78.10 8080 connects
+  probe "bitcoind -> the host itself 172.30.78.1:4446 (not bound)" btc 172.30.78.1 4446 connects
   probe "bitcoind -> internet 443 (not bound)" btc 203.0.113.5 443 connects
   probe "bitcoind -> internet 8080 (not bound either)" btc 203.0.113.5 8080 connects
 }
