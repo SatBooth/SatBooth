@@ -346,10 +346,6 @@ and the hub trusts no authority but the bundle's, so a TLS connection to it fail
 at `/etc/satbooth/ca.pem` (`SSL_CERT_FILE`) and nothing else of the authority's. `HUB_STUB_IP` is the last host address
 of `ELECTRUM_SUBNET`: if you edit one by hand, edit the other to match.
 
-The release image pinned in `compose.yml` (v0.1.0-rc.1) does not hold the stub yet; the next release does. With the
-pinned image, `hubstub` fails at start with `exec: /satbooth-hubstub: not found`, and the hub, which waits for it, does
-not start. Until the pin moves, run the hub bundle from source (`compose.build.yml`, "Build from source").
-
 **The hub's certificate authority.** Stage 2 on the hub host makes a private certificate authority (ECDSA P-256, valid
 10 years, allowed to vouch only for the names below) and a certificate for the hub's stub (valid 2 years) that names
 exactly these hosts: `hubstub`, `getalby.com`, `api.getalby.com`, `mempool.space`, `api.boltz.exchange`,
@@ -379,7 +375,7 @@ responses through, and replaces the response's `Content-Security-Policy` with
 form-action 'self'`, so the operator's browser, which holds the hub's admin session, loads and contacts nothing but the
 hub's own origin (the hub's own policy lets its pages show images from, and talk to, Alby's hosts and relays). It
 changes no other header and no body. A request the hub does not begin to answer within 60 seconds gets a 502; an idle
-connection is closed after 120 seconds. With the pinned rc.1 image it is missing like the stub: build from source.
+connection is closed after 120 seconds.
 
 **The hub host's egress rules.** Naming the stub's hosts in `/etc/hosts` is not a firewall: a name the hub resolves that is
 not in the list still goes out and fails only at the TLS handshake. The rules close that. They bound one thing, the

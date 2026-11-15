@@ -208,8 +208,7 @@ services:
   # The proxy in front of the hub's web UI (satbooth-hubproxy, in the relay image): it listens on 8080, the port the
   # netns container publishes on HUB_ADMIN_ADDR, forwards to the hub on 127.0.0.1:8081 and replaces the response's
   # content policy with one that allows the page's own origin and nothing else, so the operator's browser never loads
-  # or calls anything outside the bundle. Same pin as the relay (after it: the anchor is defined there), and the same note as the stub: the pinned rc.1 image
-  # does not hold it yet, build from source until the pin moves.
+  # or calls anything outside the bundle. Same pin as the relay (after it: the anchor is defined there).
   hubproxy:
     <<: *hardening
     image: *relay_image
@@ -228,9 +227,7 @@ services:
   # which a non-root process in a scratch image has.
   hubstub:
     <<: *hardening
-    # The relay image holds the stub from the release after v0.1.0-rc.1: with the pinned rc.1 image the start fails with
-    # "exec: /satbooth-hubstub: not found" and the hub never starts (it waits for the stub). Until the pin moves, build
-    # the bundle from source with compose.build.yml (deploy/README.md).
+    # The relay image holds the stub from v0.1.0-rc.2 on.
     image: *relay_image
     entrypoint: ["/satbooth-hubstub"]
     command: ["-cert", "/etc/satbooth/stub-cert.pem", "-key", "/etc/satbooth/stub-key.pem", "-listen", ":443"]
