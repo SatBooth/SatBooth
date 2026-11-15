@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 # shellcheck source=scripts/qualify-egress.sh
 . scripts/qualify-egress.sh
 
+tmpd=$(mktemp -d)
+trap 'rm -rf "${tmpd:?}"' EXIT
 fail() { echo "qualify-egress-test: FAIL: $*" >&2; exit 1; }
 want() { [ "$2" = "$3" ] || fail "$1: got '$2', want '$3'"; }
 
@@ -70,4 +72,24 @@ EOF2
 )
 want dns "$got" "getalby.com
 sbdns-1.example.net"
+# Question names from a capture of queries to a resolver on a port tcpdump does not decode (a synthetic pcap).
+python3 -I - "$tmpd/q.pcap" << 'PY'
+import struct, sys
+def q(name):
+    d = struct.pack('>HHHHHH', 1, 0x0100, 1, 0, 0, 0)
+    for l in name.split('.'):
+        d += bytes([len(l)]) + l.encode()
+    d += b'\0' + struct.pack('>HH', 1, 1)
+    udp = struct.pack('>HHHH', 50000, 43853, 8 + len(d), 0) + d
+    ip = struct.pack('>BBHHHBBH4s4s', 0x45, 0, 20 + len(udp), 0, 0, 64, 17, 0, bytes([127, 0, 0, 1]), bytes([127, 0, 0, 11]))
+    return b'\0' * 12 + b'\x08\x00' + ip + udp
+out = struct.pack('<IHHiIII', 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1)
+for n in ['getalby.com', 'Sb-1.example.net', 'getalby.com']:
+    p = q(n)
+    out += struct.pack('<IIII', 0, 0, len(p), len(p)) + p
+open(sys.argv[1], 'wb').write(out)
+PY
+want pcap_names "$(egress_pcap_names "$tmpd/q.pcap")" "getalby.com
+sb-1.example.net"
+want pcap_names_empty "$(egress_pcap_names "$tmpd/none.pcap")" ""
 echo "qualify-egress-test: ok"

@@ -84,6 +84,41 @@ egress_dns_names() {
   awk '{ for (i = 1; i < NF; i++) if ($i ~ /^(A|AAAA|HTTPS|PTR|TXT|MX|SRV|NS|CNAME)\?$/) { n = $(i + 1); sub(/\.$/, "", n); print n; break } }' | sort -u
 }
 
+# egress_pcap_names <pcap>: the question names of the DNS queries (UDP, IPv4, Ethernet) in the capture, one a line, unique.
+egress_pcap_names() {
+  python3 -I - "$1" << 'PY'
+import struct, sys
+names = set()
+try:
+    data = open(sys.argv[1], 'rb').read()
+except OSError:
+    data = b''
+if len(data) >= 24:
+    magic = struct.unpack('<I', data[:4])[0]
+    end = '<' if magic in (0xa1b2c3d4, 0xa1b23c4d) else '>'
+    pos = 24
+    while pos + 16 <= len(data):
+        incl = struct.unpack(end + 'I', data[pos + 8:pos + 12])[0]
+        pkt = data[pos + 16:pos + 16 + incl]
+        pos += 16 + incl
+        if len(pkt) < 14 + 20 + 8 + 12 or pkt[12:14] != b'\x08\x00':
+            continue
+        ihl = (pkt[14] & 15) * 4
+        if pkt[14 + 9] != 17:
+            continue
+        dns = pkt[14 + ihl + 8:]
+        if len(dns) < 12 or dns[2] & 0x80 or struct.unpack('>H', dns[4:6])[0] < 1:
+            continue
+        i, labels = 12, []
+        while i < len(dns) and dns[i] != 0 and dns[i] < 64:
+            labels.append(dns[i + 1:i + 1 + dns[i]].decode('ascii', 'replace'))
+            i += 1 + dns[i]
+        if labels:
+            names.add('.'.join(labels).lower())
+print('\n'.join(sorted(names)))
+PY
+}
+
 # --- root and the host --------------------------------------------------------------------------------------------
 
 egress_rr() { # <command...>: as root, in the host's network namespace
@@ -335,7 +370,7 @@ for _ in range(3):
   egress_bg hubnet "$egress_ev/hubnet.log" tcpdump -i "$br" -nn -e -s 96 -U -w "$egress_ev/hubnet.pcap" 'not arp and not port 53'
   egress_bg peer "$egress_ev/peer.log" tcpdump -i vpeer-h -nn -e -s 96 -U -w "$egress_ev/peer.pcap" 'not arp'
   egress_bg dns-any "$egress_ev/dns-any.log" tcpdump -i any -nn -e -s 256 -U -w "$egress_ev/dns-any.pcap" 'port 53'
-  egress_bg dns-lo "$egress_ev/dns-lo.txt" nsenter -t "$netns_pid" -n tcpdump -i lo -nn -l -s 256 'host 127.0.0.11'
+  egress_bg dns-lo "$egress_ev/dns-lo.log" nsenter -t "$netns_pid" -n tcpdump -i lo -nn -s 512 -U -w "$egress_ev/dns-lo.pcap" 'udp and host 127.0.0.11'
   egress_bg conntrack "$egress_ev/conntrack.txt" conntrack -E -e NEW -o timestamp,extended
   sleep 2
 
@@ -444,7 +479,7 @@ for _ in range(3):
     egress_bad "no Chrome on this host: the pages were not loaded"
   else
     printf 'regtest-only-unlock\n' > "$egress_ev/pw.tmp"
-    if "$egress_ev/uicheck" -chrome "$chrome" -base "$admin" -password-file "$egress_ev/pw.tmp" -out "$egress_ev/uicheck.json" | tee "$egress_ev/uicheck.txt"; then
+    if "$egress_ev/uicheck" -chrome "$chrome" -base "$admin" -password-file "$egress_ev/pw.tmp" -out "$egress_ev/uicheck.json" 2>&1 | tee "$egress_ev/uicheck.txt"; then
       egress_ok "the logged-in pages through the proxy: no request sent to another origin ($(sed -n 1p "$egress_ev/uicheck.txt"))"
     else
       egress_bad "the page check failed (uicheck.txt, uicheck.json)"
@@ -543,7 +578,9 @@ egress_judge() {
 
   # DNS. Names the hub's namespace asked its resolver (inside the namespace), against what any interface of the host saw.
   # The two names looked up by the probes show where Docker's resolver sends its upstream queries from.
-  egress_dns_names < "$egress_ev/dns-lo.txt" > "$egress_ev/dns-asked-in-namespace.txt"
+  # The namespace's queries go to Docker's resolver on 127.0.0.11, at a port tcpdump does not decode: the names are read
+  # from the packets' DNS questions.
+  egress_pcap_names "$egress_ev/dns-lo.pcap" > "$egress_ev/dns-asked-in-namespace.txt"
   tcpdump -nn -e -r "$egress_ev/dns-any.pcap" 2> /dev/null > "$egress_ev/dns-host.txt" || true
   local nm where
   for nm in "$off_name" "$on_name"; do
@@ -553,7 +590,7 @@ egress_judge() {
   if grep -F "$off_name" "$egress_ev/dns-host.txt" | grep -q "$egress_hub_ip\.[0-9]* > "; then
     egress_note "DNS (rules off): Docker's resolver forwards from the container's own namespace (source $egress_hub_ip seen on the host)"
   else
-    egress_note "DNS (rules off): the lookup was not seen with the hub's address as its source (dns-host.txt shows where it was)"
+    egress_note "DNS (rules off): the upstream query was NOT sent from the hub's namespace (no packet with source $egress_hub_ip): Docker's resolver forwards from the host's namespace (dns-host.txt: the interfaces and sources)"
   fi
   # A query "leaves" when it is sent Out of an interface that is not loopback, a Docker bridge or veth, or the peer's: the
   # host's own resolver path to its upstream, whatever the interface is called.

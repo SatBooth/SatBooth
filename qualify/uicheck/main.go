@@ -136,6 +136,14 @@ func clip(s string) string {
 	return s
 }
 
+// tail is the end of a long text, for the output of a browser that did not start.
+func tail(s string, n int) string {
+	if len(s) > n {
+		return "..." + s[len(s)-n:]
+	}
+	return s
+}
+
 func main() {
 	chrome := flag.String("chrome", "", "the Chrome binary")
 	base := flag.String("base", "", "the proxy's origin, http://host:port")
@@ -156,14 +164,16 @@ func main() {
 	dir, _ := os.MkdirTemp("", "uicheck")
 	defer os.RemoveAll(dir)
 	cmd := exec.Command(*chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--no-first-run", "--disable-extensions",
-		"--user-data-dir="+dir, "--remote-debugging-port=0", "about:blank")
+		"--disable-dev-shm-usage", "--user-data-dir="+dir, "--remote-debugging-port=0", "about:blank")
+	var chromeLog strings.Builder
+	cmd.Stderr, cmd.Stdout = &chromeLog, &chromeLog
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "uicheck: cannot start Chrome:", err)
 		os.Exit(1)
 	}
 	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 	var wsURL string
-	for i := 0; i < 100 && wsURL == ""; i++ {
+	for i := 0; i < 300 && wsURL == ""; i++ {
 		if b, err := os.ReadFile(filepath.Join(dir, "DevToolsActivePort")); err == nil {
 			if f := strings.Split(strings.TrimSpace(string(b)), "\n"); len(f) >= 2 {
 				wsURL = "ws://127.0.0.1:" + f[0] + f[1]
@@ -172,7 +182,9 @@ func main() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	if wsURL == "" {
-		fmt.Fprintln(os.Stderr, "uicheck: Chrome did not open its debugging port")
+		fmt.Fprintln(os.Stderr, "uicheck: Chrome did not open its debugging port; its output:")
+		fmt.Fprintln(os.Stderr, tail(chromeLog.String(), 2000))
+		_ = os.WriteFile(*out+".chrome.log", []byte(chromeLog.String()), 0o644)
 		os.Exit(1)
 	}
 	conn, _, err := websocket.Dial(ctx, wsURL, nil)
