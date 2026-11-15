@@ -416,12 +416,24 @@ func (e *imgEnv) customerPays(bolt11 string, msat int64) {
 	e.oneRow(e.mer, "the merchant's", tx.PaymentHash, "outgoing", msat)
 }
 
-// oneRow requires exactly one settled row of typ and msat at the hub for the payment hash, and returns its fee.
+// oneRow requires exactly one settled row of typ and msat at the hub for the payment hash, and returns its fee. The
+// payer learns "settled" when the preimage comes back, which can be before the receiving hub has recorded its own
+// row, so it waits up to rowWait for a settled row before it judges the rows.
 func (e *imgEnv) oneRow(h *hubAPI, name, hash, typ string, msat int64) int64 {
 	e.t.Helper()
-	rs, err := h.rowsFor(hash)
-	if err != nil {
-		e.t.Fatal(err)
+	const rowWait = 15 * time.Second
+	end := time.Now().Add(rowWait)
+	var rs []hubTx
+	for {
+		var err error
+		rs, err = h.rowsFor(hash)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		if slices.ContainsFunc(rs, func(r hubTx) bool { return r.State == "settled" }) || time.Now().After(end) {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 	if len(rs) != 1 || rs[0].Type != typ || rs[0].State != "settled" || int64(rs[0].AmountMsat) != msat {
 		e.t.Errorf("%s hub: rows %v, want one %s settled of %d msat", name, rowStates(rs), typ, msat)
