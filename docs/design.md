@@ -1890,7 +1890,7 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    `DAC_READ_SEARCH`, no network) gives each volume and file to the user that reads it and each directory mode 0700,
    and never changes a file's mode, so a loose secret file is still refused by whatever reads it. Every long-running
    service runs with a read-only root, all capabilities dropped and `no-new-privileges`.
-   - **The hub host** runs Alby Hub v1.24.7 (pinned by digest; its qualification is pending), `satbooth-relay` from the release
+   - **The hub host** runs Alby Hub v1.24.7 (pinned by digest; the egress group of `qualify/REPORT.md` ran the Lightning phases against it), `satbooth-relay` from the release
      image, bitcoind (Bitcoin Core 32.1, pruned to about 50 GB by default), with the `electrum` profile Fulcrum 2.1.4 as the
      hub's Electrum server (it needs an unpruned bitcoind with `txindex=1`: the full chain and Fulcrum's own index, not the pruned default) and, with the `monero`
      profile, monerod and SatBooth's view-only monero-wallet-rpc (v0.18.5.4). bitcoind, Fulcrum and the Monero binaries are the
@@ -2364,7 +2364,7 @@ From these follow the rules below, as built.
   base, with no third-party image; the suite runs locally and in a separate GitHub workflow (manual dispatch
   and weekly), while normal pull requests keep the offline checks. Implementation choices:
   - the hub is the v1.24.7 release image, pinned by digest (`dependencies.md` §8); the suite ran against v1.24.6
-    (tag at `921003b`, the commit the source citations name), and the run against v1.24.7 is pending;
+    (tag at `921003b`, the commit the source citations name), and the egress group ran the Lightning phases against v1.24.7 and passed (`qualify/REPORT.md`, "The hub with no outside calls");
   - the Compose network is `internal: true`, so the test network has no internet and the run is also the egress
     test of §2.1. The tests run in a container on that network, never on the host. Observed: the hubs reach
     `running` without internet, and the startup channel-suggestion call fails without blocking;

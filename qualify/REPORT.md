@@ -1121,9 +1121,17 @@ full run, with the Monero, refund and image groups on the pruned node, is the re
 
 ## The hub with no outside calls (`--only egress`)
 
-Method only: no result is recorded here until `qualify.yml` has been dispatched on the branch (the group needs Linux with
-root, which GitHub's hosted runner has; it prints "NOT RUN" elsewhere and claims nothing). The evidence of a run is the
-`qualify-logs` artifact (`dev/regtest/logs/egress/`, `summary.txt` first), kept whether the run passed or not.
+The group needs Linux with root, which GitHub's hosted runner has; it prints "NOT RUN" elsewhere and claims nothing. The
+evidence of a run is the `qualify-logs` artifact (`dev/regtest/logs/egress/`, `summary.txt` first), kept whether the run
+passed or not.
+
+Result: the group passed in https://github.com/SatBooth/SatBooth/actions/runs/43695438005. The hub bundle (Alby Hub v1.24.7) ran under the printed nftables rules (the runner's
+Docker uses nftables): only the listed Lightning peer passed the firewall, and no DNS query for a name outside the
+pinned ones left the host. The logged-in pages through the proxy made 142 requests, none to another origin;
+`GET /api/health` through the proxy answered 200; `TestLightningPay` and `TestRefundPay` passed with the rules on. A
+lookup of an unpinned name never resolved; each took 12 to 13 s (the seconds are information, not a bound). The
+iptables-legacy script is run by `scripts/egress-rules-test.sh`, in the egress step of `qualify.yml`, in a privileged
+container with its own network namespace.
 
 What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh`; the full run ends with it):
 
@@ -1150,7 +1158,8 @@ What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh
 - **Controls, so that a silence means something**: before the rules, a connection and a name lookup from inside the hub's
   namespace leave the host and must be seen; after them, a TCP connection from the hub's address, a datagram, and a
   connection from the namespace's electrum-network address to a documentation address must each be blocked, counted and
-  seen on the bridge. The page check has its own control (below).
+  seen on the bridge; so must a new connection to a listener on the host itself (the hub network's gateway address, the
+  input path), which connects with the rules off. The page check has its own control (below).
 - **Judged**: no connection from the hub's address or the electrum network to outside the bundle's and the regtest
   networks passed the firewall except the listed peer's; every packet the hub's namespace sent to such a destination and
   that is not a control or for the peer is printed as a finding (the rules dropped it; it is a call to read, not noise);
@@ -1159,7 +1168,7 @@ What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh
   are listed in `stub-calls.txt`.
 - **DNS is measured, not assumed.** Docker's embedded resolver sends its upstream queries from the host's namespace,
   where the printed rules do not see them, so the bundle's `netns` service sets `dns:` to the stub's address (no DNS
-  port: refused at once, inside the host). The group looks up unpinned names from inside the namespace with the rules
+  port: the query fails inside the host and never resolves). The group looks up unpinned names from inside the namespace with the rules
   off and with them on, with every interface of the host and the namespace's loopback recorded, and requires: the
   lookup never resolves (the seconds are recorded as information: Docker's resolver times each query out after 4 s against the stub, which has no DNS port), and the name appears nowhere on the host's loopback (its resolver) or sent out of the host
   (a packet on a Docker bridge is the query going to the stub). Its control is a container on the hub's network
@@ -1175,7 +1184,7 @@ What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh
   listed (`third_party_blocked_by_policy`). Its control makes the page try a `fetch`, a websocket and an image on an
   outside origin: all three must be blocked and recorded as violations, or the recorder is called blind and the run fails.
 
-Limits, stated before the first run: the hub's connection to the merchant that the Lightning phases use is the established
+Limits: the hub's connection to the merchant that the Lightning phases use is the established
 one made through the regtest network, so the phases show the hub works with the rules on, and the listed-peer behaviour is
 shown by the probes and the hub's own dials, not by a channel opened through the veth. The recorder sees the hub bridge,
 not the regtest network (internal, no route out). The captures of the peer's veth and the bridge see headers only.
