@@ -1,0 +1,318 @@
+package setup
+
+import (
+	"crypto/x509"
+	"encoding/pem"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+func parseCert(t *testing.T, p []byte) *x509.Certificate {
+	t.Helper()
+	b, _ := pem.Decode(p)
+	if b == nil {
+		t.Fatal("no PEM block")
+	}
+	c, err := x509.ParseCertificate(b.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func verifyName(ca, leaf *x509.Certificate, name string) error {
+	pool := x509.NewCertPool()
+	pool.AddCert(ca)
+	_, err := leaf.Verify(x509.VerifyOptions{Roots: pool, DNSName: name, CurrentTime: clock(),
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+	return err
+}
+
+func newPair(t *testing.T, seed int64) (caCert, caKey, cert, key []byte) {
+	t.Helper()
+	r := detRand(seed)
+	caCert, caKey, err := NewCA(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, key, err = IssueStubCert(caCert, caKey, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+// The chain verifies for each name of the list, and for no other.
+func TestStubCertVerifiesForItsNamesOnly(t *testing.T) {
+	caPEM, _, certPEM, _ := newPair(t, 1)
+	ca, leaf := parseCert(t, caPEM), parseCert(t, certPEM)
+	if !slices.Equal(leaf.DNSNames, StubNames()) || len(leaf.IPAddresses) != 0 || len(leaf.EmailAddresses) != 0 || len(leaf.URIs) != 0 {
+		t.Errorf("SANs %v %v, want exactly %v", leaf.DNSNames, leaf.IPAddresses, StubNames())
+	}
+	if StubNames()[0] != "hubstub" {
+		t.Error("hubstub is not first")
+	}
+	for _, n := range StubNames() {
+		if err := verifyName(ca, leaf, n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	for _, n := range []string{"example.com", "www.getalby.com", "evil.getalby.com", "hub", "stub", "localhost",
+		"blockstream.info", "relay.getalby.com", "megalithic.me.evil.test"} {
+		if err := verifyName(ca, leaf, n); err == nil {
+			t.Errorf("verification passed for %q", n)
+		}
+	}
+	// A system-style trust store without our CA does not verify it, and the leaf is not a CA.
+	if err := verifyName(leaf, leaf, "hubstub"); err == nil && leaf.IsCA {
+		t.Error("the leaf is a CA")
+	}
+	if leaf.IsCA || leaf.KeyUsage&x509.KeyUsageCertSign != 0 {
+		t.Error("the leaf may sign")
+	}
+	if !ca.IsCA || ca.MaxPathLen != 0 || !ca.MaxPathLenZero {
+		t.Error("the CA may sign below a leaf")
+	}
+	if ca.NotAfter.Sub(ca.NotBefore) < 10*365*24*time.Hour || leaf.NotAfter.Sub(leaf.NotBefore) < 2*365*24*time.Hour ||
+		leaf.NotAfter.Sub(leaf.NotBefore) > 2*365*24*time.Hour+time.Hour {
+		t.Errorf("lifetimes: CA %v, leaf %v", ca.NotAfter.Sub(ca.NotBefore), leaf.NotAfter.Sub(leaf.NotBefore))
+	}
+}
+
+// Seeded property: for random subsets and mutations of the names, a name verifies exactly when it is in the list.
+func TestStubCertSANProperty(t *testing.T) {
+	caPEM, _, certPEM, _ := newPair(t, 2)
+	ca, leaf := parseCert(t, caPEM), parseCert(t, certPEM)
+	if !reflect.DeepEqual(leaf.DNSNames, StubNames()) {
+		t.Fatal("SAN list does not round-trip")
+	}
+	r := rand.New(rand.NewSource(7))
+	names := StubNames()
+	alphabet := "abcdefghijklmnopqrstuvwxyz0123456789-.*_ABC"
+	for i := 0; i < 2000; i++ {
+		var n string
+		switch r.Intn(4) {
+		case 0:
+			n = names[r.Intn(len(names))]
+		case 1: // a listed name with one character changed, added or dropped
+			b := []byte(names[r.Intn(len(names))])
+			switch p := r.Intn(len(b)); r.Intn(3) {
+			case 0:
+				b[p] = alphabet[r.Intn(len(alphabet))]
+			case 1:
+				b = append(b[:p], append([]byte{alphabet[r.Intn(len(alphabet))]}, b[p:]...)...)
+			default:
+				b = append(b[:p], b[p+1:]...)
+			}
+			n = string(b)
+		case 2: // a listed name with a label added or its case changed
+			n = []string{"x.", "www.", "a.b."}[r.Intn(3)] + names[r.Intn(len(names))]
+		default:
+			b := make([]byte, r.Intn(30))
+			for j := range b {
+				b[j] = alphabet[r.Intn(len(alphabet))]
+			}
+			n = string(b)
+		}
+		if n == "" {
+			continue // Go checks no name for an empty one
+		}
+		in := slices.ContainsFunc(names, func(s string) bool { return strings.EqualFold(s, strings.TrimSuffix(n, ".")) })
+		if err := verifyName(ca, leaf, n); (err == nil) != in {
+			t.Fatalf("%q: in list %v, verify error %v", n, in, err)
+		}
+	}
+}
+
+// A leaf from another CA does not verify under ours.
+func TestStubCertFromAnotherCAFails(t *testing.T) {
+	caA, _, _, _ := newPair(t, 3)
+	_, _, certB, _ := newPair(t, 4)
+	if err := verifyName(parseCert(t, caA), parseCert(t, certB), "hubstub"); err == nil {
+		t.Error("a leaf of another CA verifies")
+	}
+}
+
+func TestIssueRefusesBadCA(t *testing.T) {
+	caCert, caKey, cert, key := newPair(t, 5)
+	_, otherKey, _, _ := newPair(t, 6)
+	for name, c := range map[string]struct{ cert, key []byte }{
+		"key of another CA":  {caCert, otherKey},
+		"a leaf as the CA":   {cert, key},
+		"garbage":            {[]byte("x"), caKey},
+		"no key":             {caCert, nil},
+		"certificate as key": {caCert, caCert},
+	} {
+		if _, _, err := IssueStubCert(c.cert, c.key, detRand(1)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	old := clock
+	defer func() { clock = old }()
+	clock = func() time.Time { return old().Add(11 * 365 * 24 * time.Hour) }
+	if _, _, err := IssueStubCert(caCert, caKey, detRand(1)); err == nil {
+		t.Error("an expired CA signed a leaf")
+	}
+}
+
+// The leaf never outlives the CA.
+func TestLeafEndsWithTheCA(t *testing.T) {
+	old := clock
+	defer func() { clock = old }()
+	caCert, caKey, _, _ := newPair(t, 8)
+	ca := parseCert(t, caCert)
+	clock = func() time.Time { return ca.NotAfter.Add(-24 * time.Hour) }
+	c, _, err := IssueStubCert(caCert, caKey, detRand(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parseCert(t, c).NotAfter.After(ca.NotAfter) {
+		t.Error("the leaf outlives the CA")
+	}
+}
+
+func fileMode(t *testing.T, p string) os.FileMode {
+	t.Helper()
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.Mode().Perm()
+}
+
+// Stage 2 writes the four files, every one 0600, the CA key only under setup/, and no file of config/ or of the
+// state holds the CA key.
+func TestHubInitWritesTheCA(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(2)
+	d := e.hubDir
+	for _, n := range []string{caCertFile, stubCertFile, stubKeyFile, caKeyFile} {
+		if m := fileMode(t, filepath.Join(d, n)); m != 0o600 {
+			t.Errorf("%s has mode %o", n, m)
+		}
+	}
+	caKey := e.read(d, caKeyFile)
+	if !strings.Contains(string(caKey), "EC PRIVATE KEY") {
+		t.Fatal("setup/ca-key.pem is not a key")
+	}
+	err := filepath.WalkDir(d, func(p string, de os.DirEntry, err error) error {
+		if err != nil || de.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(d, p)
+		b, _ := os.ReadFile(p)
+		if rel != caKeyFile && strings.Contains(string(b), strings.TrimSpace(string(caKey[strings.Index(string(caKey), "\n"):]))[:40]) {
+			t.Errorf("the CA key's content is in %s", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, leaf := parseCert(t, e.read(d, caCertFile)), parseCert(t, e.read(d, stubCertFile))
+	for _, n := range StubNames() {
+		if err := verifyName(ca, leaf, n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	if strings.Contains(string(e.read(d, stubKeyFile)), string(caKey)) || string(e.read(d, stubKeyFile)) == string(caKey) {
+		t.Error("the stub's key is the CA's")
+	}
+}
+
+func renew(t *testing.T, dir string, seed int64) (*Report, error) {
+	t.Helper()
+	lk, err := LockDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lk.Close()
+	return lk.HubRenewCert(detRand(seed))
+}
+
+// A rerun renews the leaf and keeps the CA, its key and every other file, at the same modes.
+func TestRenewKeepsTheCA(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	before := snapshot(t, d)
+	old := clock
+	defer func() { clock = old }()
+	clock = func() time.Time { return old().Add(400 * 24 * time.Hour) }
+	if _, err := renew(t, d, 9); err != nil {
+		t.Fatal(err)
+	}
+	after := snapshot(t, d)
+	for n, v := range before {
+		switch n {
+		case stubCertFile, stubKeyFile:
+			if after[n] == v {
+				t.Errorf("%s was not renewed", n)
+			}
+		default:
+			if after[n] != v {
+				t.Errorf("%s changed", n)
+			}
+		}
+	}
+	if len(after) != len(before) {
+		t.Errorf("files: %d before, %d after (a temporary file is left?)", len(before), len(after))
+	}
+	for _, n := range []string{stubCertFile, stubKeyFile} {
+		if m := fileMode(t, filepath.Join(d, n)); m != 0o600 {
+			t.Errorf("%s has mode %o", n, m)
+		}
+	}
+	ca, leaf := parseCert(t, e.read(d, caCertFile)), parseCert(t, e.read(d, stubCertFile))
+	for _, n := range StubNames() {
+		if err := verifyName(ca, leaf, n); err != nil {
+			t.Errorf("%s: %v", n, err)
+		}
+	}
+	if !leaf.NotBefore.After(old()) {
+		t.Error("the renewed leaf is not newer")
+	}
+	// A second rerun works too, and leaves no temporary file.
+	if _, err := renew(t, d, 10); err != nil {
+		t.Fatal(err)
+	}
+	if exists(filepath.Join(d, stubCertFile+".new")) || exists(filepath.Join(d, stubKeyFile+".new")) {
+		t.Error("a temporary file is left")
+	}
+}
+
+func TestRenewRefusals(t *testing.T) {
+	// Not set up at all.
+	if _, err := renew(t, baseDir(t), 1); err == nil {
+		t.Error("renewed in an empty directory")
+	}
+	// The public host's directory is not a hub host.
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(1)
+	if _, err := renew(t, e.pubDir, 1); err == nil {
+		t.Error("renewed on the public host")
+	}
+	// A CA key that is gone or does not match the CA certificate.
+	e = newEnv(t, fxEveryRail(t))
+	e.upTo(2)
+	other := newEnv(t, fxEveryRail(t))
+	other.upTo(2)
+	if err := os.WriteFile(filepath.Join(e.hubDir, caKeyFile), other.read(other.hubDir, caKeyFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renew(t, e.hubDir, 1); err == nil {
+		t.Error("renewed with another CA's key")
+	}
+	if err := os.Remove(filepath.Join(e.hubDir, caKeyFile)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renew(t, e.hubDir, 1); err == nil {
+		t.Error("renewed without the CA key")
+	}
+}

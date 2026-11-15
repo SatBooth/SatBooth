@@ -52,7 +52,18 @@ func (lk *Lock) HubInit(a *HubAnswers, handoff []byte, digest string, rand io.Re
 			return nil, err
 		}
 	}
-	files := []file{{name: "config/hub.env", data: HubEnv(hubPass)}}
+	caCert, caKey, err := NewCA(rand)
+	if err != nil {
+		return nil, err
+	}
+	stubCert, stubKey, err := IssueStubCert(caCert, caKey, rand)
+	if err != nil {
+		return nil, err
+	}
+	// The CA key goes to setup/, which no service mounts; the hub gets the CA certificate and the stub its own pair.
+	files := []file{{name: "config/hub.env", data: HubEnv(hubPass)},
+		{name: caCertFile, data: caCert}, {name: stubCertFile, data: stubCert}, {name: stubKeyFile, data: stubKey},
+		{name: caKeyFile, data: caKey}}
 	if ha.Electrum {
 		files = append(files, file{name: "config/fulcrum.conf", data: FulcrumConf(fulPass)})
 	}

@@ -237,7 +237,8 @@ var (
 	hubStage2 = []string{"config/", "config/wallet-rpc/", "wallet/", "setup/", "setup/carry/", "config/hub.env",
 		"config/fulcrum.conf", "config/bitcoin.conf", "config/monerod.conf", "config/wallet-rpc/rpc-login",
 		"config/wallet-rpc/wallet.pass", "setup/carry/wallet-rpc.pass", "setup/read-public-to-hub.json",
-		"setup/state.json", "compose.env"}
+		"setup/state.json", "compose.env",
+		"config/hub-ca.pem", "config/stub-cert.pem", "config/stub-key.pem", "setup/ca-key.pem"}
 	hubStage3 = append(append([]string{}, hubStage2...), "config/relay.json", "setup/hub-to-public.json")
 )
 
@@ -350,7 +351,7 @@ func TestLightningOnlyStages(t *testing.T) {
 		"setup/public-to-hub.json", "setup/state.json", "compose.env", "etc/satbooth.json", "setup/read-hub-to-public.json"})
 	wantTree(t, "hub", e.hubDir, []string{"config/", "wallet/", "setup/", "config/hub.env", "config/fulcrum.conf",
 		"config/bitcoin.conf", "setup/read-public-to-hub.json", "setup/state.json", "compose.env", "config/relay.json",
-		"setup/hub-to-public.json"})
+		"setup/hub-to-public.json", "config/hub-ca.pem", "config/stub-cert.pem", "config/stub-key.pem", "setup/ca-key.pem"})
 	if _, err := service.ParseConfig(e.read(e.pubDir, "etc/satbooth.json")); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +374,7 @@ func TestPrunedHubStages(t *testing.T) {
 	}
 	wantTree(t, "hub", e.hubDir, []string{"config/", "wallet/", "setup/", "config/hub.env",
 		"config/bitcoin.conf", "setup/read-public-to-hub.json", "setup/state.json", "compose.env", "config/relay.json",
-		"setup/hub-to-public.json"})
+		"setup/hub-to-public.json", "config/hub-ca.pem", "config/stub-cert.pem", "config/stub-key.pem", "setup/ca-key.pem"})
 	conf := string(e.read(e.hubDir, "config/bitcoin.conf"))
 	if !strings.Contains(conf, "\nprune=50000\n") || strings.Contains(conf, "txindex") || strings.Contains(conf, "fulcrum") {
 		t.Errorf("bitcoin.conf:\n%s", conf)

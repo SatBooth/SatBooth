@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]
+# Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert> [options]
 #
 # Pulls the pinned release tools image (with SATBOOTH_BUILD=1 in the environment: builds it from this repository
 # instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only
@@ -18,7 +18,7 @@ case "${SATBOOTH_BUILD:-}" in
 esac
 
 usage() {
-  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]" >&2
+  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert> [options]" >&2
   echo "       (options are those of satbooth-setup, except -dir and -host-dir, which are set here)" >&2
   exit 2
 }

@@ -36,6 +36,7 @@ const usageText = `usage:
   satbooth-setup hub init      -dir <dir> [-host-dir <path>] -handoff <file> [-digest <digest>] [-answers <file>]
   satbooth-setup hub pair      -dir <dir> [-invoice-wallet <hex>] [-payout-wallet <hex>]
   satbooth-setup public finish -dir <dir> -handoff <file> [-digest <digest>] [-wallet-rpc-pass <file>]
+  satbooth-setup hub renew-cert -dir <dir>   (a new certificate for the stub, from the same CA)
   any stage: -discard-incomplete (remove what an unfinished run of the stage left)
              -source-build (the images are built from this repository: the start commands name compose.build.yml)`
 
@@ -58,6 +59,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	sourceBuild := fs.Bool("source-build", false, "")
 	var answers, hubURL, hostDir, handoff, digest, invoiceW, payoutW, walletPass *string
 	var st setup.Stage
+	renew := false
 	str := func(name string) *string { return fs.String(name, "", "") }
 	switch host + " " + stage {
 	case "public init":
@@ -72,6 +74,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "public finish":
 		handoff, digest, walletPass = str("handoff"), str("digest"), str("wallet-rpc-pass")
 		st = setup.StagePublicDone
+	case "hub renew-cert":
+		renew = true
 	default:
 		return usage("unknown stage")
 	}
@@ -90,6 +94,22 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if given[name] && fs.Lookup(name).Value.String() == "" {
 			return usage("-" + name + " is given with an empty value")
 		}
+	}
+	if renew {
+		if *discard || *sourceBuild {
+			return usage("hub renew-cert takes -dir only")
+		}
+		lock, err := setup.LockDir(*dir)
+		if err != nil {
+			return fail(stderr, err)
+		}
+		defer lock.Close()
+		rep, err := lock.HubRenewCert(randSource)
+		if err != nil {
+			return fail(stderr, err)
+		}
+		printReport(stdout, "hub renew-cert", rep)
+		return 0
 	}
 	if handoff != nil && *handoff == "" && !*discard {
 		return usage("-handoff is required")

@@ -334,6 +334,17 @@ directories. Every file is created with mode 0600 and every directory with 0700,
 directory's path may hold only letters, digits and `/._-` (it goes into a Compose env file), and the wrapper refuses a
 colon in any path it mounts (Docker's mount syntax).
 
+**The hub's certificate authority.** Stage 2 on the hub host makes a private certificate authority (ECDSA P-256, valid
+10 years) and a certificate for the hub's stub (valid 2 years) that names exactly these hosts: `hubstub`, `getalby.com`,
+`api.getalby.com`, `mempool.space`, `api.boltz.exchange`, `api.satsrouting.exchange`, `megalithic.me`,
+`electrum.getalbypro.com` and `vss.getalbypro.com`. The hub trusts that authority alone (`SSL_CERT_FILE`), so the
+certificate verifies for those names and for no other. Files: `config/hub-ca.pem` (the authority's certificate, for the
+hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the stub), and `setup/ca-key.pem`, the authority's key: it is
+in `setup/`, which no service mounts, and is never copied; keep it that way. Every file has mode 0600. Before the
+certificate expires, run `deploy/setup.sh <dir> hub renew-cert`: it writes a new certificate and key for the stub from
+the same authority and leaves every other file as it is; restart the stub afterwards. The hub and bitcoind do not
+restart.
+
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
 65532 and sets them to 0700, and `etc/`'s files go with it: after the first start you read them as root. On the hub
 host it gives each configuration file to the user that reads it (the hub, bitcoind, Fulcrum if `fulcrum.conf` exists, and with Monero
