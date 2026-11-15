@@ -853,18 +853,22 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   required value, so an empty one is an error, never every interface (`scripts/check.sh`). Inside the hub host,
   monerod and wallet-rpc have a network of their own: no other container can call monerod's RPC, which has no login
   and, unrestricted, could be pointed at a chain of someone else's making (`set_bootstrap_daemon`) that wallet-rpc
-  would then report as payments; monerod also runs with `--restricted-rpc`. Fulcrum is on an internal network with
-  only bitcoind and the hub's namespace, with no route out. The example `bitcoin.conf` confines Fulcrum's bitcoind
-  user by `rpcwhitelist` to the 15 calls Fulcrum 2.1.4 makes. Accepted residuals:
-  - **bitcoind and Fulcrum can reach the hub's API on 8080.** The hub's HTTP listener binds every address of its
+  would then report as payments; monerod also runs with `--restricted-rpc`. By default there is no Fulcrum: the bundle runs no Electrum server, and pins the hub's
+  `LDK_ELECTRUM_SERVER` to `tcp://127.0.0.1:9`, where nothing listens. That pin is the control against the hub's
+  default, Alby's Electrum server (getAlby/hub v1.24.6 `config/models.go:34`): without it the hub's two address
+  lookups (deposit-address rotation, auto swap-out to an xpub) would tell a third party the hub's addresses and the
+  host's IP. With the opt-in `electrum` profile, Fulcrum is on an internal network with only bitcoind and the hub's
+  namespace, with no route out, and the example `bitcoin.conf` confines Fulcrum's bitcoind user by `rpcwhitelist` to
+  the 15 calls Fulcrum 2.1.4 makes. Accepted residuals:
+  - **bitcoind (and, with the `electrum` profile, Fulcrum) can reach the hub's API on 8080.** The hub's HTTP listener binds every address of its
     namespace and has no setting for the address (getAlby/hub v1.24.6 `cmd/http/main.go:59`), and a published port
     reaches the container's address, not its loopback, so the hub's listener cannot be narrowed to the tunnel without
-    a forwarder or firewall rules inside the namespace. So a compromised bitcoind (on the `hub` network) or Fulcrum (a
+    a forwarder or firewall rules inside the namespace. So a compromised bitcoind (on the `hub` network) or, with the profile, Fulcrum (a
     parser bug fed by chain data, on the `electrum` network) can connect to the API. It still needs the unlock
     password or a token, and the hub limits unlock attempts with one global bucket of 1 a second, burst 2
     (`http/http_service.go:99-113`). A hub that has not been set up yet belongs to whoever opens its setup first. The
     bundle's setup order narrows that window: the first `up` starts only `volume-init`, `netns`, bitcoind and the hub,
-    and the operator sets the unlock password through the tunnel before Fulcrum, the relay or the rest start, and
+    and the operator sets the unlock password through the tunnel before Fulcrum (if run), the relay or the rest start, and
     before the public host is connected to the private link (`deploy/README.md`, "The hub host"). bitcoind is already
     running in that window, so the window is bounded by how soon the operator sets the password, not closed.
   - **The hub's own bitcoind RPC user.** The example `bitcoin.conf` confines it by `rpcwhitelist` to the eleven
@@ -900,7 +904,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`. `scripts/image-check.sh` refuses any other file,
   in CI, and `.dockerignore` keeps the build context to the Go sources, `vendor/`, `go.mod`, `go.sum` and the three
   files `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root
-  filesystem, all capabilities dropped and `no-new-privileges`. On the hub host, bitcoind, Fulcrum, monerod and
+  filesystem, all capabilities dropped and `no-new-privileges`. On the hub host, bitcoind, Fulcrum (the `electrum` profile), monerod and
   wallet-rpc are built from the official release tarballs, checked against pinned SHA-256 hashes, on a digest-pinned
   `debian:13-slim`, and Alby Hub is its release image pulled by digest; SatBooth's own images never contain them
   (`dependencies.md` §8).
@@ -1144,7 +1148,7 @@ neither host (`satbooth-approve` is not in the tools image; setup takes approval
 | public | the API keys | the plain keys in the setup directory; their SHA-256 hashes in `api_keys_file` | the merchant's app holds the keys; SatBooth reads the hashes |
 | public | the webhook secrets (one per endpoint since plan 13) and, if configured, the alert secret | `webhooks[].secret_file` and the `alerts` block's secret file in `SATBOOTH_ETC` | SatBooth (65532) |
 | hub | the hub's bitcoind password | `hub.env` in `HUB_CONFIG_DIR`; its `rpcauth` line in `bitcoin.conf` | the hub (10003); bitcoind (10001) reads the hash |
-| hub | Fulcrum's bitcoind password | `fulcrum.conf`; its `rpcauth` line in `bitcoin.conf` | Fulcrum (10004); bitcoind reads the hash |
+| hub | Fulcrum's bitcoind password (`electrum` profile only) | `fulcrum.conf`; its `rpcauth` line in `bitcoin.conf` | Fulcrum (10004); bitcoind reads the hash |
 | hub | the wallet-rpc login password (Monero) | `wallet-rpc/rpc-login`, and the copy the operator carries | wallet-rpc (10002); SatBooth through the copy |
 | hub | the view-only wallet's password (Monero) | `wallet-rpc/wallet.pass` | wallet-rpc (10002) |
 

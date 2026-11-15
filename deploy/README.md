@@ -101,7 +101,9 @@ carries the public host's copies so that the stage can refuse when the two hosts
 | `hub_admin_addr` | where the hub's admin page is published (`HUB_ADMIN_ADDR`): an IPv4 loopback or private address, never one of the two link addresses and not inside `hub_subnet` or `electrum_subnet` | `127.0.0.1` |
 | `hub_subnet` | the hub bundle's Docker network (`HUB_SUBNET`): an IPv4 network of `/16` to `/29` | `172.30.78.0/25` |
 | `hub_ip` | the hub's fixed address in it (`HUB_IP`): not its network, gateway or broadcast address | `172.30.78.10` |
-| `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`); must not overlap `hub_subnet` | `172.30.78.128/25` |
+| `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`), needed with or without the Electrum server; must not overlap `hub_subnet` | `172.30.78.128/25` |
+| `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs an unpruned node with `txindex=1` and about 900 GB more disk (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
+| `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 550 to 1048576. Refused with `electrum: true`: leave it out | `50000` |
 
 A minimal answers file for the public host (Lightning only):
 
@@ -168,9 +170,9 @@ flag, an extra argument, or `-host-dir`, `-hub-url`, `-answers`, `-wallet-rpc-pa
    ```
 
    (Without `-digest` it asks for it. Without `-answers` it asks the questions.) The digest is checked before anything
-   is written. The stage writes, under `<dir>`: in `config/`, `hub.env`, `fulcrum.conf` and `bitcoin.conf` (with the
-   `rpcauth` lines of the hub's, Fulcrum's and, with the on-chain rail, SatBooth's bitcoind users and their
-   `rpcwhitelist` lines) and, with Monero, `monerod.conf`, `wallet-rpc/rpc-login` and `wallet-rpc/wallet.pass`;
+   is written. The stage writes, under `<dir>`: in `config/`, `hub.env` and `bitcoin.conf` (with the `rpcauth` lines of
+   the hub's and, with the on-chain rail, SatBooth's bitcoind users and their `rpcwhitelist` lines; with
+   `electrum: true`, also Fulcrum's) and, with `electrum: true`, `fulcrum.conf`, and, with Monero, `monerod.conf`, `wallet-rpc/rpc-login` and `wallet-rpc/wallet.pass`;
    `compose.env`; a copy of the handoff it read, `setup/read-public-to-hub.json`; and, with Monero,
    `setup/carry/wallet-rpc.pass`, the copy of the wallet-rpc login password that step 3 carries to the public host.
    It prints the digest it computed (it matched the one you gave) and these steps, which you do in this order. Below,
@@ -334,7 +336,7 @@ colon in any path it mounts (Docker's mount syntax).
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
 65532 and sets them to 0700, and `etc/`'s files go with it: after the first start you read them as root. On the hub
-host it gives each configuration file to the user that reads it (the hub, bitcoind, Fulcrum, and with Monero
+host it gives each configuration file to the user that reads it (the hub, bitcoind, Fulcrum if `fulcrum.conf` exists, and with Monero
 `monerod.conf` and `wallet-rpc/` to 10002; `relay.json`, if it exists, to 65532) and `wallet/`, Monero or not, to 10002,
 and keeps the file modes.
 It never touches `setup/` or `compose.env`. That is why a stage that writes into `etc/` (stage 4) must come before the
@@ -587,7 +589,7 @@ tag.
 
 | Host | Bundle | Runs |
 |---|---|---|
-| hub (private) | `deploy/hub/compose.yml` | Alby Hub, `satbooth-relay`, bitcoind, Fulcrum (the hub's Electrum server), monerod, monero-wallet-rpc |
+| hub (private) | `deploy/hub/compose.yml` | Alby Hub, `satbooth-relay`, bitcoind (pruned by default); with the `electrum` profile Fulcrum (the hub's Electrum server); with the `monero` profile monerod, monero-wallet-rpc |
 | public | `deploy/public/compose.yml` | `satbooth` |
 
 Each bundle takes its operator values from an env file, passed with `--env-file`. The env files hold addresses and
@@ -666,9 +668,9 @@ is not started until stage 3 has written `relay.json`, so the loop does not aris
 
 **What can reach the hub's API.** The hub's HTTP listener binds every address of its namespace (getAlby/hub v1.24.6
 `cmd/http/main.go:59`, `":"` and the port, with no setting for the address). So besides the tunnel, bitcoind (on the
-`hub` network) and Fulcrum (on the `electrum` network) can connect to its API on 8080. That API still needs the
+`hub` network) and, with the `electrum` profile, Fulcrum (on the `electrum` network) can connect to its API on 8080. That API still needs the
 unlock password or a token, and the hub limits unlock attempts; nothing else of the hub is reachable from them, and the
-relay's client listener binds `HUB_IP` only. A compromised bitcoind or Fulcrum can therefore try the API, and on a hub
+relay's client listener binds `HUB_IP` only. A compromised bitcoind (or Fulcrum) can therefore try the API, and on a hub
 that has not been set up yet, take it: hence the order above.
 
 monerod and wallet-rpc are in the `monero` profile: Monero is optional, and they may run on a third private host
@@ -687,23 +689,24 @@ create a missing file's path as a directory.
    | `HUB_PRIVATE_ADDR` | the hub host's address on the private link; the relay, bitcoind's RPC and (`monero` profile) wallet-rpc bind it |
    | `HUB_ADMIN_ADDR` | where the hub's admin UI is published: `127.0.0.1`, reached through an SSH tunnel; never `HUB_PRIVATE_ADDR` or a public address |
    | `HUB_SUBNET`, `HUB_IP` | the bundle's Docker network and the fixed address of the hub and the relay on it; `client_listen` in `relay.json` is `HUB_IP:7448` |
-   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind and Fulcrum (no route out) |
+   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind and, with the `electrum` profile, Fulcrum (no route out); created, and needed, with or without the profile |
    | `HUB_NETWORK` | the hub's chain: `bitcoin` or `signet` (the hub maps `testnet` to signet, getAlby/hub v1.24.6 `lnclient/ldk/ldk.go:206-213`) |
-   | `HUB_CONFIG_DIR` | host directory with `relay.json`, `bitcoin.conf`, `hub.env`, and with the `monero` profile `monerod.conf` and `wallet-rpc/` |
+   | `HUB_CONFIG_DIR` | host directory with `relay.json`, `bitcoin.conf`, `hub.env`, with the `electrum` profile `fulcrum.conf`, and with the `monero` profile `monerod.conf` and `wallet-rpc/` |
    | `MONERO_WALLET_DIR` | host directory with the view-only wallet `satbooth-view` and `satbooth-view.keys` (any directory without the `monero` profile) |
+   | `HUB_ELECTRUM_SERVER` | the hub's Electrum server (`LDK_ELECTRUM_SERVER`): `tcp://127.0.0.1:9` (nothing listens there) by default, `tcp://fulcrum:50001` with the `electrum` profile; setup writes the one that goes with the `electrum` answer |
 
 2. **Files in `HUB_CONFIG_DIR`.** `deploy/hub/config-example/` has examples of the three without secrets. Stage 2 of
-   `satbooth-setup` writes `bitcoin.conf`, `hub.env` and `fulcrum.conf` (with the `rpcauth` lines and `rpcwhitelist`
-   lines described below, byte for byte those of the example) and, when the public host's handoff says Monero is on,
+   `satbooth-setup` writes `bitcoin.conf` and `hub.env` (with the `rpcauth` lines and `rpcwhitelist` lines described
+   below, byte for byte those of the example), with `electrum: true` `fulcrum.conf`, and, when the public host's handoff says Monero is on,
    `monerod.conf` and `wallet-rpc/` (`rpc-login`, `wallet.pass`); stage 3 writes `relay.json`.
 
    | File | Read by | Holds |
    |---|---|---|
    | `relay.json` | the relay (65532) | the relay's configuration (`docs/running.md`, "Running the relay"): `hub_listen` `127.0.0.1:7447`, `client_listen` `HUB_IP:7448`, `client_relay_url` `ws://HUB_PRIVATE_ADDR:7448`, which must equal SatBooth's `nwc.relay_url` byte for byte, and the pairs. No secret. |
-   | `bitcoin.conf` | bitcoind (10001) | `txindex=1` (Fulcrum needs it, and an unpruned node), `rpcbind=0.0.0.0`, `rpcport=8332` on every chain, `rpcallowip` for `HUB_SUBNET`, `ELECTRUM_SUBNET` and the public host's private address only, `rpcauth` lines for the users `hub` and `fulcrum`, each confined by `rpcwhitelist`: the hub's user to the 11 calls its chain source makes (the chain tip, headers and blocks, the mempool and its transactions, fee estimates, the broadcast; `docs/dependencies.md` §8), Fulcrum's to the 15 it makes (`config-example/bitcoin.conf`), SatBooth's user to its 12 (`docs/bitcoind.md`, "Setting up bitcoind"), and `rpcwhitelistdefault=0`, so `bitcoin-cli` with the cookie inside the container stays unrestricted. With `LDK_GOSSIP_SOURCE` left empty (below) the hub checks the channels it learns over gossip against the chain, which needs `getblockhash` and `gettxout`: without them every such check fails and the hub drops the announcement (lightning-block-sync 0.2.0 `src/gossip.rs`), so it learns no channels beyond its own to route through. |
+   | `bitcoin.conf` | bitcoind (10001) | `prune=<bitcoind_prune_mib>` (default `50000`) or, with the `electrum` profile and never together with `prune`, `txindex=1` (Fulcrum needs it, and an unpruned node), `rpcbind=0.0.0.0`, `rpcport=8332` on every chain, `rpcallowip` for `HUB_SUBNET`, with the `electrum` profile `ELECTRUM_SUBNET`, and the public host's private address only, `rpcauth` lines for the user `hub` and, with the `electrum` profile, `fulcrum`, each confined by `rpcwhitelist`: the hub's user to the 11 calls its chain source makes (the chain tip, headers and blocks, the mempool and its transactions, fee estimates, the broadcast; `docs/dependencies.md` §8), Fulcrum's to the 15 it makes (`config-example/bitcoin.conf`), SatBooth's user to its 12 (`docs/bitcoind.md`, "Setting up bitcoind"), and `rpcwhitelistdefault=0`, so `bitcoin-cli` with the cookie inside the container stays unrestricted. With `LDK_GOSSIP_SOURCE` left empty (below) the hub checks the channels it learns over gossip against the chain, which needs `getblockhash` and `gettxout`: without them every such check fails and the hub drops the announcement (lightning-block-sync 0.2.0 `src/gossip.rs`), so it learns no channels beyond its own to route through. |
    | `monerod.conf` (`monero` profile) | monerod (10002) | monerod's options; its RPC on `0.0.0.0:18081` with `confirm-external-bind`, for wallet-rpc on the `monero` network only (`--restricted-rpc` is added by `compose.yml`). |
    | `hub.env` | the hub (10003) | **secret, 0600:** `LDK_BITCOIND_RPC_PASSWORD=<the hub user's password>`. |
-   | `fulcrum.conf` | Fulcrum (10004) | **secret, 0600:** `rpcuser = fulcrum`, `rpcpassword = <its password>`, `peering = false`, `announce = false`. |
+   | `fulcrum.conf` (`electrum` profile) | Fulcrum (10004) | **secret, 0600:** `rpcuser = fulcrum`, `rpcpassword = <its password>`, `peering = false`, `announce = false`. |
    | `wallet-rpc/rpc-login` (`monero` profile) | wallet-rpc (10002) | **secret, 0600:** one line `<user>:<password>`, SatBooth's `monero.rpc_user` and the password in its `monero.rpc_password_file`. |
    | `wallet-rpc/wallet.pass` (`monero` profile) | wallet-rpc (10002) | **secret, 0600:** the view-only wallet's password. |
 
@@ -754,8 +757,8 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | `SEND_EVENTS_TO_ALBY` | `false` | fixed: `false` |
 | `AUTO_LINK_ALBY_ACCOUNT` | `false` | fixed: `false` |
 | `MEMPOOL_API` | unreachable, on purpose | left out: the hub's default (`https://mempool.space/api`); set it in `hub.env` to use your own |
-| `LDK_ELECTRUM_SERVER` | not set | fixed: `tcp://fulcrum:50001`, the bundle's own Electrum server (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`) |
-| `LDK_ESPLORA_SERVER` | not set | left out: set, it would take the address lookups away from Fulcrum (`chain/address_lookup.go:20-26`) |
+| `LDK_ELECTRUM_SERVER` | not set | operator: `HUB_ELECTRUM_SERVER`, `tcp://127.0.0.1:9` or `tcp://fulcrum:50001` (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`) |
+| `LDK_ESPLORA_SERVER` | not set | left out: set, it would take the address lookups away from the Electrum server (`chain/address_lookup.go:20-26`) |
 | `RELAY` | `ws://127.0.0.1:7447` | fixed: `ws://127.0.0.1:7447` (the relay's hub listener) |
 | `AUTO_UNLOCK_PASSWORD` | a test string | left out: the operator unlocks the hub in its UI after each hub start |
 
@@ -773,24 +776,63 @@ had no address). So neither the hub nor the relay owns it: `netns` (the pinned `
 join it, as a Kubernetes pod's `pause` container does.
 
 **Three networks.** `hub` holds `netns` (the hub and the relay) and bitcoind; `electrum`, internal (no route out),
-holds `netns`, bitcoind and Fulcrum; `monero` holds only monerod and wallet-rpc. Observed on the bundle (regtest): from
-the hub's namespace, bitcoind and Fulcrum answer and monerod's name does not resolve, nor does its address answer;
-Fulcrum reaches bitcoind and nothing outside.
+holds `netns`, bitcoind and, with the `electrum` profile, Fulcrum; `monero` holds only monerod and wallet-rpc. Observed
+on the bundle (regtest, with Fulcrum): from the hub's namespace, bitcoind and Fulcrum answer and monerod's name does not
+resolve, nor does its address answer; Fulcrum reaches bitcoind and nothing outside.
 monerod's RPC has no login, and whoever can call it unrestricted can point it at a chain of their own making
 (`set_bootstrap_daemon`), which wallet-rpc would then report as payments. So no container but wallet-rpc reaches it,
 and the bundle starts monerod with `--restricted-rpc` as well: that keeps every call the wallet makes (monero
 v0.18.5.4 `src/rpc/core_rpc_server.h:113-189`, `src/wallet/wallet2.cpp:3177`), and hides only pool transactions still
 in their Dandelion++ stem until they are relayed (`core_rpc_server.cpp:651-654`).
 
-**The Electrum server.** With bitcoind as its chain source, the hub's Lightning node (LDK) follows the chain, channel
-closes and breaches included, from bitcoind alone (`lnclient/ldk/ldk.go:217-232`, `SetChainSourceBitcoindRpc` at
-`:226`, in getAlby/hub v1.24.6). Only the hub's own on-chain address lookups, whether an address has been used (its
-address API and swaps, `api/address_lookup.go:9-16`, `swaps/swaps_service.go:1598-1612`), need an address index, which
-bitcoind lacks; they go to `LDK_ELECTRUM_SERVER` (`chain/address_lookup.go:20-26`, Electrum protocol over `tcp://` or
-`ssl://`, `chain/electrum.go`). The bundle runs Fulcrum for them, so they stay on the host. Fulcrum needs bitcoind with
-`txindex=1` and unpruned, its own index on disk (its README gives 133 GB for Bitcoin as of August 2023, more since) and
-at least 1 GB of RAM; it builds the index on first start, which takes hours to days. Until then the hub's lookups
-fail, and nothing of SatBooth's depends on them.
+**The Electrum server, and the pruned node.** With bitcoind as its chain source, the hub's Lightning node (LDK) follows
+the chain, channel closes and breaches included, from bitcoind alone (`lnclient/ldk/ldk.go:217-232`,
+`SetChainSourceBitcoindRpc` at `:226`, in getAlby/hub v1.24.6). Only two things of the hub's own use an Electrum
+server, to ask whether an on-chain address has been used (`chain/address_lookup.go:20-26`, Electrum protocol over
+`tcp://` or `ssl://`, `chain/electrum.go`): rotating the deposit address its UI shows (`api/api.go`,
+`GetUnusedOnchainAddress`: on a failed lookup it logs and shows the current address again), and an automatic swap-out
+to an xpub (`swaps/swaps_service.go:1598-1612`). Neither is part of SatBooth's payments or of the relay.
+
+By default the bundle therefore runs **no Electrum server**: `bitcoin.conf` has `prune=50000` and no `txindex`, and
+`HUB_ELECTRUM_SERVER` is `tcp://127.0.0.1:9`, an address nothing listens on. It is set because the hub's own default is
+Alby's server (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`): left unset, those two lookups would go to a
+third party, which would learn the hub's addresses and the host's IP. Pinned to the unreachable address, they fail on
+the host and nothing leaves it.
+
+The prune size is the answer `bitcoind_prune_mib`, 550 to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
+months of blocks, plus bitcoind's chainstate) by default. bitcoind still downloads and checks the whole chain once; it
+then keeps only the newest blocks. A smaller size is less disk and a shorter time the hub may be offline: a hub that was
+off for longer than the blocks kept cover has no way to catch up from bitcoind and needs a fresh sync, so size it above
+the longest outage you would accept. SatBooth's watch-only wallet follows the tip; if it asks for a block the node no
+longer has, it re-anchors its scan at the tip (`docs/threat-model.md`, the on-chain residual that names a pruned node).
+
+**With an Electrum server.** For the two lookups, answer `electrum: true` in `hub init` (or set `HUB_ELECTRUM_SERVER=
+tcp://fulcrum:50001` and use the files below by hand) **and** start the bundle with `--profile electrum`: the two go
+together. The answer without the profile gives an unpruned node with `txindex=1` and no Fulcrum; the profile without
+the answer leaves Fulcrum with a pruned node and no `fulcrum.conf`, and Compose refuses to start it. (`hub init` and
+`hub pair` print the start commands with the profile when the answer is `true`.) Fulcrum needs bitcoind with
+`txindex=1` and unpruned (about 900 GB for Bitcoin's chain and its index together), its own index on disk (its README
+gives 133 GB as of August 2023, more since) and at least 1 GB of RAM; it builds the index on first start, which takes
+hours to days. Until then the hub's lookups fail, and nothing of SatBooth's depends on them. `bitcoind_prune_mib` is
+refused with `electrum: true`: an unpruned node has none.
+
+**Upgrading a hub that ran unpruned with Fulcrum** (the first release candidate's default) to the pruned default, on the
+hub host, with `dc` as above. `bitcoind` refuses `prune` together with `txindex=1`, so the order matters. Setup refuses a
+directory that already holds its files, so edit the files:
+
+1. Stop the bundle: `dc --profile electrum --profile monero down` (this keeps the volumes).
+2. In `<dir>/config/bitcoin.conf`, delete the `txindex=1` line and add `prune=50000` in its place. Delete the
+   `rpcallowip=` line for the `ELECTRUM_SUBNET` network, and the two `rpcauth=fulcrum:` and `rpcwhitelist=fulcrum:`
+   lines.
+3. Add `HUB_ELECTRUM_SERVER=tcp://127.0.0.1:9` to `<dir>/compose.env` (Compose refuses to start the hub without it).
+4. Delete `<dir>/config/fulcrum.conf`, and the Fulcrum volume: `docker volume rm satbooth-hub_fulcrum-data`.
+5. Start it: `dc up -d --build` (add `--profile monero` if you run Monero). bitcoind starts pruned and deletes old
+   blocks as it goes; the old `txindex` is no longer used, and `indexes/txindex` in bitcoind's data can be deleted to
+   free its space (`dc exec bitcoind rm -r /data/indexes/txindex`).
+
+To keep Fulcrum instead, change nothing of this, add `HUB_ELECTRUM_SERVER=tcp://fulcrum:50001` to `<dir>/compose.env`,
+and start with `--profile electrum`. Going from the pruned default to an Electrum server is not an edit: a pruned node
+cannot be unpruned without downloading the chain again, so start from a new data volume with `electrum: true`.
 
 **The node images** (`deploy/hub/bitcoind/Dockerfile`, `deploy/hub/monero/Dockerfile`, `deploy/hub/fulcrum/Dockerfile`)
 download the official release tarballs of Bitcoin Core 32.1 and Monero v0.18.5.4 (the qualified versions) and Fulcrum

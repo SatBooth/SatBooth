@@ -157,10 +157,12 @@ Facts that shape the design (getAlby/hub main, read 2026-10-26 to 10-30):
   - `SEND_EVENTS_TO_ALBY=false`.
   - `MEMPOOL_API`: our own mempool/esplora instance, or accept the rare call.
   - No LSPs, Boltz or swaps.
-  - As built in the hub bundle (plan 10, §3): with bitcoind as LDK's chain source, the hub still sends its on-chain
-    address lookups (its address API and swaps) to an Electrum server, Alby's by default (getAlby/hub v1.24.6
-    `chain/address_lookup.go:20-26`). The bundle points `LDK_ELECTRUM_SERVER` at its own Fulcrum. `MEMPOOL_API` is
-    left at the hub's default; the operator may set it in `hub.env`.
+  - As built in the hub bundle (plan 10, §3): with bitcoind as LDK's chain source, the hub still sends two on-chain
+    address lookups (rotating the deposit address its UI shows, auto swap-out to an xpub) to an Electrum server, Alby's
+    by default (getAlby/hub v1.24.6 `chain/address_lookup.go:20-26`, `config/models.go:34`). By default the bundle runs
+    no Electrum server and points `LDK_ELECTRUM_SERVER` at `tcp://127.0.0.1:9`, where nothing listens: those lookups
+    fail on the host and nothing goes to Alby. With the opt-in `electrum` profile it points at its own Fulcrum.
+    `MEMPOOL_API` is left at the hub's default; the operator may set it in `hub.env`.
 - Hard-coded `getalby.com/api` calls remain for fiat rates, channel suggestions at startup and service
   status. **Catch:** `api.Health` calls `getalby.com/api/internal/info` first and fails when that fails, so
   health checks must use NWC `get_info` or node/channel state instead.
@@ -439,7 +441,7 @@ wrong firewall rule still doesn't let a stranger read metadata or flood subscrip
   start. Orders, invoices per rail, payment events, an append-only audit log. The ledger (`ledger/`) is built (plan 2):
   accounts and transfers (single-phase, pending, post, void, expiry) in TigerBeetle's model, insert-only and guarded by
   triggers, with restart, property and fuzz tests.
-- **Where the public surface runs:** a CDN/WAF in front of everything public. The hub, relay, bitcoind, Fulcrum,
+- **Where the public surface runs:** a CDN/WAF in front of everything public. The hub, relay, bitcoind, Fulcrum (if run),
   monerod and wallet-rpc are never public.
 - **Pricing:** either a fiat price converted by `rates` (plan 7) or explicit amounts from the merchant's app.
 - **Who calls SatBooth:**
@@ -1888,18 +1890,19 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    and never changes a file's mode, so a loose secret file is still refused by whatever reads it. Every long-running
    service runs with a read-only root, all capabilities dropped and `no-new-privileges`.
    - **The hub host** runs Alby Hub v1.24.6 (the qualified image, pinned by digest), `satbooth-relay` from the release
-     image, bitcoind (Bitcoin Core 32.1), Fulcrum 2.1.4 as the hub's Electrum server and, with the `monero` profile,
-     monerod and SatBooth's view-only monero-wallet-rpc (v0.18.5.4). bitcoind, Fulcrum and the Monero binaries are the
+     image, bitcoind (Bitcoin Core 32.1, pruned to about 50 GB by default), with the `electrum` profile Fulcrum 2.1.4 as the
+     hub's Electrum server (it needs an unpruned bitcoind with `txindex=1`, about 900 GB) and, with the `monero`
+     profile, monerod and SatBooth's view-only monero-wallet-rpc (v0.18.5.4). bitcoind, Fulcrum and the Monero binaries are the
      official release tarballs, checked against pinned SHA-256 hashes, on a digest-pinned `debian:13-slim`, each under
      its own user (bitcoind 10001, monerod and wallet-rpc 10002, the hub 10003, Fulcrum 10004, the relay 65532). A
      `netns` container holds the network namespace that the hub and the relay share, so the relay's hub listener stays
-     on loopback and either can restart alone. The hub's address lookups (its address API and swaps) go to the
-     bundle's Fulcrum (`LDK_ELECTRUM_SERVER`), not to Alby's server; its Lightning node follows the chain from bitcoind
-     alone. monerod runs with `--restricted-rpc`, which `compose.yml` adds where the operator's file cannot drop it;
+     on loopback and either can restart alone. The hub's two address lookups go to the bundle's Fulcrum
+     (`LDK_ELECTRUM_SERVER`) with the `electrum` profile, and otherwise to an address nothing listens on, never to
+     Alby's server; its Lightning node follows the chain from bitcoind alone. monerod runs with `--restricted-rpc`, which `compose.yml` adds where the operator's file cannot drop it;
      wallet-rpc runs with full RPC behind its Digest login (SatBooth refuses a restricted wallet-rpc), the login read
      from a 0600 file into its environment by its entrypoint, never argv.
    - **Three networks on the hub host.** `hub` holds the hub's namespace and bitcoind; `electrum`, internal (no route
-     out), holds the hub's namespace, bitcoind and Fulcrum; `monero` holds only monerod and wallet-rpc, so no other
+     out), holds the hub's namespace, bitcoind and, with the `electrum` profile, Fulcrum; `monero` holds only monerod and wallet-rpc, so no other
      container can call monerod's RPC.
    - **The public host** runs `satbooth` from the release image with `ulimits: memlock: -1` and a 60 s stop grace, on
      a fixed address of the bundle's own network (SatBooth refuses a wildcard listener), and `satbooth-oneoff` (profile

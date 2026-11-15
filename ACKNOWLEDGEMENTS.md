@@ -46,7 +46,7 @@ Recorded public API responses are used as parser fixtures: [Kraken](https://docs
 
 SatBooth runs alongside [Alby Hub](https://github.com/getAlby/hub) (Apache-2.0),
 [Bitcoin Core](https://github.com/bitcoin/bitcoin) and [Monero](https://github.com/monero-project/monero), and
-relies on their documented and tested behaviour. The hub host's bundle also runs
+relies on their documented and tested behaviour. The hub host's bundle can also run
 [Fulcrum](https://github.com/cculianu/Fulcrum) (GPL-3.0-or-later) unmodified, as a separate program. The Go libraries
 it links are listed, with their licenses
 and records, in [`docs/dependencies.md`](docs/dependencies.md).
