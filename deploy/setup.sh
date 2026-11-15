@@ -37,7 +37,7 @@ esac
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # The release image of the setup command, pinned by tag and digest (scripts/release-pins.sh). SATBOOTH_BUILD=1 builds
 # it from this repository instead.
-tools_image=ghcr.io/satbooth/satbooth-tools:v0.1.0-rc.1@sha256:eb55cf1cdd7a4a4a0c0f50179c99a5db58226f37ac59eb79a7ed311e38744cc9
+tools_image=ghcr.io/satbooth/satbooth-tools:v0.1.0-rc.2@sha256:96a4f94ef9ae8646932a02ed28e8baa8acc506248d922e03038fcf73518c19c1
 
 # Refuse a colon before anything is created (a relative <dir> is under the current directory).
 case "$dir" in
