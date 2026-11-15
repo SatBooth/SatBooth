@@ -866,8 +866,13 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   internet and fails only at the TLS handshake, after the connection and the DNS query. The egress rules of the hub
   host are what stop that: setup prints them (`hub egress-rules`, nftables or iptables-legacy) and the operator applies
   them as root. They bound the namespace of the hub, the relay and the UI proxy to the bundle's own networks, answers to
-  connections made to it, and TCP connections to listed Lightning peers (address and port); everything else,
-  outside DNS included, is logged and dropped. Residuals: a peer must be listed before the hub can reach it; the rules
+  connections made to it, and TCP connections to listed Lightning peers (address and port); everything else they send
+  is logged and dropped. DNS is a separate control: Docker's embedded resolver sends its upstream queries from the
+  host's network namespace (measured on Docker Engine 29.4.2), where those rules never see them, so the `netns` service
+  sets `dns:` to the stub's address, whose container has no DNS port: a name nobody pinned is refused on the internal
+  network and never reaches the host's resolver. Residual: any container of the bundle without that setting resolves
+  through the host's resolver (bitcoind, Fulcrum, the Monero services), and a change that drops the setting reopens
+  the path (`TestHubStubWiring` checks it; the qualification measures it). Residuals: a peer must be listed before the hub can reach it; the rules
   are the operator's to apply and persist, and the bundle does not check that they are loaded; bitcoind is not bound. In the operator's browser,
   `satbooth-hubproxy` stands on the tunnel's port and replaces the hub's content policy (which allows Alby's hosts and
   relays) with a self-only one; a page of the hub can then load and contact nothing outside its own origin. Residual: the

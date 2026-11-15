@@ -164,6 +164,16 @@ func TestHubStubWiring(t *testing.T) {
 	if strings.Join(pinned, ",") != strings.Join(StubNames(), ",") {
 		t.Errorf("pinned names %v, want %v", pinned, StubNames())
 	}
+	// Docker's resolver sends queries for unpinned names from the host: the namespace's only upstream is the stub's
+	// address (which has no DNS port), set on netns alone (the hub, the relay and the proxy share its resolver).
+	if !strings.Contains(netns, "dns:\n      - \"${HUB_STUB_IP:?set HUB_STUB_IP}\"\n") {
+		t.Error("netns lacks dns: [HUB_STUB_IP]: unpinned names would go to the host's resolver")
+	}
+	for _, svc := range []string{"hub", "relay", "hubproxy", "hubstub"} {
+		if strings.Contains(serviceText(t, c, svc), "\n    dns:") {
+			t.Errorf("%s sets dns: it shares or has no resolver of its own to set", svc)
+		}
+	}
 	if strings.Contains(serviceText(t, c, "hub"), "extra_hosts") {
 		t.Error("the hub shares netns's hosts file: extra_hosts on it is refused by Docker")
 	}

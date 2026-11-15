@@ -381,11 +381,21 @@ on the host. That namespace may reach the bundle's own two networks (`HUB_SUBNET
 stub, Fulcrum), may answer connections made to it (the tunnel to 8080, the relay's 7448, everything the public host
 calls, and any connection a Lightning peer makes to the hub's own listener if you publish it), and may open a TCP
 connection to the internet only to a **listed Lightning peer: an address and a port**, since peers do not all listen
-on 9735. Everything else, outside DNS included, is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
+on 9735. Everything else the namespace sends is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
 bitcoind is another container with other addresses and is not bound: it needs the internet for its peers. The
 namespace has a second address, on the internal `electrum` network: whatever leaves with that source for a
 destination outside `ELECTRUM_SUBNET` is dropped and logged as well. The
 `electrum` and `monero` options change nothing here. Docker's networks here have no IPv6, so peers are IPv4 addresses.
+
+**DNS is not one of the things the rules stop.** Docker's embedded resolver answers the bundle's service names and the
+pinned names itself, and sends a query for any other name to its upstream servers **from the host's network namespace,
+not the container's** (measured on Docker Engine 29.4.2: the query appears from the host's own address, through the
+host's resolver, and never crosses the forward path these rules sit on). So the `netns` service sets
+`dns: [HUB_STUB_IP]`: the one upstream the namespace's resolver has is the stub's address, which the host reaches over
+the internal `electrum` network and whose container has no DNS port, so a name nobody pinned is refused at once and
+reaches neither the host's resolver nor the internet. Docker's resolver still answers `bitcoind`, `hubstub`, `fulcrum`
+(with the profile) and the pinned names. A container of the bundle without that setting (bitcoind, Fulcrum, the Monero
+services) resolves through the host's resolver; they are not bound by the rules either.
 
 The list starts with the answers' `lightning_peers` (answers file only: `"lightning_peers": ["203.0.113.7:9735"]`;
 IPv4 literals with a port from 1 to 65535, no hostname; empty by default). **Add a peer before you connect to it or open

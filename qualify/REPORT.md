@@ -1157,11 +1157,14 @@ What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh
   the kernel log has lines with the prefix `satbooth-hub-egress:` (at most 5 a minute, so the counters are the count);
   `GET /api/health` through the proxy is 200 and the hub runs; the stub's log shows the update check; the stub log's calls
   are listed in `stub-calls.txt`.
-- **DNS is measured, not assumed**: a name nobody pinned is looked up from inside the namespace with the rules off and
-  again with them on, with every interface of the host and the namespace's `lo` recorded. The output says where Docker's
-  embedded resolver sent its query from (the container's namespace shows the hub's address on the bridge; the host's
-  namespace shows it only on another interface). A query that leaves by the host's outward interface with the rules on
-  is a finding, and so is any name the hub asked inside its namespace that leaves by it.
+- **DNS is measured, not assumed.** Docker's embedded resolver sends its upstream queries from the host's namespace,
+  where the printed rules do not see them, so the bundle's `netns` service sets `dns:` to the stub's address (no DNS
+  port: refused at once, inside the host). The group looks up unpinned names from inside the namespace with the rules
+  off and with them on, with every interface of the host and the namespace's loopback recorded, and requires: the
+  lookup fails within 8 s, and the name appears nowhere on the host's loopback (its resolver) or sent out of the host
+  (a packet on a Docker bridge is the query going to the stub). Its control is a container on the hub's network
+  without the setting, whose lookup must be seen on the host's resolver path, so that the recorder is shown to see it.
+  The names the hub's namespace asked (read from the packets' DNS questions) must show none either.
 - **The Lightning phases run with the rules on**: `TestLightningPay` (invoice, payment, notification, webhook) and
   `TestRefundPay` (payout and refund through the payout connection), unchanged. The hub also dials the peer itself (a
   throwaway public key, so the TCP connection is what is recorded) on the listed port and on an unlisted one.

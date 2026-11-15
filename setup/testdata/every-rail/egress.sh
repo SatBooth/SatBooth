@@ -2,7 +2,8 @@
 # SatBooth hub host: what the hub's network namespace may send out. Run as root: sh <this file>
 # The namespace (hub, relay, UI proxy) has the address 172.30.78.10. It may reach the bundle's own two networks, answer
 # connections made to it, and open TCP connections to the Lightning peers in the chain SATBOOTH_HUB_PEERS, and nothing else:
-# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.
+# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:
+# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.
 # What leaves with an address on the electrum network (172.30.78.128/25) for anywhere outside it is dropped too.
 # Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:
 #   iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT

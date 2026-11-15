@@ -179,7 +179,16 @@ egress_probe() {
       echo sent
       ;;
     dns)
-      if docker run --rm --network "container:$nid" "$egress_tools_image" timeout 12 getent ahosts "$1" > /dev/null 2>&1; then echo resolved; else echo unresolved; fi
+      # The answer and the seconds it took: a refused name must fail at once, not after a resolver's timeouts.
+      local began=$SECONDS res=unresolved
+      if docker run --rm --network "container:$nid" "$egress_tools_image" timeout 12 getent ahosts "$1" > /dev/null 2>&1; then res=resolved; fi
+      echo "$res $((SECONDS - began))"
+      ;;
+    dnsctl)
+      # The control: a container on the hub's network WITHOUT the namespace's dns: setting, which resolves through the
+      # host's resolver, the path the recorder must be able to see.
+      docker run --rm --network "${hub_project}_hub" "$egress_tools_image" timeout 12 getent ahosts "$1" > /dev/null 2>&1 || true
+      echo done
       ;;
   esac
 }
@@ -376,11 +385,15 @@ for _ in range(3):
 
   # Control, rules off: a connection and a name lookup from the hub's namespace leave the host. The recorder must see
   # them, or its silence later means nothing.
-  local off_name on_name
+  local off_name on_name ctl_name r
   off_name="sbdns-off-$RANDOM$RANDOM.example.net"
   on_name="sbdns-on-$RANDOM$RANDOM.example.net"
+  ctl_name="sbdns-ctl-$RANDOM$RANDOM.example.net"
   egress_probe tcp 203.0.113.9 4440 > /dev/null
-  egress_probe dns "$off_name" > /dev/null
+  egress_probe dnsctl "$ctl_name" > /dev/null
+  r=$(egress_probe dns "$off_name")
+  egress_note "DNS probe, rules off: $off_name from the namespace: $r"
+  case "$r" in "unresolved "[0-8]) egress_ok "an unpinned name fails at once inside the namespace (rules off): $r" ;; *) egress_bad "an unpinned name did not fail fast inside the namespace (rules off): $r" ;; esac
   sleep 3
 
   # The printed rules, applied.
@@ -396,7 +409,7 @@ for _ in range(3):
   fi
 
   # Fence canaries before the hub runs: each must be dropped, counted and still seen leaving the namespace.
-  local d0 d1 d2 r
+  local d0 d1 d2
   d0=$(egress_drops)
   r=$(egress_probe tcp 203.0.113.9 4443)
   if [ "$r" = blocked ]; then egress_ok "canary tcp 203.0.113.9:4443 from the hub's address: blocked"; else egress_bad "canary tcp to the internet connected with the rules on"; fi
@@ -417,7 +430,9 @@ for _ in range(3):
   if [ "$r" = connects ]; then egress_ok "the peer $peer_ip:9735 after it is listed (the printed add command): connects"; else egress_bad "the listed peer does not connect"; fi
   r=$(egress_probe tcp "$peer_ip" 9736)
   if [ "$r" = blocked ]; then egress_ok "the same address, port 9736 (not listed): blocked"; else egress_bad "an unlisted port of the listed peer connected"; fi
-  egress_probe dns "$on_name" > /dev/null
+  r=$(egress_probe dns "$on_name")
+  egress_note "DNS probe, rules on: $on_name from the namespace: $r"
+  case "$r" in "unresolved "[0-8]) egress_ok "an unpinned name fails at once inside the namespace (rules on): $r" ;; *) egress_bad "an unpinned name did not fail fast inside the namespace (rules on): $r" ;; esac
   sleep 2
 
   # The hub, the relay, the proxy and the stub start now, under the rules and the recorders.
@@ -503,7 +518,7 @@ for _ in range(3):
   fi
   for r in hubnet peer dns-any dns-lo conntrack; do egress_stop "$r"; done
   sleep 2
-  egress_judge "$hub_mac" "$peer_ip" "$regtest_net" "$off_name" "$on_name" "$outward"
+  egress_judge "$hub_mac" "$peer_ip" "$regtest_net" "$off_name" "$on_name" "$outward" "$ctl_name"
   egress_ran=1
   log "egress: $egress_findings finding(s) and failure(s); evidence in $logdir/egress (summary.txt)"
   [ "$egress_findings" -eq 0 ]
@@ -511,7 +526,7 @@ for _ in range(3):
 
 # egress_judge <hub mac> <peer ip> <regtest net> <name off> <name on> <outward interface>
 egress_judge() {
-  local hub_mac=$1 peer_ip=$2 regtest_net=$3 off_name=$4 on_name=$5 outward=$6
+  local hub_mac=$1 peer_ip=$2 regtest_net=$3 off_name=$4 on_name=$5 outward=$6 ctl_name=$7
   local nets=("$egress_hub_subnet" "$egress_electrum_subnet" "$regtest_net")
   local mac proto src sport dst dport line
 
@@ -576,40 +591,43 @@ egress_judge() {
   egress_note "kernel log lines with the prefix satbooth-hub-egress: $({ grep -c 'satbooth-hub-egress:' "$egress_ev/dmesg.txt" || true; })"
   if grep -q 'satbooth-hub-egress:' "$egress_ev/dmesg.txt"; then egress_ok "the firewall logged drops with its prefix"; else egress_bad "the kernel log holds no line with the prefix satbooth-hub-egress: (dmesg.txt)"; fi
 
-  # DNS. Names the hub's namespace asked its resolver (inside the namespace), against what any interface of the host saw.
-  # The two names looked up by the probes show where Docker's resolver sends its upstream queries from.
+  # DNS. Docker's resolver sends its upstream queries from the HOST's namespace, where the printed rules do not see them
+  # (measured on Docker Engine 29.4.2), so the bundle's netns sets dns: to the stub's address, which has no DNS port.
+  # The control below, a container on the hub network without that setting, must show the host's resolver path in the
+  # capture; the namespace's names (the probes' and any the hub asked) must show none: no packet on loopback (the host's
+  # resolver) and none sent out of the host. A packet on a Docker bridge is the query going to the stub, inside the host.
   # The namespace's queries go to Docker's resolver on 127.0.0.11, at a port tcpdump does not decode: the names are read
   # from the packets' DNS questions.
   egress_pcap_names "$egress_ev/dns-lo.pcap" > "$egress_ev/dns-asked-in-namespace.txt"
   tcpdump -nn -e -r "$egress_ev/dns-any.pcap" 2> /dev/null > "$egress_ev/dns-host.txt" || true
-  local nm where
-  for nm in "$off_name" "$on_name"; do
-    where=$({ grep -F "$nm" "$egress_ev/dns-host.txt" || true; } | awk '{ for (i = 1; i <= NF; i++) if ($i == "In" || $i == "Out" || $i == "B") { print $(i - 1) ":" $i; break } }' | sort | uniq -c | tr '\n' ' ')
-    egress_note "DNS: $nm seen on the host as: ${where:-nowhere}"
-  done
-  if grep -F "$off_name" "$egress_ev/dns-host.txt" | grep -q "$egress_hub_ip\.[0-9]* > "; then
-    egress_note "DNS (rules off): Docker's resolver forwards from the container's own namespace (source $egress_hub_ip seen on the host)"
-  else
-    egress_note "DNS (rules off): the upstream query was NOT sent from the hub's namespace (no packet with source $egress_hub_ip): Docker's resolver forwards from the host's namespace (dns-host.txt: the interfaces and sources)"
-  fi
-  # A query "leaves" when it is sent Out of an interface that is not loopback, a Docker bridge or veth, or the peer's: the
-  # host's own resolver path to its upstream, whatever the interface is called.
-  dns_left() { # <name>: the lines of that name sent Out by a non-local interface
-    { grep -F "$1" "$egress_ev/dns-host.txt" || true; } | grep -E ' Out ' | grep -vE "^[0-9:.]+ (lo|docker0|br-[0-9a-f]+|veth[0-9a-f]+|vpeer-h) " || true
+  dns_host_side() { # <name>: the lines of that name on the host's loopback or sent Out by a non-Docker interface
+    { grep -F "$1" "$egress_ev/dns-host.txt" || true; } | grep -vE "^[0-9:.]+ (docker0|br-[0-9a-f]+|veth[0-9a-f]+|vpeer-h) " | grep -E '^[0-9:.]+ lo |( Out )' || true
   }
-  : "$outward" # (kept in the signature: the notes name it)
-  if [ -n "$(dns_left "$on_name")" ]; then
-    egress_finding "DNS (rules on): a query for $on_name left the host ($(dns_left "$on_name" | head -1 | awk '{ print $2 " " $3 }')): a name the hub's namespace asks leaks as a host DNS query"
+  dns_via() { # <name>: where the name was seen on the host, as interface:direction counts
+    { grep -F "$1" "$egress_ev/dns-host.txt" || true; } | awk '{ for (i = 1; i <= NF; i++) if ($i == "In" || $i == "Out" || $i == "B") { print $(i - 1) ":" $i; break } }' | sort | uniq -c | tr '\n' ' '
+  }
+  local nm
+  for nm in "$ctl_name" "$off_name" "$on_name"; do egress_note "DNS: $nm seen on the host as: $(dns_via "$nm")"; done
+  if [ -n "$(dns_host_side "$ctl_name")" ]; then
+    egress_ok "DNS control: a container on the hub's network without dns: was seen going through the host's resolver (the recorder sees that path)"
   else
-    egress_ok "DNS (rules on): the lookup of $on_name did not leave the host"
+    egress_bad "DNS control: the control lookup of $ctl_name was not seen on the host's loopback or outward: the recorder may be blind to the path"
   fi
+  : "$outward"
+  for nm in "$off_name" "$on_name"; do
+    if [ -n "$(dns_host_side "$nm")" ]; then
+      egress_bad "DNS: $nm, looked up from the hub's namespace, reached the host's resolver path ($(dns_host_side "$nm" | head -1 | awk '{ print $2 " " $3 }'))"
+    else
+      egress_ok "DNS: $nm, looked up from the hub's namespace, did not reach the host's resolver or leave the host"
+    fi
+  done
   local n leaked=0
   while read -r n; do
     [ -n "$n" ] || continue
-    if [ -n "$(dns_left "$n")" ]; then
-      egress_finding "DNS: the name $n, asked from the hub's namespace, left the host"
+    if [ -n "$(dns_host_side "$n")" ]; then
+      egress_bad "DNS: the name $n, asked from the hub's namespace, reached the host's resolver path"
       leaked=1
     fi
   done < <(grep -v -e "$off_name" -e "$on_name" "$egress_ev/dns-asked-in-namespace.txt" || true)
-  if [ "$leaked" -eq 0 ]; then egress_ok "DNS: no name asked inside the namespace other than the probes' left the host"; fi
+  if [ "$leaked" -eq 0 ]; then egress_ok "DNS: no name the hub's namespace asked other than the probes' reached the host's resolver path ($(grep -vc -e "$off_name" -e "$on_name" "$egress_ev/dns-asked-in-namespace.txt" || true) names)"; fi
 }

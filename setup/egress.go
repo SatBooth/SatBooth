@@ -10,7 +10,9 @@ import (
 // The hub, the relay and the UI proxy share one network namespace, the one of the netns container, whose address on
 // the bundle's hub network is HUB_IP. Everything that leaves that namespace towards the internet crosses the host's
 // forward path with HUB_IP as its source, and these rules bound it there: the hub's outside calls that are not pinned
-// to the stub fail at the firewall, not only at the TLS handshake. The one thing it may open to the internet is a TCP
+// to the stub fail at the firewall, not only at the TLS handshake. (Docker's embedded resolver is not covered: it sends
+// its upstream queries from the host, which these rules do not see; the bundle's netns service sets dns: to the stub's
+// address so that they never reach the host's resolver.) The one thing it may open to the internet is a TCP
 // connection to a listed Lightning peer, an address and a port (peers do not all listen on 9735). bitcoind is another
 // container (other addresses) and is not bound: it needs the internet for its peers. The namespace has a second
 // address, on the internal electrum network; a process that bound to it would leave by the default route with that
@@ -44,7 +46,8 @@ func EgressNft(a *HubAnswers) string {
 	w("# SatBooth hub host: what the hub's network namespace may send out. Load as root: nft -f <this file>")
 	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", ip)
 	w("# connections made to it, and open TCP connections to the Lightning peers in the set %s, and nothing else:", nftSet)
-	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:")
+	w("# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.")
 	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   nft add element inet %s %s { 203.0.113.7 . 9735 }", nftTable, nftSet)
@@ -92,7 +95,8 @@ func EgressIptables(a *HubAnswers) string {
 	w("# SatBooth hub host: what the hub's network namespace may send out. Run as root: sh <this file>")
 	w("# The namespace (hub, relay, UI proxy) has the address %s. It may reach the bundle's own two networks, answer", a.HubIP)
 	w("# connections made to it, and open TCP connections to the Lightning peers in the chain %s, and nothing else:", iptPeers)
-	w("# everything else, outside DNS included, is logged and dropped. bitcoind is another container and is not bound.")
+	w("# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:")
+	w("# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.")
 	w("# What leaves with an address on the electrum network (%s) for anywhere outside it is dropped too.", a.ElectrumSubnet)
 	w("# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:")
 	w("#   iptables-legacy -w -A %s -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT", iptPeers)
