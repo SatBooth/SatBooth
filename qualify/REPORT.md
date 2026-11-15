@@ -1125,13 +1125,16 @@ The group needs Linux with root, which GitHub's hosted runner has; it prints "NO
 evidence of a run is the `qualify-logs` artifact (`dev/regtest/logs/egress/`, `summary.txt` first), kept whether the run
 passed or not.
 
-Result: the group passed in https://github.com/SatBooth/SatBooth/actions/runs/43695438005. The hub bundle (Alby Hub v1.24.7) ran under the printed nftables rules (the runner's
-Docker uses nftables): only the listed Lightning peer passed the firewall, and no DNS query for a name outside the
-pinned ones left the host. The logged-in pages through the proxy made 142 requests, none to another origin;
-`GET /api/health` through the proxy answered 200; `TestLightningPay` and `TestRefundPay` passed with the rules on. A
-lookup of an unpinned name never resolved; each took 12 to 13 s (the seconds are information, not a bound). The
-iptables-legacy script is run by `scripts/egress-rules-test.sh`, in the egress step of `qualify.yml`, in a privileged
-container with its own network namespace.
+Result: the group passed in https://github.com/SatBooth/SatBooth/actions/runs/43706817298 (commit `9c1e584`). The hub
+bundle (Alby Hub v1.24.7, IPv6 off on its networks) ran under the printed nftables rules (the runner's Docker uses
+nftables): only the listed Lightning peer passed the firewall; new connections from the hub's address and from its
+electrum-network address to the host itself were dropped (each connected with the rules off); and no DNS query for a
+name outside the pinned ones left the host. The logged-in pages through the proxy made 142 requests, none to another
+origin; `GET /api/health` through the proxy answered 200; `TestLightningPay` and `TestRefundPay` passed with the rules
+on. A lookup of an unpinned name never resolved; the two probes took 12 and 13 s (the seconds are information, not a
+bound). In the same run `scripts/egress-rules-test.sh` applied both printed files, the nftables one and the
+iptables-legacy one, in a privileged container with its own network namespace, and every probe matched (including the
+reruns, which leave one jump in `DOCKER-USER` and two in `INPUT`).
 
 What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh`; the full run ends with it):
 

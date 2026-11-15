@@ -430,8 +430,8 @@ for _ in range(3):
   if [ "$r" = blocked ]; then egress_ok "canary tcp 203.0.113.9:4445 from the electrum-network address: blocked"; else egress_bad "canary from the electrum-network address connected"; fi
   r=$(egress_probe tcp "$peer_ip" 9735)
   if [ "$r" = blocked ]; then egress_ok "the peer $peer_ip:9735 before it is listed: blocked"; else egress_bad "the unlisted peer connected"; fi
-  # Each host canary is judged by its own counter rise: the counters are those of the drop rules of every chain, and
-  # nothing else sends to the host's listener during the probe.
+  # Each host canary is also read against the drop counters around it. The counters sum the drop rules of every chain,
+  # so this backs the probe's own "blocked" (with its rules-off control above) rather than naming the rule that fired.
   local h0 h1
   h0=$(egress_drops)
   r=$(egress_probe tcp "$host_ip" 4446)

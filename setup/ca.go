@@ -232,6 +232,10 @@ func (l *Lock) HubRenewCert(rand io.Reader) (*Report, error) {
 	case notThere(certErr) && notThere(keyErr):
 		return nil, errors.New("setup: only config/hub-ca.pem exists, without setup/ca-cert.pem and setup/ca-key.pem (an earlier run " +
 			"stopped after its first write): delete config/hub-ca.pem (as root if the hub owns it) and run this again, which makes a new authority")
+	case certErr == nil && notThere(keyErr):
+		return nil, errors.New("setup: setup/ca-key.pem is missing but setup/ca-cert.pem exists (an earlier run stopped before " +
+			"its last write, or the key was removed): delete setup/ca-cert.pem and config/hub-ca.pem (as root if the hub owns it) " +
+			"and run this again, which makes a new authority")
 	case certErr != nil:
 		return nil, errors.New("setup: cannot read setup/ca-cert.pem (it and setup/ca-key.pem must both be there, or both absent)")
 	case keyErr != nil:

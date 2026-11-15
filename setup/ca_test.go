@@ -392,6 +392,21 @@ func TestRenewWithOnlyTheConfigCopy(t *testing.T) {
 	}
 }
 
+// A stop after the second write (setup's copy present, the key absent) names both files to delete.
+func TestRenewWithoutTheKey(t *testing.T) {
+	e := newEnv(t, fxEveryRail(t))
+	e.upTo(3)
+	d := e.hubDir
+	if err := os.Remove(filepath.Join(d, caKeyFile)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := renew(t, d, 9)
+	if err == nil || !strings.Contains(err.Error(), "setup/ca-key.pem is missing") ||
+		!strings.Contains(err.Error(), "delete setup/ca-cert.pem and config/hub-ca.pem") {
+		t.Fatalf("error: %v", err)
+	}
+}
+
 // The CA itself refuses to vouch for any other name: a leaf made with its key for a name outside the list fails
 // verification, alone or beside listed names, and every listed name still verifies.
 func TestCAIsConstrainedToTheNames(t *testing.T) {
