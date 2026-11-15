@@ -1,6 +1,8 @@
 package setup
 
 import (
+	"math/rand"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -115,6 +117,125 @@ func TestHubImagePinsAgree(t *testing.T) {
 	for _, f := range [][]byte{b, r} {
 		if strings.Contains(string(f), "getalby/hub:v1.24.6") {
 			t.Error("a compose file still pins v1.24.6")
+		}
+	}
+}
+
+// serviceText is the text of one service of a Compose file: from its "  <name>:" line to the next service or the
+// top-level key after the services.
+func serviceText(t *testing.T, path, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	i := strings.Index(s, "\n  "+name+":\n")
+	if i < 0 {
+		t.Fatalf("%s has no service %s", path, name)
+	}
+	lines := strings.SplitAfter(s[i+1:], "\n")
+	out := lines[0]
+	for _, l := range lines[1:] {
+		if l != "\n" && !strings.HasPrefix(l, "   ") && !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			break
+		}
+		out += l
+	}
+	return out
+}
+
+// The names pinned to the stub are exactly the names of its certificate, each to HUB_STUB_IP; the stub is on the
+// internal network alone with its own files read-only, at 443 as a non-root user through the namespaced sysctl; the hub
+// mounts the authority's certificate at SSL_CERT_FILE and nothing else of the authority's.
+func TestHubStubWiring(t *testing.T) {
+	const c = "../deploy/hub/compose.yml"
+	netns := serviceText(t, c, "netns")
+	var pinned []string
+	for _, l := range strings.Split(netns, "\n") {
+		if n, ok := strings.CutPrefix(strings.TrimSpace(l), `- "`); ok && strings.Contains(n, ":${HUB_STUB_IP:?") {
+			name, rest, _ := strings.Cut(n, ":")
+			if rest != "${HUB_STUB_IP:?set HUB_STUB_IP}\"" {
+				t.Errorf("%s is pinned to %s", name, rest)
+			}
+			pinned = append(pinned, name)
+		}
+	}
+	if strings.Join(pinned, ",") != strings.Join(StubNames(), ",") {
+		t.Errorf("pinned names %v, want %v", pinned, StubNames())
+	}
+	if strings.Contains(serviceText(t, c, "hub"), "extra_hosts") {
+		t.Error("the hub shares netns's hosts file: extra_hosts on it is refused by Docker")
+	}
+
+	stub := serviceText(t, c, "hubstub")
+	for _, want := range []string{
+		"image: ghcr.io/satbooth/satbooth-relay:", `entrypoint: ["/satbooth-hubstub"]`, "net.ipv4.ip_unprivileged_port_start", "<<: *hardening",
+		"/stub-cert.pem\n        target: /etc/satbooth/stub-cert.pem\n        read_only: true",
+		"/stub-key.pem\n        target: /etc/satbooth/stub-key.pem\n        read_only: true",
+		"ipv4_address: ${HUB_STUB_IP:?set HUB_STUB_IP}",
+	} {
+		if !strings.Contains(stub, want) {
+			t.Errorf("the stub service lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"ports:", "cap_add", "user: \"0", "hub-ca-key", "ca-key", "network_mode", "hub:\n", "privileged:"} {
+		if strings.Contains(stub, bad) {
+			t.Errorf("the stub service has %q", bad)
+		}
+	}
+	relayImage := func(s string) string {
+		_, v, _ := strings.Cut(s, "image: ")
+		v, _, _ = strings.Cut(v, "\n")
+		return v
+	}
+	if relayImage(stub) != relayImage(serviceText(t, c, "relay")) {
+		t.Error("the stub and the relay are not the same image reference")
+	}
+
+	hub := serviceText(t, c, "hub")
+	if !strings.Contains(hub, "/hub-ca.pem\n        target: /etc/satbooth/ca.pem\n        read_only: true") {
+		t.Error("the hub does not mount hub-ca.pem read-only at SSL_CERT_FILE")
+	}
+	if env := hubEnvironment(t, c); env["SSL_CERT_FILE"] != "/etc/satbooth/ca.pem" || strings.Contains(hub, "ca-key") ||
+		strings.Contains(hub, "stub-") {
+		t.Error("the hub is given more than the authority's certificate")
+	}
+
+	vi := serviceText(t, c, "volume-init")
+	for _, want := range []string{
+		"chown 10003:10003 /config/hub-ca.pem", "chown 65532:65532 /config/stub-cert.pem /config/stub-key.pem"} {
+		if !strings.Contains(vi, want) {
+			t.Errorf("volume-init lacks %q", want)
+		}
+	}
+	b := serviceText(t, "../deploy/hub/compose.build.yml", "hubstub")
+	if !strings.Contains(b, "target: satbooth-relay") || !strings.Contains(b, "image: satbooth-relay:local") {
+		t.Error("compose.build.yml does not build the stub from the relay image")
+	}
+}
+
+// The stub's address is the last host address of the internal network, inside it, and never the gateway.
+func TestStubIP(t *testing.T) {
+	for in, want := range map[string]string{"172.30.78.128/25": "172.30.78.254", "10.3.0.0/24": "10.3.0.254",
+		"192.168.0.0/29": "192.168.0.6", "10.0.0.0/16": "10.0.255.254"} {
+		if got := StubIP(in); got != want {
+			t.Errorf("StubIP(%s) = %s, want %s", in, got, want)
+		}
+	}
+	for _, in := range []string{"", "x", "fd00::/64", "10.0.0.0/30"} {
+		if StubIP(in) != "" {
+			t.Errorf("StubIP(%q) is not empty", in)
+		}
+	}
+	r := rand.New(rand.NewSource(5))
+	for i := 0; i < 500; i++ {
+		bits := 16 + r.Intn(14)
+		a := netip.AddrFrom4([4]byte{10, byte(r.Intn(256)), byte(r.Intn(256)), 0})
+		p, _ := a.Prefix(bits)
+		ip := netip.MustParseAddr(StubIP(p.String()))
+		if !p.Contains(ip) || ip == p.Addr() || ip == p.Addr().Next() || ip == lastAddr(p) {
+			t.Fatalf("%s: stub address %s", p, ip)
 		}
 	}
 }

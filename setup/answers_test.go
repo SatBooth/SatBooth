@@ -862,7 +862,7 @@ func TestParseHubAnswersProperty(t *testing.T) {
 			t.Fatalf("relay refuses the rendered file: %v: %s", err, in)
 		}
 		env := string(HubComposeEnv(a))
-		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 9 || strings.ContainsAny(env, " \"'$\r\t") {
+		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 10 || strings.ContainsAny(env, " \"'$\r\t") {
 			t.Fatalf("hub env file: %q", env)
 		}
 	}

@@ -328,3 +328,23 @@ func TestKnownHostsAreTheCertificatesNames(t *testing.T) {
 		t.Errorf("%d known hosts, %d names", n, len(setup.StubNames()))
 	}
 }
+
+// The version the info document names as the latest is the hub the bundle pins: a hub upgrade has to change both.
+func TestLatestVersionIsThePinnedHub(t *testing.T) {
+	b, err := os.ReadFile("../deploy/hub/compose.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, ok := strings.Cut(string(b), "ghcr.io/getalby/hub:v")
+	if !ok {
+		t.Fatal("no pinned hub image")
+	}
+	tag, _, _ := strings.Cut(rest, "@")
+	var doc hubInfo
+	if err := json.Unmarshal([]byte(info), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Hub.LatestVersion != tag {
+		t.Errorf("the stub says the latest hub is %s, the bundle pins %s", doc.Hub.LatestVersion, tag)
+	}
+}

@@ -52,6 +52,8 @@ services:
         chmod 0700 /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /wallet
         if [ -e /config/fulcrum.conf ]; then chown 10004:10004 /config/fulcrum.conf; fi
         if [ -e /config/relay.json ]; then chown 65532:65532 /config/relay.json; fi
+        if [ -e /config/hub-ca.pem ]; then chown 10003:10003 /config/hub-ca.pem; fi
+        if [ -e /config/stub-cert.pem ]; then chown 65532:65532 /config/stub-cert.pem /config/stub-key.pem; fi
         if [ -e /config/monerod.conf ]; then chown 10002:10002 /config/monerod.conf; fi
         if [ -e /config/wallet-rpc ]; then chown -R 10002:10002 /config/wallet-rpc; chmod 0700 /config/wallet-rpc; fi
     volumes:
@@ -77,6 +79,21 @@ services:
       hub:
         ipv4_address: ${HUB_IP:?set HUB_IP}
       electrum: {}
+    # The names the hub would call at Alby, mempool.space, Boltz and Megalith (and the stub's own) are the stub's: the
+    # hub shares this container's network and its /etc/hosts (Docker refuses extra_hosts on a container that joins a
+    # namespace), so a lookup never leaves the host. They are exactly setup's StubNames, the names of the stub's
+    # certificate (TestHubStubWiring). Any other name the hub asks for is not pinned: it has no route out and trusts
+    # no certificate authority but the bundle's.
+    extra_hosts:
+      - "hubstub:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "getalby.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.getalby.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "mempool.space:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.boltz.exchange:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.satsrouting.exchange:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "megalithic.me:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "electrum.getalbypro.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "vss.getalbypro.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
     ports:
       # The hub's web UI and API: the operator's admin access (setup, unlock, channels, pairing, backups). Never on
       # HUB_PRIVATE_ADDR: the public host reaches that address, and the UI controls the node's funds.
@@ -114,8 +131,8 @@ services:
       #   stub as well (api/rebalance.go:60-75; lnclient/ldk/ldk.go:282-288).
       # - HIDE_UPDATE_BANNER: hides the banner; the hub still asks its update check, which the stub answers.
       # - SSL_CERT_FILE and SSL_CERT_DIR: the hub trusts one certificate authority, the bundle's, and no system root, so
-      #   a TLS connection to any real host fails. The path is where the authority's certificate (config/hub-ca.pem,
-      #   made by setup) goes in the container; this file does not mount it yet, so the hub has no root at all.
+      #   a TLS connection to any real host fails. The authority's certificate is config/hub-ca.pem (made by setup),
+      #   mounted below; /etc/satbooth/no-roots exists nowhere, so the system roots are never read.
       BOLTZ_API: https://hubstub
       REBALANCE_SERVICE_URL: https://hubstub
       LDK_VSS_URL: https://hubstub
@@ -139,12 +156,21 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      # The one certificate authority the hub trusts (SSL_CERT_FILE below); its key is in setup/, never here.
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/hub-ca.pem
+        target: /etc/satbooth/ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       volume-init:
         condition: service_completed_successfully
       netns:
         condition: service_started
       bitcoind:
+        condition: service_started
+      hubstub:
         condition: service_started
 
   relay:
@@ -164,6 +190,39 @@ services:
         condition: service_completed_successfully
       netns:
         condition: service_started
+
+  # Answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally (satbooth-hubstub, in the relay image),
+  # over TLS with a certificate from the bundle's own authority, at HUB_STUB_IP. It is on the internal electrum network
+  # alone: it has no route out and nothing outside can reach it. It listens on 443 as 65532 with every capability
+  # dropped: the sysctl lowers the first unprivileged port in this container's own network namespace only (it is
+  # namespaced, so the host and the other containers keep theirs), which needs no capability and no setcap, neither of
+  # which a non-root process in a scratch image has.
+  hubstub:
+    <<: *hardening
+    image: ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
+    entrypoint: ["/satbooth-hubstub"]
+    command: ["-cert", "/etc/satbooth/stub-cert.pem", "-key", "/etc/satbooth/stub-key.pem", "-listen", ":443"]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    volumes:
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/stub-cert.pem
+        target: /etc/satbooth/stub-cert.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/stub-key.pem
+        target: /etc/satbooth/stub-key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      electrum:
+        ipv4_address: ${HUB_STUB_IP:?set HUB_STUB_IP}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
 
   bitcoind:
     <<: *hardening
@@ -275,7 +334,7 @@ networks:
     ipam:
       config:
         - subnet: ${HUB_SUBNET:?set HUB_SUBNET}
-  # netns (the hub), bitcoind and Fulcrum, with no route out: Fulcrum's only network. It exists without the electrum
+  # netns (the hub), bitcoind, the stub and Fulcrum, with no route out: Fulcrum's and the stub's only network. It exists without the electrum
   # profile too (the hub and bitcoind are always on it, and Compose cannot attach them conditionally), unused, so
   # ELECTRUM_SUBNET is always set.
   electrum:

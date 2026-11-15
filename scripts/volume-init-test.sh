@@ -48,7 +48,7 @@ mkdir -m 0700 "$SATBOOTH_ETC" "$SATBOOTH_BACKUPS" "$HUB_CONFIG_DIR" "$MONERO_WAL
 (
   umask 077
   echo '{}' > "$SATBOOTH_ETC/satbooth.json"
-  for f in hub.env bitcoin.conf relay.json fulcrum.conf monerod.conf wallet-rpc/rpc-login wallet-rpc/wallet.pass; do
+  for f in hub.env bitcoin.conf relay.json hub-ca.pem stub-cert.pem stub-key.pem fulcrum.conf monerod.conf wallet-rpc/rpc-login wallet-rpc/wallet.pass; do
     echo dummy > "$HUB_CONFIG_DIR/$f"
   done
   echo dummy > "$MONERO_WALLET_DIR/satbooth-view"
@@ -61,11 +61,12 @@ expect public pub "65532:65532 700 /etc/satbooth;65532:65532 600 /etc/satbooth/s
 twice hub hub
 expect hub hub "10003:10003 700 /vol/hub;10001:10001 700 /vol/bitcoind;10004:10004 700 /vol/fulcrum;\
 10002:10002 700 /vol/monerod;10003:10003 600 /config/hub.env;10001:10001 600 /config/bitcoin.conf;\
-65532:65532 600 /config/relay.json;10004:10004 600 /config/fulcrum.conf;10002:10002 600 /config/monerod.conf;\
+65532:65532 600 /config/relay.json;10003:10003 600 /config/hub-ca.pem;65532:65532 600 /config/stub-cert.pem;\
+65532:65532 600 /config/stub-key.pem;10004:10004 600 /config/fulcrum.conf;10002:10002 600 /config/monerod.conf;\
 10002:10002 700 /config/wallet-rpc;10002:10002 600 /config/wallet-rpc/rpc-login;\
 10002:10002 600 /config/wallet-rpc/wallet.pass;10002:10002 700 /wallet;10002:10002 600 /wallet/satbooth-view;" \
-  /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /config/hub.env /config/bitcoin.conf /config/relay.json \
-  /config/fulcrum.conf /config/monerod.conf /config/wallet-rpc /config/wallet-rpc/rpc-login \
+  /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /config/hub.env /config/bitcoin.conf /config/relay.json /config/hub-ca.pem /config/stub-cert.pem \
+  /config/stub-key.pem /config/fulcrum.conf /config/monerod.conf /config/wallet-rpc /config/wallet-rpc/rpc-login \
   /config/wallet-rpc/wallet.pass /wallet /wallet/satbooth-view
 
 # Without the electrum profile there is no fulcrum.conf: volume-init must still exit 0 and prepare the other files, and

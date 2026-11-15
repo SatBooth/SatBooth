@@ -1812,7 +1812,7 @@ images (plan 10)", "Deployment bundles"). The threat model's §0, §5, §6 and �
    -trimpath -ldflags=-buildid=`. The `satbooth` image holds `/satbooth` and `/etc/ssl/certs/ca-certificates.crt`,
    copied from the digest-pinned Go image's `certs` stage, always the `linux/amd64` one (rate providers, webhooks,
    `wss://` relays and an `https://` bitcoind or wallet-rpc); the
-   `satbooth-relay` image holds `/satbooth-relay`; the `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`
+   `satbooth-relay` image holds `/satbooth-relay` and `/satbooth-hubstub` (the hub bundle's stub); the `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`
    (no entrypoint, no CA bundle: neither uses the network). `scripts/image-check.sh` lists every entry in every layer of the
    exported image and refuses any other file; `scripts/image-run-test.sh` runs each image with a read-only root, all
    capabilities dropped and `no-new-privileges`, and checks its refusal of a missing configuration (for the tools image,

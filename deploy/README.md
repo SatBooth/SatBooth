@@ -334,6 +334,17 @@ directories. Every file is created with mode 0600 and every directory with 0700,
 directory's path may hold only letters, digits and `/._-` (it goes into a Compose env file), and the wrapper refuses a
 colon in any path it mounts (Docker's mount syntax).
 
+**The stub.** The `hubstub` service (`satbooth-hubstub`, from the relay image) answers, over TLS, the calls the hub makes
+to Alby, mempool.space, Boltz and Megalith. It is on the internal network alone, at `HUB_STUB_IP`, and listens on 443 as
+user 65532 with every capability dropped, through the namespaced sysctl `net.ipv4.ip_unprivileged_port_start=0` on its
+own container (a capability would not help a non-root process in an image with no file capabilities, and the sysctl
+reaches no other container or the host). The hub container shares the `netns` container's network and its `/etc/hosts`,
+so `netns` carries the `extra_hosts` that send every name of the certificate to the stub; any other name is not pinned,
+and the hub trusts no authority but the bundle's, so a TLS connection to it fails. The hub mounts `config/hub-ca.pem`
+at `/etc/satbooth/ca.pem` (`SSL_CERT_FILE`) and nothing else of the authority's. The release image pinned in
+`compose.yml` is older than the stub: until the pins move at the next release, run the bundle from source
+(`compose.build.yml`).
+
 **The hub's certificate authority.** Stage 2 on the hub host makes a private certificate authority (ECDSA P-256, valid
 10 years) and a certificate for the hub's stub (valid 2 years) that names exactly these hosts: `hubstub`, `getalby.com`,
 `api.getalby.com`, `mempool.space`, `api.boltz.exchange`, `api.satsrouting.exchange`, `megalithic.me`,
@@ -342,7 +353,7 @@ certificate verifies for those names and for no other. Files: `config/hub-ca.pem
 hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the stub), and `setup/ca-key.pem`, the authority's key: it is
 in `setup/`, which no service mounts, and is never copied; keep it that way. Every file has mode 0600. Before the
 certificate expires, run `deploy/setup.sh <dir> hub renew-cert`: it writes a new certificate and key for the stub from
-the same authority and leaves every other file as it is; restart the stub afterwards. The hub and bitcoind do not
+the same authority and leaves every other file as it is; restart the stub afterwards (it reads its certificate once, at start), and run `volume-init` first so the new files belong to its user. The hub and bitcoind do not
 restart. Each file is written as `<name>.new` (mode 0600) and renamed into place, the key first: if the run is
 interrupted, run it again (a `.new` file left behind is replaced; a certificate that does not match its key is repaired).
 The authority's certificate ends 10 years after stage 2 ran, and the command refuses once it has ended; a new authority
@@ -709,7 +720,8 @@ create a missing file's path as a directory.
    | `HUB_PRIVATE_ADDR` | the hub host's address on the private link; the relay, bitcoind's RPC and (`monero` profile) wallet-rpc bind it |
    | `HUB_ADMIN_ADDR` | where the hub's admin UI is published: `127.0.0.1`, reached through an SSH tunnel; never `HUB_PRIVATE_ADDR` or a public address |
    | `HUB_SUBNET`, `HUB_IP` | the bundle's Docker network and the fixed address of the hub and the relay on it; `client_listen` in `relay.json` is `HUB_IP:7448` |
-   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind and, with the `electrum` profile, Fulcrum (no route out); created, and needed, with or without the profile |
+   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind, the stub and, with the `electrum` profile, Fulcrum (no route out); created, and needed, with or without the profile |
+   | `HUB_STUB_IP` | the stub's fixed address on that network: the last host address of `ELECTRUM_SUBNET` (stage 2 writes it; by hand, `172.30.78.254` for the default) |
    | `HUB_NETWORK` | the hub's chain: `bitcoin` or `signet` (the hub maps `testnet` to signet, getAlby/hub v1.24.6 `lnclient/ldk/ldk.go:206-213`) |
    | `HUB_CONFIG_DIR` | host directory with `relay.json`, `bitcoin.conf`, `hub.env`, with the `electrum` profile `fulcrum.conf`, and with the `monero` profile `monerod.conf` and `wallet-rpc/` |
    | `MONERO_WALLET_DIR` | host directory with the view-only wallet `satbooth-view` and `satbooth-view.keys` (any directory without the `monero` profile) |
