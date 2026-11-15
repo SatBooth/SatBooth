@@ -1161,7 +1161,7 @@ What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh
   where the printed rules do not see them, so the bundle's `netns` service sets `dns:` to the stub's address (no DNS
   port: refused at once, inside the host). The group looks up unpinned names from inside the namespace with the rules
   off and with them on, with every interface of the host and the namespace's loopback recorded, and requires: the
-  lookup fails within 8 s, and the name appears nowhere on the host's loopback (its resolver) or sent out of the host
+  lookup never resolves (the seconds are recorded as information: Docker's resolver times each query out after 4 s against the stub, which has no DNS port), and the name appears nowhere on the host's loopback (its resolver) or sent out of the host
   (a packet on a Docker bridge is the query going to the stub). Its control is a container on the hub's network
   without the setting, whose lookup must be seen on the host's resolver path, so that the recorder is shown to see it.
   The names the hub's namespace asked (read from the packets' DNS questions) must show none either.
