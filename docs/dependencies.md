@@ -140,8 +140,11 @@ From `getAlby/hub` at commit `921003b` (the v1.24.6 release), `SendPaymentSync` 
 
 **The qualified hub.** `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7`
 (the multi-arch index digest). The tag `v1.24.6` points at commit `921003b`, so the source citations in this
-section and the image are the same code. The qualification suite asserts the facts marked observed below and passed in
-full against this image; the timings and counts quoted are from the earlier v1.24.4 run (`qualify/REPORT.md`).
+section and the image are the same code. The hub bundle and the regtest hubs now pin v1.24.7 (§8); the egress group
+ran the Lightning phases against it and passed (`qualify/REPORT.md`, "The hub with no outside calls"), the rest of the suite
+against v1.24.6; the citations of this section are v1.24.6's. The qualification suite asserts the facts
+marked observed below and passed in full against the v1.24.6 image; the timings and counts quoted are from the
+earlier v1.24.4 run (`qualify/REPORT.md`).
 
 | Fact the client relies on | Source (`getAlby/hub 921003b`) | Observed (qualification) |
 |---|---|---|
@@ -369,6 +372,17 @@ it minus what it has paid out (`db/queries/get_isolated_balance.go`).
     arise) has `ARBITRARY_EXECUTION`, `FILES`, `READ_SYSTEM_STATE`, `REFLECT` and `UNANALYZED` and no `NETWORK`;
     `scripts/capslock.sh` runs that analysis for it and for `cmd/satbooth-pair` (both ship in the tools image) and
     fails if `NETWORK` appears, if capslock fails or if it prints no capability at all.
+  - Adding `hubstub` and `cmd/satbooth-hubstub` (the hub bundle's stub, shipped in the relay image; standard library
+    only, no module) adds one package entry to `docs/capslock.json`, and no other package changed. It lists `NETWORK`
+    (it serves TLS), `FILES` (`tls.LoadX509KeyPair` reads the certificate and key), `REFLECT`, `RUNTIME`,
+    `SYSTEM_CALLS`, `ARBITRARY_EXECUTION`, `UNSAFE_POINTER` and `UNANALYZED`, the artefacts `net/http` and `crypto/tls`
+    carry for every server in the module. It answers with fixed strings rather than `encoding/json`, so the encoder's
+    writer over-approximation (above) adds nothing to it.
+  - Adding `hubproxy` and `cmd/satbooth-hubproxy` (the reverse proxy in front of the hub's UI, shipped in the relay
+    image; standard library only: `net/http/httputil`) adds one package entry to `docs/capslock.json` with the same
+    capabilities as `hubstub` (it serves and dials HTTP, and reads nothing but its flags), and no other package changed.
+    The proxy uses the default transport with its proxy setting removed and refuses any upstream that is not an `http`
+    URL on a loopback address.
   - `service` and `cmd/satbooth` gain `MODIFY_SYSTEM_STATE` under the label `LOGGING` (plan 13): `service.Run` sets the
     standard logger's flags and output (`log.SetFlags`, `log.SetOutput`) once, to a writer that logs a fixed line. The
     standard logger is where `net/http` writes on its own (a client logs the first bytes a server sent on a connection
@@ -593,12 +607,12 @@ it minus what it has paid out (`db/queries/get_isolated_balance.go`).
 images never contain them. Alby Hub is its release image, pulled by digest. bitcoind, Fulcrum and the Monero binaries
 are official release binaries, checked against pinned SHA-256 hashes in the Dockerfiles (`deploy/hub/*/Dockerfile`)
 and copied onto `debian:13-slim` pinned by digest (plan 10, decision 5). Each runs as its own non-root user with a
-read-only root and no capabilities (`deploy/README.md`). Alby Hub v1.24.6, Bitcoin Core 32.1 and Monero v0.18.5.4 are
-the qualified versions (`qualify/REPORT.md`); the bundle uses the same pins as `dev/regtest/`.
+read-only root and no capabilities (`deploy/README.md`). Alby Hub v1.24.7, Bitcoin Core 32.1 and Monero v0.18.5.4 are
+the pinned versions (Alby Hub v1.24.6 is the version `qualify/REPORT.md` records); the bundle uses the same pins as `dev/regtest/`.
 
 | Server | Version (date) | Why | License | Source of the binary and its check | Needs | Record |
 |---|---|---|---|---|---|---|
-| Alby Hub | v1.24.6 | The Lightning node SatBooth's NWC connections reach (`design.md` §2.1); §4 above has what it enforces | Apache-2.0 | `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7`, the multi-arch index digest; the tag points at commit `921003b`, the source the docs cite (§4) | bitcoind as its chain source (`LDK_BITCOIND_RPC_*`), optionally the bundle's Fulcrum (profile `electrum`) for its address lookups, SatBooth's relay | The version qualified against; a new version is re-qualified before its digest replaces this one |
+| Alby Hub | v1.24.7 (2026-11-14) | The Lightning node SatBooth's NWC connections reach (`design.md` §2.1); §4 above has what it enforces | Apache-2.0 | `ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6dac330fb8a426c02a247d81ebaf07deece22634e97d8f20dd48c3a8e38`, the multi-arch index digest; the tag points at commit `0f16a2f4`. Checked 2026-11-15: the release's `manifest.txt` verified with its detached signature `manifest.txt.asc` ("Good signature", key `5D92 1859 38E6 DBF8 93DC CC5B A5EA BD88 3509 2B08`, published at `github.com/rolznz.gpg` and named in the repository's README), and its hashes equal the SHA-256 digests GitHub shows for the release's assets; the manifest covers the release archives, not the image, so the image is tied to the tag by its build provenance, which records source `github.com/getAlby/hub` at revision `0f16a2f4fa59bd6d97d6496377fcdf885f558b95` for both `linux/amd64` and `linux/arm64`, the commit the tag `v1.24.7` points at (`git ls-remote`). The image is not signed and has no GitHub attestation. | bitcoind as its chain source (`LDK_BITCOIND_RPC_*`), optionally the bundle's Fulcrum (profile `electrum`) for its address lookups, SatBooth's relay | v1.24.7 replaces v1.24.6, which the suite was run against (`qualify/REPORT.md`): the suite has to be run against v1.24.7 before a release. Reasons: v1.24.6 polled the mempool API after every on-chain send, up to 29 times, and returned an error when it never answered, so a broadcast send could be reported as failed and paid twice (`lnclient/ldk/ldk.go` at v1.24.6 `RedeemOnchainFunds`; removed by commit `4078e88e`, "do not verify on-chain sends with the mempool API in LDK backend"), and the bundle points that API at its own stub. v1.24.7 is two days old at the time of writing, short of the 14-day rule for new versions; it is taken because it fixes that hazard. The other changes since v1.24.6 that touch the network are a User-Agent header on swap requests, which the bundle does not use, and the Alby login's PKCE flow, which it does not use either |
 | Bitcoin Core | 32.1 | The hub's chain source and SatBooth's on-chain rail (watch-only wallet, whitelisted RPC user); with the `electrum` profile, Fulcrum's index | MIT | `bitcoincore.org/bin/bitcoin-core-32.1/bitcoin-32.1-{x86_64,aarch64}-linux-gnu.tar.gz`; SHA-256 pinned in `deploy/hub/bitcoind/Dockerfile`, the same hashes as `dev/regtest/bitcoind/Dockerfile`, the entries of the release's `SHA256SUMS` (8 good signatures from the builder keys of `bitcoin-core/guix.sigs` at `fdc0f963`). Only `bitcoind` and `bitcoin-cli` are copied | pruned by default (`prune=50000`, about 50 GB, answer `bitcoind_prune_mib`); unpruned with `txindex=1` only with the `electrum` profile, for Fulcrum | The version qualified against (`qualify/REPORT.md`, "On-chain end to end") |
 | Monero (`monerod`, `monero-wallet-rpc`, `monero-wallet-cli`) | v0.18.5.4 | The `monero` profile: the operator's node and SatBooth's view-only wallet-rpc; `monero-wallet-cli` for the operator to make the view-only wallet | BSD-3-Clause | `downloads.getmonero.org/cli/monero-linux-{x64,armv8}-v0.18.5.4.tar.bz2`; SHA-256 pinned in `deploy/hub/monero/Dockerfile`, the same hashes as `dev/regtest/monero/Dockerfile`, copied from `getmonero.org/downloads/hashes.txt` after its PGP signature verified with the key in `utils/gpg_keys/binaryfate.asc` at the tag | a pruned node is enough | The version qualified against (`qualify/REPORT.md`, "Monero end to end"); not qualified against v0.19 (`docs/monero.md`, "Setting up monerod and monero-wallet-rpc") |
 | Fulcrum (optional: profile `electrum`) | 2.1.4 (2026-10-18) | Optional, off by default. The hub's on-chain address lookups (whether an address was used, for its address API and swaps) need an Electrum or Esplora server: bitcoind has no address index (getAlby/hub v1.24.6 `chain/address_lookup.go:17-26`). Left to the hub's default they go to Alby's server, which learns the hub's addresses and the host's IP; without this profile the bundle pins them to an unreachable local address instead (`deploy/README.md`, "The Electrum server, and the pruned node"). The hub's Lightning chain monitoring does not use it: with bitcoind configured, LDK's only chain source is bitcoind (`lnclient/ldk/ldk.go:217-232`). | GPL-3.0-or-later (`LICENSE.txt` in the tarball); run unmodified as a separate program, no code taken | `github.com/cculianu/Fulcrum` releases, `Fulcrum-2.1.4-{x86_64,arm64}-linux.tar.gz`; hashes from `Fulcrum-2.1.4-shasums.txt`, whose signature verified as "Good signature" from key `D465 135F 97D0 047E 18E9 9DC3 2181 0A54 2031 C02C` (Calin Culianu), the key published in `Electron-Cash/Electron-Cash` `pubkeys/calinkey.txt` (2026-11-11). Dynamically linked against glibc, zlib and libbz2 only, all in the base image | bitcoind with `txindex=1`, unpruned; disk for its index (133 GB for Bitcoin as of August 2023, per its README, more since); RAM 1 GB minimum (`db_mem` default 2048 MiB) | No CVE in the NVD (keyword searches "Fulcrum SPV" and "cculianu", 2026-11-11) and no GitHub security advisory. Maintained since 2020 (53 releases; 2.1.0 to 2.1.4 between 2025-11 and 2026-10); 1,704 commits by its author, 49 by the next four contributors. Chosen over electrs (MIT), which publishes no release binaries. |
@@ -660,9 +674,17 @@ image, and each pin, is in `deploy/README.md` ("Release images").
 | Go builder | `golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9` | the `build` and `certs` stages of `deploy/image/Dockerfile` (only the binaries and the CA bundle leave them: the bundle comes from the `certs` stage, the `linux/amd64` image with no `RUN`); the `volume-init` of the public bundle and of `dev/regtest/` |
 | BuildKit | `moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c` (v0.34.1, published 2026-10-20; the newest release at least 14 days old when pinned) | the `docker-container` builder of `scripts/release-lib.sh`: Docker's own BuildKit, pinned because layer compression and the exporter decide the release image digests |
 | Debian | `debian:13-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2` | the bitcoind, Fulcrum and Monero images of the hub bundle and of `dev/regtest/`, the hub bundle's `netns` and `volume-init` |
-| Alby Hub | `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770…` (the table above) | the hub bundle and the regtest hubs |
+| Alby Hub | `ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6da…` (the table above) | the hub bundle and the regtest hubs |
 | Registry | `registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373` | test only: `scripts/release-push_test.sh` runs it on 127.0.0.1 and proves the absent, present-equal and present-other cases of the registry tag check of `scripts/release-push.sh` against a real OCI distribution server. The Docker official image of CNCF Distribution, pulled anonymously from Docker Hub in CI like the other base images; no release image contains it |
 | `satbooth`, `satbooth-relay`, `satbooth-tools` | built from `deploy/image/Dockerfile`, `FROM scratch`, and published by the release workflow to `ghcr.io/satbooth/<name>:<version>`; the bundles and `deploy/setup.sh` pin each by `tag@digest`, and `compose.build.yml` or `SATBOOTH_BUILD=1` builds from source | the public bundle, the hub bundle's relay, the setup command, and (built from source) qualification |
+
+**Qualification tools for the egress group (test only, nothing shipped).** `qualify/uicheck` drives the runner's Chrome over the
+Chrome DevTools Protocol with `github.com/coder/websocket`, which SatBooth already vendors: no Playwright, no new module and no
+Node dependency (Playwright would add a package and a browser download to pin, and Chrome and its protocol are on the
+runner already). The group installs `tcpdump`, `conntrack` and `nftables` with apt on the runner (workflow step) and builds a
+local image `satbooth-egress-tools` (`debian:13-slim` by the digest above, apt: `iproute2`, `netcat-openbsd`, `socat`,
+`tcpdump`, `conntrack`, `nftables`, `iptables`, `util-linux`) for the peer's namespace and the probes; it is built at run
+time, never published, and never part of a bundle or a release.
 
 **The font.** The logo's wordmark (`docs/logo/satbooth-logo*.svg`) is Rubik 2.300 (github.com/googlefonts/rubik, the
 variable font at weight 800), SIL Open Font License 1.1, with its letters converted to paths. No font file is in the

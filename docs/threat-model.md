@@ -845,9 +845,43 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   (TLS 1.2 or later), no redirect followed, no proxy from the environment, a 10 s timeout, at most 256 KiB of an
   answer, one request per provider per `fetch_seconds` whatever the traffic, and nothing from an answer in a log, an
   error or a response (§10, threat 3).
+- The hub's calls to outside services (the hub bundle; `deploy/README.md`, "The stub"). Alby Hub calls Alby's servers
+  (health and update information, channel suggestions, rates, stories), mempool.space, a swap provider and Megalith's
+  rebalance service at its defaults, and a payment checkout has no business telling any of them that it exists. Controls:
+  the hub's environment redirects what it can to the stub (`BOLTZ_API`, `MEMPOOL_API`, `REBALANCE_SERVICE_URL`,
+  `LDK_VSS_URL`), disables the liquidity provider and rapid gossip sync, and hides the update banner; the container that
+  holds the hub's network namespace maps every other name the hub uses by default (the nine names of the stub's
+  certificate) to the stub in its `/etc/hosts`; the stub, `satbooth-hubstub`, answers them over TLS with a document
+  that says "healthy" and with refusals, logs the method, host and path of each request and never a body, and runs as a
+  non-root user with every capability dropped on the internal network, which has no route out; the hub trusts one
+  certificate authority, the bundle's, through `SSL_CERT_FILE`, with `SSL_CERT_DIR` pointed at a directory that does not
+  exist so that no system root is read (shown: with `SSL_CERT_FILE` alone, a Go client still trusted the system roots);
+  and the authority's certificate carries a critical name constraint for exactly those names, so its key cannot vouch
+  for another host. Residuals: **a compromised stub** can answer the hub with anything the hub accepts from those
+  names (a false "healthy", false suggestions) and can reach what is on the internal network, bitcoind's RPC (whose
+  hub user is confined by `rpcwhitelist`) and Fulcrum, but nothing outside, and it holds no secret but its own
+  certificate key; **theft of the authority's key** (`setup/ca-key.pem`, on a host nothing mounts it on) lets its thief
+  impersonate only the nine names, and only to a client that is on this host's network and trusts it, which is the hub;
+  **pinning names in `/etc/hosts` is not a firewall**: a name the hub resolves that is not in the list goes out to the
+  internet and fails only at the TLS handshake, after the connection and the DNS query. The egress rules of the hub
+  host are what stop that: setup prints them (`hub egress-rules`, nftables or iptables-legacy) and the operator applies
+  them as root. They bound the namespace of the hub, the relay and the UI proxy to the bundle's own networks, answers to
+  connections made to it, and TCP connections to listed Lightning peers (address and port); everything else they send
+  is logged and dropped. DNS is a separate control: Docker's embedded resolver sends its upstream queries from the
+  host's network namespace (measured on Docker Engine 29.4.2), where those rules never see them, so the `netns` service
+  sets `dns:` to the stub's address, whose container has no DNS port: a name nobody pinned is refused on the internal
+  network and never reaches the host's resolver. Residual: any container of the bundle without that setting resolves
+  through the host's resolver (bitcoind, Fulcrum, the Monero services), and a change that drops the setting reopens
+  the path (`TestHubStubWiring` checks it; the qualification measures it). Residuals: a peer must be listed before the hub can reach it; the rules
+  are the operator's to apply and persist, and the bundle does not check that they are loaded; bitcoind is not bound. In the operator's browser,
+  `satbooth-hubproxy` stands on the tunnel's port and replaces the hub's content policy (which allows Alby's hosts and
+  relays) with a self-only one; a page of the hub can then load and contact nothing outside its own origin. Residual: the
+  policy does not stop a link the operator clicks; the operator's own host can reach the hub's listener (HUB_IP, port
+  8081) directly, bypassing the proxy and its policy, which affects only the operator's own browser; and the hub's own listener (8081) is still reachable from the
+  bundle's other containers, as the listener always was (below).
 - The per-host bundles (plan 10, as built; `deploy/README.md`, `design.md` §3 "Operations, as built (plan 10)").
   The hub host publishes on its private-link address only the three things SatBooth calls: the relay's client listener (7448),
-  bitcoind's RPC (8332) and, with the `monero` profile, wallet-rpc (18083). The hub's admin UI and API (8080) is
+  bitcoind's RPC (8332) and, with the `monero` profile, wallet-rpc (18083). The hub's admin UI and API (8080, the proxy's port: the hub itself listens on 8081) is
   published on a separate address, loopback in the example, reached through an SSH tunnel, so a compromised public
   host cannot reach it over the link. The public host publishes only the checkout page. Every published address is a
   required value, so an empty one is an error, never every interface (`scripts/check.sh`). Inside the hub host,
@@ -860,7 +894,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
   host's IP. With the opt-in `electrum` profile, Fulcrum is on an internal network with only bitcoind and the hub's
   namespace, with no route out, and the example `bitcoin.conf` confines Fulcrum's bitcoind user by `rpcwhitelist` to
   the 15 calls Fulcrum 2.1.4 makes. Accepted residuals:
-  - **bitcoind (and, with the `electrum` profile, Fulcrum) can reach the hub's API on 8080.** The hub's HTTP listener binds every address of its
+  - **bitcoind (and, with the `electrum` profile, Fulcrum) can reach the hub's API on 8081.** The hub's HTTP listener binds every address of its
     namespace and has no setting for the address (getAlby/hub v1.24.6 `cmd/http/main.go:59`), and a published port
     reaches the container's address, not its loopback, so the hub's listener cannot be narrowed to the tunnel without
     a forwarder or firewall rules inside the namespace. So a compromised bitcoind (on the `hub` network) or, with the profile, Fulcrum (a
@@ -900,7 +934,7 @@ It never carries the invoice, a payment hash or a preimage. Without a `payout` b
 - As built, the release images are `FROM scratch`, built from the digest-pinned builder
   (`golang:1.27.4-trixie`) with vendored modules and no module download (`GOFLAGS=-mod=vendor GOPROXY=off
   GOTOOLCHAIN=local CGO_ENABLED=0`, `-trimpath -ldflags=-buildid=`). The `satbooth` image holds two files, `/satbooth`
-  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds one, `/satbooth-relay`; the
+  and `/etc/ssl/certs/ca-certificates.crt`; the `satbooth-relay` image holds three, `/satbooth-relay`, `/satbooth-hubstub` (the hub bundle's stub) and `/satbooth-hubproxy` (the proxy in front of the hub's UI); the
   `satbooth-tools` image holds `/satbooth-setup` and `/satbooth-pair`. `scripts/image-check.sh` refuses any other file,
   in CI, and `.dockerignore` keeps the build context to the Go sources, `vendor/`, `go.mod`, `go.sum` and the three
   files `checkout` embeds (`page.html`, `style.css`, `logo.svg`). They run as 65532:65532 with a read-only root

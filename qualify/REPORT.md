@@ -1118,3 +1118,76 @@ Targeted local runs (Docker Desktop, macOS), all green: `--only deploy` (pruned 
 `--only hub` (`TestQualify` and `TestHubAddressLookup`) and `--only onchain` (every on-chain phase of the full run, with
 the three bitcoind kills, `TestOnchainIndexAfter` re-importing descriptors, and the stuck pair, on the pruned node). The
 full run, with the Monero, refund and image groups on the pruned node, is the repository's `qualify.yml` dispatch.
+
+## The hub with no outside calls (`--only egress`)
+
+The group needs Linux with root, which GitHub's hosted runner has; it prints "NOT RUN" elsewhere and claims nothing. The
+evidence of a run is the `qualify-logs` artifact (`dev/regtest/logs/egress/`, `summary.txt` first), kept whether the run
+passed or not.
+
+Result: the group passed in https://github.com/SatBooth/SatBooth/actions/runs/43706817298 (commit `9c1e584`). The hub
+bundle (Alby Hub v1.24.7, IPv6 off on its networks) ran under the printed nftables rules (the runner's Docker uses
+nftables): only the listed Lightning peer passed the firewall; new connections from the hub's address and from its
+electrum-network address to the host itself were dropped (each connected with the rules off); and no DNS query for a
+name outside the pinned ones left the host. The logged-in pages through the proxy made 142 requests, none to another
+origin; `GET /api/health` through the proxy answered 200; `TestLightningPay` and `TestRefundPay` passed with the rules
+on. A lookup of an unpinned name never resolved; the two probes took 12 and 13 s (the seconds are information, not a
+bound). In the same run `scripts/egress-rules-test.sh` applied both printed files, the nftables one and the
+iptables-legacy one, in a privileged container with its own network namespace, and every probe matched (including the
+reruns, which leave one jump in `DOCKER-USER` and two in `INPUT`).
+
+What the group does (`scripts/qualify-egress.sh`, sourced by `scripts/qualify.sh`; the full run ends with it):
+
+- **The system under test is the hub bundle**, not a copy of its settings. After the setup phases, the regtest
+  `hub-satbooth` and its relay stop, and the bundle's compose file (`deploy/hub/compose.yml`, built from source, stage 1
+  and 2 of the setup command, answers without any peer) starts in their place through `dev/regtest/egress-hub.override.yml`:
+  the namespace holder gets `hub-satbooth`'s address on the regtest network, the hub keeps that hub's data volume (its node,
+  channel and connections) and uses the regtest bitcoind with the hub's own RPC user, and the relay is the bundle's relay
+  with the regtest relay's pairs. The stub, the UI proxy, the private authority, the pinned names and the environment are
+  the bundle's own. The Lightning phases then reach the hub's API through the bundle's proxy on 8080.
+- **The rules are the printed ones**: `satbooth-setup hub egress-rules` for the state of that bundle, applied as root on the
+  host. The host's firewall is detected and recorded (`host.txt`: Docker version, `iptables --version`, DOCKER-USER in
+  iptables and in iptables-legacy, the nftables tables, `bridge-nf-call-iptables`, addresses and routes). A host whose
+  DOCKER-USER is in iptables-legacy gets the iptables script; any other gets the nftables file (its chain runs before
+  Docker's).
+- **The peer is outside both networks**: a namespace behind a veth on the host (`10.99.0.2`), reached over the host's forward
+  path, with a relay carrying its port 9735 to the merchant's hub. No peer is in the answers. The order is: rules on and
+  peer not listed (connection blocked, the drop counters rise, the kernel log has the prefix), then the printed add command,
+  then the connection works, and the same address on port 9736 stays blocked.
+- **Recorders, started before the rules and before the hub**: `tcpdump` on the hub network's bridge (headers only, 96
+  bytes, no DNS), on the peer's veth, on every interface for DNS (256 bytes) and inside the hub's namespace on `lo` for DNS,
+  and `conntrack -E` for new connections (an entry is confirmed only for a packet the firewall did not drop, so the list is
+  exactly what passed). Packet captures hold no payload beyond the first bytes of each packet.
+- **Controls, so that a silence means something**: before the rules, a connection and a name lookup from inside the hub's
+  namespace leave the host and must be seen; after them, a TCP connection from the hub's address, a datagram, and a
+  connection from the namespace's electrum-network address to a documentation address must each be blocked, counted and
+  seen on the bridge; so must a new connection to a listener on the host itself (the hub network's gateway address, the
+  input path), which connects with the rules off. The page check has its own control (below).
+- **Judged**: no connection from the hub's address or the electrum network to outside the bundle's and the regtest
+  networks passed the firewall except the listed peer's; every packet the hub's namespace sent to such a destination and
+  that is not a control or for the peer is printed as a finding (the rules dropped it; it is a call to read, not noise);
+  the kernel log has lines with the prefix `satbooth-hub-egress:` (at most 5 a minute, so the counters are the count);
+  `GET /api/health` through the proxy is 200 and the hub runs; the stub's log shows the update check; the stub log's calls
+  are listed in `stub-calls.txt`.
+- **DNS is measured, not assumed.** Docker's embedded resolver sends its upstream queries from the host's namespace,
+  where the printed rules do not see them, so the bundle's `netns` service sets `dns:` to the stub's address (no DNS
+  port: the query fails inside the host and never resolves). The group looks up unpinned names from inside the namespace with the rules
+  off and with them on, with every interface of the host and the namespace's loopback recorded, and requires: the
+  lookup never resolves (the seconds are recorded as information: Docker's resolver times each query out after 4 s against the stub, which has no DNS port), and the name appears nowhere on the host's loopback (its resolver) or sent out of the host
+  (a packet on a Docker bridge is the query going to the stub). Its control is a container on the hub's network
+  without the setting, whose lookup must be seen on the host's resolver path, so that the recorder is shown to see it.
+  The names the hub's namespace asked (read from the packets' DNS questions) must show none either.
+- **The Lightning phases run with the rules on**: `TestLightningPay` (invoice, payment, notification, webhook) and
+  `TestRefundPay` (payout and refund through the payout connection), unchanged. The hub also dials the peer itself (a
+  throwaway public key, so the TCP connection is what is recorded) on the listed port and on an unlisted one.
+- **The logged-in pages, through the proxy, in headless Chrome** (`qualify/uicheck`, the Chrome DevTools Protocol over the
+  vendored websocket library; the runner's Chrome, its version printed): it logs in through the form, then loads Home,
+  Channels, Receive, Settings, the app store and Peers, and records every request, every console message and every
+  content-policy violation. A request to another origin that left the browser fails the run; one the policy stopped is
+  listed (`third_party_blocked_by_policy`). Its control makes the page try a `fetch`, a websocket and an image on an
+  outside origin: all three must be blocked and recorded as violations, or the recorder is called blind and the run fails.
+
+Limits: the hub's connection to the merchant that the Lightning phases use is the established
+one made through the regtest network, so the phases show the hub works with the rules on, and the listed-peer behaviour is
+shown by the probes and the hub's own dials, not by a channel opened through the veth. The recorder sees the hub bridge,
+not the regtest network (internal, no route out). The captures of the peer's veth and the bridge see headers only.

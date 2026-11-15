@@ -61,6 +61,16 @@ run_setup SATBOOTH_BUILD=1
 grep -q "^run .* satbooth-tools:local /satbooth-setup " "$STUB_LOG" || fail "SATBOOTH_BUILD=1: did not run the local image"
 grep -q "^run .* /satbooth-setup public init .* -source-build\$" "$STUB_LOG" || fail "SATBOOTH_BUILD=1: no -source-build flag"
 
+# renew-cert and egress-rules refuse -source-build, so the wrapper does not add it to them.
+for stage in renew-cert egress-rules; do
+  : > "$STUB_LOG"
+  rc=0
+  env -u SATBOOTH_BUILD PATH="$tmp/bin:$PATH" SATBOOTH_BUILD=1 bash deploy/setup.sh "$tmp/work" hub "$stage" > /dev/null 2> "$tmp/err" || rc=$?
+  [ "$rc" -eq 0 ] || fail "SATBOOTH_BUILD=1 $stage: exit $rc"
+  grep -q "^run .* /satbooth-setup hub $stage " "$STUB_LOG" || fail "SATBOOTH_BUILD=1 $stage: the run is missing"
+  ! grep -q -- '-source-build' "$STUB_LOG" || fail "SATBOOTH_BUILD=1 $stage: -source-build was passed"
+done
+
 # Another value is refused before Docker is used.
 run_setup SATBOOTH_BUILD=yes
 [ "$rc" -eq 2 ] || fail "SATBOOTH_BUILD=yes: exit $rc, want 2"

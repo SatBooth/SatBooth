@@ -102,6 +102,7 @@ carries the public host's copies so that the stage can refuse when the two hosts
 | `hub_subnet` | the hub bundle's Docker network (`HUB_SUBNET`): an IPv4 network of `/16` to `/29` | `172.30.78.0/25` |
 | `hub_ip` | the hub's fixed address in it (`HUB_IP`): not its network, gateway or broadcast address | `172.30.78.10` |
 | `electrum_subnet` | the bundle's internal Docker network (`ELECTRUM_SUBNET`), needed with or without the Electrum server; must not overlap `hub_subnet` | `172.30.78.128/25` |
+| `lightning_peers` | the Lightning peers the hub's namespace may connect to on the internet, each `a.b.c.d:port` (IPv4 literal, port 1 to 65535; answers file only, at most 256); more are added to the firewall by hand ("The hub host's egress rules") | none |
 | `electrum` | `true`: run an Electrum server (Fulcrum) for the hub's address lookups, which needs the full, unpruned chain with `txindex=1` and Fulcrum's own index, instead of the pruned default (see "The Electrum server"); start the hub with `--profile electrum` too | `false` |
 | `bitcoind_prune_mib` | how many MiB of block files bitcoind keeps (`prune=` in `bitcoin.conf`): 10240 (10 GiB, about five weeks of blocks) to 1048576. Refused with `electrum: true`: leave it out | `50000` |
 
@@ -178,7 +179,8 @@ flag, an extra argument, or `-host-dir`, `-hub-url`, `-answers`, `-wallet-rpc-pa
    It prints the digest it computed (it matched the one you gave) and these steps, which you do in this order. Below,
    `dc` stands for `docker compose -f deploy/hub/compose.yml --env-file <dir>/compose.env`.
 
-   1. **Start the hub alone:** `dc up -d --build hub`. This starts `volume-init`, `netns`, bitcoind and the hub.
+   1. **Start the hub alone:** `dc up -d --build hub hubproxy`. This starts `volume-init`, `netns`, bitcoind, the stub,
+      the hub and the proxy that serves its admin page on port 8080.
    2. **Open an SSH tunnel to its admin page** from your workstation, with the address of `hub_admin_addr` (loopback by
       default): `ssh -L 8080:<hub_admin_addr>:8080 <hub host>`, then open `http://127.0.0.1:8080`.
    3. **Set the unlock password now, before anything else.** A fresh hub belongs to whoever opens its page first.
@@ -333,6 +335,144 @@ stage also refuses a base directory that already holds any of its
 directories. Every file is created with mode 0600 and every directory with 0700, whatever the umask. The base
 directory's path may hold only letters, digits and `/._-` (it goes into a Compose env file), and the wrapper refuses a
 colon in any path it mounts (Docker's mount syntax).
+
+**The stub.** The `hubstub` service (`satbooth-hubstub`, from the relay image) answers, over TLS, the calls the hub makes
+to Alby, mempool.space, Boltz and Megalith. It is on the internal network alone, at `HUB_STUB_IP`, and listens on 443 as
+user 65532 with every capability dropped, through the namespaced sysctl `net.ipv4.ip_unprivileged_port_start=0` on its
+own container (a capability would not help a non-root process in an image with no file capabilities, and the sysctl
+reaches no other container or the host). The hub container shares the `netns` container's network and its `/etc/hosts`,
+so `netns` carries the `extra_hosts` that send every name of the certificate to the stub; any other name is not pinned,
+and the hub trusts no authority but the bundle's, so a TLS connection to it fails. The hub mounts `config/hub-ca.pem`
+at `/etc/satbooth/ca.pem` (`SSL_CERT_FILE`) and nothing else of the authority's. `HUB_STUB_IP` is the last host address
+of `ELECTRUM_SUBNET`: if you edit one by hand, edit the other to match.
+
+The release image pinned in `compose.yml` (v0.1.0-rc.1) does not hold the stub yet; the next release does. With the
+pinned image, `hubstub` fails at start with `exec: /satbooth-hubstub: not found`, and the hub, which waits for it, does
+not start. Until the pin moves, run the hub bundle from source (`compose.build.yml`, "Build from source").
+
+**The hub's certificate authority.** Stage 2 on the hub host makes a private certificate authority (ECDSA P-256, valid
+10 years, allowed to vouch only for the names below) and a certificate for the hub's stub (valid 2 years) that names
+exactly these hosts: `hubstub`, `getalby.com`, `api.getalby.com`, `mempool.space`, `api.boltz.exchange`,
+`api.satsrouting.exchange`, `megalithic.me`, `electrum.getalbypro.com` and `vss.getalbypro.com`. The hub trusts that
+authority alone (`SSL_CERT_FILE`), so the certificate verifies for those names and for no other. Files, all mode 0600:
+`config/hub-ca.pem` (the authority's certificate, for the hub), `config/stub-cert.pem` and `config/stub-key.pem` (for the
+stub), `setup/ca-cert.pem` (setup's own copy of the authority's certificate) and `setup/ca-key.pem`, the authority's key:
+the last two are in `setup/`, which no service mounts, and the key is never copied. `volume-init` gives `hub-ca.pem` to
+the hub's user (10003) and the stub's two files to the stub's (65532); after that the operator cannot read
+`config/hub-ca.pem`, which is why setup keeps its own copy.
+
+To renew the stub's certificate before it expires, run `deploy/setup.sh <dir> hub renew-cert`, then `volume-init`, then
+restart `hubstub` (it reads its certificate once, at start). The command reads the authority's certificate from
+`setup/ca-cert.pem`, so it works after `volume-init` has given `config/hub-ca.pem` to the hub; it keeps the authority and
+every other file, and puts `config/hub-ca.pem` back only if it is missing or can be read and differs (if it cannot
+replace it, it says so: copy `setup/ca-cert.pem` over it, then run `volume-init`). The hub and bitcoind do not restart. On a
+host set up before setup kept its own copy there is no `setup/ca-cert.pem`: the command says so and names the fix, run
+once as root, `sudo cat config/hub-ca.pem > setup/ca-cert.pem` (the file is public; the redirect runs as you). If it is interrupted, run it again. The authority's certificate ends 10 years after it
+was made, and the command refuses after that: a new authority means a new setup directory and a new `config/hub-ca.pem`
+for the hub.
+
+**The UI proxy.** The operator's tunnel (`ssh -L 8080:<hub_admin_addr>:8080`) ends at `hubproxy`
+(`satbooth-hubproxy`, from the relay image), not at the hub: the hub listens on 8081 in the namespace it shares with the
+proxy, and only 8080 is published. The proxy forwards every request unchanged except that it adds `X-Forwarded-For` with the client's address (the tunnel's end; the hub reads it), passes websockets and streaming
+responses through, and replaces the response's `Content-Security-Policy` with
+`default-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none';
+form-action 'self'`, so the operator's browser, which holds the hub's admin session, loads and contacts nothing but the
+hub's own origin (the hub's own policy lets its pages show images from, and talk to, Alby's hosts and relays). It
+changes no other header and no body. A request the hub does not begin to answer within 60 seconds gets a 502; an idle
+connection is closed after 120 seconds. With the pinned rc.1 image it is missing like the stub: build from source.
+
+**The hub host's egress rules.** Naming the stub's hosts in `/etc/hosts` is not a firewall: a name the hub resolves that is
+not in the list still goes out and fails only at the TLS handshake. The rules close that. They bound one thing, the
+network namespace of the hub, the relay and the UI proxy (the address `HUB_IP` on the hub network), and nothing else
+on the host. That namespace may reach the bundle's own two networks (`HUB_SUBNET`, `ELECTRUM_SUBNET`: bitcoind, the
+stub, Fulcrum), may answer connections made to it (the tunnel to 8080, the relay's 7448, everything the public host
+calls, and any connection a Lightning peer makes to the hub's own listener if you publish it), and may open a TCP
+connection to the internet only to a **listed Lightning peer: an address and a port**, since peers do not all listen
+on 9735. Everything else the namespace sends is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped.
+bitcoind is another container with other addresses and is not bound: it needs the internet for its peers. The
+namespace has a second address, on the internal `electrum` network: whatever leaves with that source for a
+destination outside `ELECTRUM_SUBNET` is dropped and logged as well. What the namespace sends to the host itself (the
+hub network's gateway address, `HUB_PRIVATE_ADDR`, any address of the host) takes the input path, not the forward path:
+a second chain there, from the same two source addresses, lets the host's replies to connections made to the namespace
+through (`ct state established,related`) and logs and drops every new connection to the host. The
+`electrum` and `monero` options change nothing here. The bundle sets `enable_ipv6: false` on the `hub` and `electrum`
+networks, whatever the daemon's default, because the rules are IPv4 only, so peers are IPv4 addresses.
+
+**DNS is not one of the things the rules stop.** Docker's embedded resolver answers the bundle's service names and the
+pinned names itself, and sends a query for any other name to its upstream servers **from the host's network namespace,
+not the container's** (measured on Docker Engine 29.4.2: the query appears from the host's own address, through the
+host's resolver, and never crosses the forward path these rules sit on). So the `netns` service sets
+`dns: [HUB_STUB_IP]`: the one upstream the namespace's resolver has is the stub's address, which the host reaches over
+the internal `electrum` network and whose container has no DNS port, so a name nobody pinned never resolves (each lookup fails after 12 to 13 s, measured) and
+reaches neither the host's resolver nor the internet. Docker's resolver still answers `bitcoind`, `hubstub`, `fulcrum`
+(with the profile) and the pinned names. A container of the bundle without that setting (bitcoind, Fulcrum, the Monero
+services) resolves through the host's resolver; they are not bound by the rules either.
+
+The list starts with the answers' `lightning_peers` (answers file only: `"lightning_peers": ["203.0.113.7:9735"]`;
+IPv4 literals with a port from 1 to 65535, no hostname; empty by default). **Add a peer before you connect to it or open
+a channel with it**, and remove it when it is gone. A hub that tries a peer that is not listed gets a connection that
+never opens. A peer removed from the list does not cut a connection that is already open (an established flow is let
+through): restart the connection. A peer taken out of the answers does not leave a running set or chain either: the
+files only add, so remove it by hand (below).
+
+Setup prints the rules and never applies them. Print the nftables set on a host with `nft` (it is independent of how
+Docker programs its own rules, including through `iptables-nft`), and the iptables set only where Docker uses
+iptables-legacy (`iptables --version` says which):
+
+```sh
+deploy/setup.sh <dir> hub egress-rules -format nft > hub-egress.nft          # nftables
+deploy/setup.sh <dir> hub egress-rules -format iptables > hub-egress.sh      # iptables-legacy
+```
+
+Apply as root: `nft -f hub-egress.nft` (it rebuilds its chain, and keeps the peer set and what was added to it), or
+`sh hub-egress.sh` (it replaces its chains `SATBOOTH_HUB_EGRESS`, `SATBOOTH_HUB_ELECTRUM` and `SATBOOTH_HUB_HOST` in one step with
+`iptables-restore --noflush`, so that a rerun never leaves them empty behind their jumps, keeps the peer chain
+`SATBOOTH_HUB_PEERS`, and adds one jump each to the first two from `DOCKER-USER` and two to the third from `INPUT` (one
+for each of the namespace's two source addresses); `IPT=iptables` names another binary, and its
+`-restore` twin must exist). A peer in the iptables set is `ACCEPT`ed, which ends the traversal of `DOCKER-USER`: rules
+of your own that come after the jump do not see the packets to a listed peer (put them before it). If `iptables
+--version` says `nf_tables`, Docker programs nftables: use the nft file, not the iptables one. Add and remove a peer (the files repeat these):
+
+```sh
+nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }       # nftables: add
+nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }    #           remove
+nft list set inet satbooth_hub satbooth_hub_peers                                  #           list
+iptables-legacy -w -A SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT   # iptables: add
+iptables-legacy -w -D SATBOOTH_HUB_PEERS -d 203.0.113.7 -p tcp --dport 9735 -j ACCEPT   #           remove
+iptables-legacy -w -S SATBOOTH_HUB_PEERS                                                #           list
+```
+
+They survive a Docker restart: the nftables table is not Docker's, and Docker keeps the contents of `DOCKER-USER`. They
+do not survive a reboot, and peers added by hand are not in the files. Save the current state and load it at boot:
+`nft list table inet satbooth_hub > /etc/satbooth-hub.nft`, then at boot
+`nft delete table inet satbooth_hub 2>/dev/null; nft -f /etc/satbooth-hub.nft` from a systemd unit that runs
+`Before=docker.service`, so the rules are in place before any container starts (the nftables file does not need Docker's
+chains). For iptables, `iptables-legacy-save > /etc/satbooth-hub.rules` and `iptables-legacy-restore` after
+`docker.service` has started (Docker must have created `DOCKER-USER` first, so restore only the three chains, or re-run
+`hub-egress.sh` and then add your peers). **That leaves a window**: the containers restart with the daemon
+(`restart: unless-stopped`) and the hub dials out at once, so from the daemon's start until the script finishes (seconds)
+nothing bounds them, and a connection opened in that window is an established flow that the rules let through for as long
+as it lives. To close it, restart the hub's services (`netns`, `hub`, `relay`, `hubproxy`) as the unit's last step, which
+ends those connections, or run `docker compose stop` before a planned reboot (a container stopped by hand stays stopped
+with `unless-stopped`) and start the bundle only after the rules are loaded. The nftables file has no such window.
+Check, from the hub's namespace (`docker compose … exec netns` has no tools; use a throwaway container that joins it):
+
+```sh
+docker run --rm --network container:<project>-netns-1 debian:13-slim bash -c \
+  'exec 3<>/dev/tcp/<a listed peer>/<its port> && echo peer connects; exec 4<>/dev/tcp/1.1.1.1/443 || echo 443 blocked'
+```
+
+The drops appear in `journalctl -k | grep satbooth-hub-egress`, and in `nft list chain inet satbooth_hub egress`
+(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v` (and `SATBOOTH_HUB_ELECTRUM`; the host chain: `nft list chain inet satbooth_hub host_input` or `SATBOOTH_HUB_HOST`). `scripts/egress-rules-test.sh` applies the printed rules
+to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases,
+including adding and removing a peer and saving and loading the nftables state.
+
+**A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
+`deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), add the
+`HUB_STUB_IP=` line it prints to `compose.env` (the file stage 2 wrote before the stub existed has none), run the
+`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. If the command stops after writing only some of `config/hub-ca.pem`, `setup/ca-cert.pem` and `setup/ca-key.pem`, it
+refuses to go on: delete the ones that exist and run it again. The hub's
+environment also changes (`BOLTZ_API`, `MEMPOOL_API` and the others above): `up -d` recreates it.
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
 65532 and sets them to 0700, and `etc/`'s files go with it: after the first start you read them as root. On the hub
@@ -539,7 +679,7 @@ too. The qualification suite runs the bundles this way.
 |---|---|---|
 | `satbooth` | `/satbooth` | The binary, built with `CGO_ENABLED=0 go build -trimpath -ldflags=-buildid=` from the vendored modules. |
 | `satbooth` | `/etc/ssl/certs/ca-certificates.crt` | The CA bundle, copied from the pinned Go image (the `certs` stage, which always runs for `linux/amd64`, so the bytes do not depend on the build host). SatBooth makes outbound TLS connections: rate providers, webhooks, `wss://` relays and an `https://` bitcoind or wallet-rpc. |
-| `satbooth-relay` | `/satbooth-relay` | The binary, built the same way. |
+| `satbooth-relay` | `/satbooth-relay`, `/satbooth-hubstub`, `/satbooth-hubproxy` | The three binaries, built the same way: the relay, and the hub bundle's stub (`cmd/satbooth-hubstub`), which answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally, and the proxy in front of the hub's web UI (`cmd/satbooth-hubproxy`). |
 | `satbooth-tools` | `/satbooth-setup` | The setup command, built the same way. It has no `ENTRYPOINT`: `deploy/setup.sh` names the command. |
 | `satbooth-tools` | `/satbooth-pair` | The pairing tool, built the same way. No CA bundle: neither tool uses the network. |
 
@@ -555,7 +695,7 @@ code never calls `time.LoadLocation`), no shell, no package manager and no other
 | `actions/checkout@3d3c42e5...` | v7.0.1 | The pin `check.yml` and `release.yml` use. |
 | `actions/upload-artifact@cf430e03...`, `actions/download-artifact@9000827c...` | v7.0.2, v8.0.2 | `release.yml` moves each runner's digests to the job that compares them (`upload-artifact` is also used by `qualify.yml`). |
 | `actions/attest-build-provenance@4d101475...` | v4.2.2 | `release.yml` attests each pushed image; the action wraps `actions/attest@508db95d...` (v4.2.1). |
-| `ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770...` (hub bundle) | Alby Hub v1.24.6 | The version qualified against (`qualify/REPORT.md`); the same pin as the regtest hubs. |
+| `ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6da...` (hub bundle) | Alby Hub v1.24.7 | The newest release. v1.24.6 polled the mempool API after every on-chain send and could report a broadcast send as failed (`docs/dependencies.md` §8); the same pin as the regtest hubs. |
 | `debian:13-slim@sha256:a72b4433...` (hub bundle) | Debian 13 | The base of the bitcoind and Monero images (decision 5), the `netns` holder and the hub bundle's `volume-init`; the same pin as the regtest helpers. |
 | Bitcoin Core 32.1, Monero v0.18.5.4 (hub bundle) | release tarballs, SHA-256 pinned | The versions qualified against; the hashes are the regtest images'. |
 | Fulcrum 2.1.4 (hub bundle) | release tarballs, SHA-256 pinned | The newest release (2026-10-18); the hashes are from its PGP-signed `shasums.txt`, see `docs/dependencies.md` §8. |
@@ -576,7 +716,7 @@ docker build -f deploy/image/Dockerfile --target satbooth -t satbooth:local .
 docker build -f deploy/image/Dockerfile --target satbooth-relay -t satbooth-relay:local .
 docker build -f deploy/image/Dockerfile --target satbooth-tools -t satbooth-tools:local .
 scripts/image-check.sh satbooth:local /satbooth /etc/ssl/certs/ca-certificates.crt
-scripts/image-check.sh satbooth-relay:local /satbooth-relay
+scripts/image-check.sh satbooth-relay:local /satbooth-relay /satbooth-hubstub /satbooth-hubproxy
 scripts/image-check.sh satbooth-tools:local /satbooth-setup /satbooth-pair
 scripts/image-run-test.sh satbooth:local satbooth-relay:local satbooth-tools:local
 ```
@@ -649,11 +789,11 @@ outside Swarm (`docs/running.md`, "Secrets in Docker Compose"), so the bundles d
 ### The hub host
 
 **The first start sets the hub's password before anything else runs.** A fresh hub belongs to whoever opens its setup
-page first. So the first `up` starts only the hub and what it needs (`volume-init`, `netns` and bitcoind), and the
-first act after it is to set the unlock password over the SSH tunnel; only then does the rest start:
+page first. So the first `up` starts only the hub, what it needs (`volume-init`, `netns`, bitcoind and the stub) and
+the proxy that serves its page (`hubproxy`), and the first act after it is to set the unlock password over the SSH tunnel; only then does the rest start:
 
 ```sh
-docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build hub
+docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build hub hubproxy
 ssh -L 8080:127.0.0.1:8080 <hub host>   # open http://127.0.0.1:8080 and set the unlock password now
 docker compose -f deploy/hub/compose.yml --env-file <your env file> up -d --build
 # or, with Monero on this host:
@@ -671,7 +811,7 @@ is not started until stage 3 has written `relay.json`, so the loop does not aris
 
 **What can reach the hub's API.** The hub's HTTP listener binds every address of its namespace (getAlby/hub v1.24.6
 `cmd/http/main.go:59`, `":"` and the port, with no setting for the address). So besides the tunnel, bitcoind (on the
-`hub` network) and, with the `electrum` profile, Fulcrum (on the `electrum` network) can connect to its API on 8080. That API still needs the
+`hub` network) and, with the `electrum` profile, Fulcrum (on the `electrum` network) can connect to its API on 8081. That API still needs the
 unlock password or a token, and the hub limits unlock attempts; nothing else of the hub is reachable from them, and the
 relay's client listener binds `HUB_IP` only. A compromised bitcoind (or Fulcrum) can therefore try the API, and on a hub
 that has not been set up yet, take it: hence the order above.
@@ -692,7 +832,8 @@ create a missing file's path as a directory.
    | `HUB_PRIVATE_ADDR` | the hub host's address on the private link; the relay, bitcoind's RPC and (`monero` profile) wallet-rpc bind it |
    | `HUB_ADMIN_ADDR` | where the hub's admin UI is published: `127.0.0.1`, reached through an SSH tunnel; never `HUB_PRIVATE_ADDR` or a public address |
    | `HUB_SUBNET`, `HUB_IP` | the bundle's Docker network and the fixed address of the hub and the relay on it; `client_listen` in `relay.json` is `HUB_IP:7448` |
-   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind and, with the `electrum` profile, Fulcrum (no route out); created, and needed, with or without the profile |
+   | `ELECTRUM_SUBNET` | the bundle's internal network of the hub, bitcoind, the stub and, with the `electrum` profile, Fulcrum (no route out); created, and needed, with or without the profile |
+   | `HUB_STUB_IP` | the stub's fixed address on that network: the last host address of `ELECTRUM_SUBNET` (stage 2 writes it; by hand, `172.30.78.254` for the default) |
    | `HUB_NETWORK` | the hub's chain: `bitcoin` or `signet` (the hub maps `testnet` to signet, getAlby/hub v1.24.6 `lnclient/ldk/ldk.go:206-213`) |
    | `HUB_CONFIG_DIR` | host directory with `relay.json`, `bitcoin.conf`, `hub.env`, with the `electrum` profile `fulcrum.conf`, and with the `monero` profile `monerod.conf` and `wallet-rpc/` |
    | `MONERO_WALLET_DIR` | host directory with the view-only wallet `satbooth-view` and `satbooth-view.keys` (any directory without the `monero` profile) |
@@ -749,24 +890,36 @@ Each key is fixed in `compose.yml`, an operator value, a secret in `hub.env`, or
 | Key | Regtest | Bundle |
 |---|---|---|
 | `WORK_DIR` | `/data` | fixed: `/data` (the `hub-data` volume) |
-| `PORT` | `8080` | fixed: `8080` |
+| `PORT` | `8080` | fixed: `8081` (the hub's own listener; `hubproxy` holds the published port 8080 in front of it) |
 | `NETWORK` | `regtest` | operator: `HUB_NETWORK` |
 | `LOG_LEVEL` | `4` | fixed: `4` |
 | `LDK_BITCOIND_RPC_HOST` | `172.30.78.2` | fixed: `bitcoind` (the bundle's service) |
 | `LDK_BITCOIND_RPC_PORT` | `18443` | fixed: `8332` (`bitcoin.conf` sets `rpcport=8332` on every chain) |
 | `LDK_BITCOIND_RPC_USER` | `hub`, whitelisted as in the bundle | fixed: `hub` |
 | `LDK_BITCOIND_RPC_PASSWORD` | a test string | secret: `hub.env` |
-| `LDK_GOSSIP_SOURCE` | empty | left out: unset and empty are the same, gossip over the peer-to-peer network (`lnclient/ldk/ldk.go:253`), whose channel announcements the hub checks with `getblockhash` and `gettxout` (both in the hub user's `rpcwhitelist`) |
+| `LDK_GOSSIP_SOURCE` | empty | fixed: empty, so no rapid gossip sync server and gossip over the peer-to-peer network (`lnclient/ldk/ldk.go:252-255`), whose channel announcements the hub checks with `getblockhash` and `gettxout` (both in the hub user's `rpcwhitelist`) |
 | `SEND_EVENTS_TO_ALBY` | `false` | fixed: `false` |
 | `AUTO_LINK_ALBY_ACCOUNT` | `false` | fixed: `false` |
-| `MEMPOOL_API` | unreachable, on purpose | left out: the hub's default (`https://mempool.space/api`); set it in `hub.env` to use your own |
+| `MEMPOOL_API` | unreachable, on purpose | fixed: `https://hubstub/api`, the bundle's own stub; the hub's default is `https://mempool.space/api`, and its web UI sends channel peers' public keys and funding transaction ids there (getAlby/hub v1.24.7 `api/api.go:1443-1458`) |
+| `BOLTZ_API` | not set | fixed: `https://hubstub`; any non-empty value stops the call to `getalby.com/api/internal/info` that the hub makes at every start to choose its swap provider (`swaps/swaps_service.go:96-103`); swaps do not work |
+| `LDK_LSPS2_ADDRESSES` | not set | fixed: `none`, which parses to no liquidity provider. Empty would leave the hub's built-in third-party node on, and an invoice above the inbound capacity would then connect to it (`lnclient/ldk/ldk.go:174-202, 2949-2966`) |
+| `REBALANCE_SERVICE_URL` | not set | fixed: `https://hubstub`; the hub's default is Megalith's service, called when the operator rebalances (`api/rebalance.go:60-75`) |
+| `LDK_VSS_URL` | not set | fixed: `https://hubstub`; the hub's default is Alby's VSS server, used only if the operator enables VSS (`lnclient/ldk/ldk.go:282-288`) |
+| `HIDE_UPDATE_BANNER` | not set | fixed: `true` (hides the update banner in the web UI) |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | not set | fixed: `/etc/satbooth/ca.pem` and `/etc/satbooth/no-roots`: the hub trusts the bundle's own certificate authority and no system root, so a TLS connection from the hub to any real host fails. The bundle mounts the certificate and runs `hubstub`, which answers the pinned names |
 | `LDK_ELECTRUM_SERVER` | not set | operator: `HUB_ELECTRUM_SERVER`, `tcp://127.0.0.1:9` or `tcp://fulcrum:50001` (below); unset, the hub would use Alby's (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`) |
 | `LDK_ESPLORA_SERVER` | not set | left out: set, it would take the address lookups away from the Electrum server (`chain/address_lookup.go:20-26`) |
 | `RELAY` | `ws://127.0.0.1:7447` | fixed: `ws://127.0.0.1:7447` (the relay's hub listener) |
 | `AUTO_UNLOCK_PASSWORD` | a test string | left out: the operator unlocks the hub in its UI after each hub start |
 
+**Settings in the hub's web UI.** Two outside calls have no environment switch. In the hub's UI (Settings), turn
+**JIT channels** off, and set the display currency to **SATS**: with USD the UI asks `getalby.com` for rates whenever a
+fiat amount is shown (`useBitcoinRate.ts:7`), and with JIT channels on, the Receive and About pages ask a third-party
+node for fees (`api/api.go:1600-1628`). Avoid the Home page's widgets, swaps, buying a channel, the automatic channel
+and rebalancing: they call Alby's or other third parties' servers by design.
+
 The hub loads `hub.env` because it reads `.env` from its working directory (`service/service.go:56` in getAlby/hub
-v1.24.6, `godotenv.Load(".env")`, which never overrides a variable that is already set), and the bundle mounts the file
+v1.24.7, `godotenv.Load(".env")`, which never overrides a variable that is already set), and the bundle mounts the file
 there. Without `AUTO_UNLOCK_PASSWORD`, a restarted hub is locked until the operator unlocks it, and SatBooth cannot
 start (or reach the wallet) until then; adding it to `hub.env` makes the hub unlock itself, at the cost of keeping its
 unlock password on the host.
@@ -800,8 +953,9 @@ By default the bundle therefore runs **no Electrum server**: `bitcoin.conf` has 
 `HUB_ELECTRUM_SERVER` is `tcp://127.0.0.1:9`, an address nothing listens on. It is set because the hub's own default is
 Alby's server (`ssl://electrum.getalbypro.com:50002`, `config/models.go:34`): left unset, those two lookups would go to a
 third party, which would learn the hub's addresses and the host's IP. Pinned to the unreachable address, those address lookups
-call no third party: they fail on the host. (The hub's other calls to third parties, such as its fiat rates and
-`MEMPOOL_API`, are separate: see `docs/design.md`.)
+call no third party: they fail on the host. (The hub's other calls to third parties are separate: the bundle's environment redirects `MEMPOOL_API`, `BOLTZ_API`,
+`REBALANCE_SERVICE_URL` and `LDK_VSS_URL` to its own stub, which wins over `hub.env`; see the hub's environment above
+and `docs/design.md`.)
 
 The prune size is the answer `bitcoind_prune_mib`, 10240 (10 GiB, about five weeks of blocks) to 1048576 MiB, `50000` (about 50 GB of block files, roughly six
 months of blocks, plus bitcoind's chainstate) by default. bitcoind still downloads and checks the whole chain once; it

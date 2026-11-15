@@ -52,6 +52,8 @@ services:
         chmod 0700 /vol/hub /vol/bitcoind /vol/fulcrum /vol/monerod /wallet
         if [ -e /config/fulcrum.conf ]; then chown 10004:10004 /config/fulcrum.conf; fi
         if [ -e /config/relay.json ]; then chown 65532:65532 /config/relay.json; fi
+        if [ -e /config/hub-ca.pem ]; then chown 10003:10003 /config/hub-ca.pem; fi
+        if [ -e /config/stub-cert.pem ]; then chown 65532:65532 /config/stub-cert.pem /config/stub-key.pem; fi
         if [ -e /config/monerod.conf ]; then chown 10002:10002 /config/monerod.conf; fi
         if [ -e /config/wallet-rpc ]; then chown -R 10002:10002 /config/wallet-rpc; chmod 0700 /config/wallet-rpc; fi
     volumes:
@@ -77,6 +79,31 @@ services:
       hub:
         ipv4_address: ${HUB_IP:?set HUB_IP}
       electrum: {}
+    # The names the hub would call at Alby, mempool.space, Boltz and Megalith (and the stub's own) are the stub's: the
+    # hub shares this container's network and its /etc/hosts (Docker refuses extra_hosts on a container that joins a
+    # namespace), so a lookup never leaves the host. They are exactly setup's StubNames, the names of the stub's
+    # certificate (TestHubStubWiring). Any other name the hub asks for is not pinned: it has no route out and trusts
+    # no certificate authority but the bundle's.
+    extra_hosts:
+      - "hubstub:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "getalby.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.getalby.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "mempool.space:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.boltz.exchange:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "api.satsrouting.exchange:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "megalithic.me:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "electrum.getalbypro.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+      - "vss.getalbypro.com:${HUB_STUB_IP:?set HUB_STUB_IP}"
+    # Docker's embedded resolver (127.0.0.11) answers the bundle's service names and the names above itself, and sends a
+    # query for any other name to the servers listed here. Measured on Docker Engine 29.4.2: it sends them from the HOST's
+    # network namespace, not from this one, so the host's firewall rules for this namespace never see them and the
+    # host's own resolver would carry them to the internet. The one server listed is the stub's address: its container
+    # has no DNS port, the host reaches it over the internal electrum network, and the query fails there: the name never resolves (measured at 12 to 13 s a lookup).
+    # A container of this bundle without this setting (bitcoind, Fulcrum and the Monero services, which may need the
+    # internet) resolves through the host's resolver. The relay, the proxy and the hub share this namespace and its
+    # resolver; the stub is on the internal electrum network alone and has no route out.
+    dns:
+      - "${HUB_STUB_IP:?set HUB_STUB_IP}"
     ports:
       # The hub's web UI and API: the operator's admin access (setup, unlock, channels, pairing, backups). Never on
       # HUB_PRIVATE_ADDR: the public host reaches that address, and the UI controls the node's funds.
@@ -86,15 +113,17 @@ services:
 
   hub:
     <<: *hardening
-    image: ghcr.io/getalby/hub:v1.24.6@sha256:4bb27770ff2b68ab8342f75909dfcb59db0ca8f903045967e44c908b7f6f85f7
+    image: ghcr.io/getalby/hub:v1.24.7@sha256:7e3de6dac330fb8a426c02a247d81ebaf07deece22634e97d8f20dd48c3a8e38
     user: "10003:10003"
     network_mode: service:netns
-    # The hub loads .env from its working directory (getAlby/hub v1.24.6 service/service.go:56, godotenv.Load(".env"),
+    # The hub loads .env from its working directory (getAlby/hub v1.24.7 service/service.go:56, godotenv.Load(".env"),
     # which never overrides a variable already set): hub.env holds LDK_BITCOIND_RPC_PASSWORD and nothing set below.
     working_dir: /etc/albyhub
     environment:
       WORK_DIR: /data
-      PORT: "8080"
+      # The hub listens on 8081, in the namespace it shares with hubproxy, which holds the published port 8080: the
+      # operator reaches the UI through the proxy only (deploy/README.md, "The UI proxy").
+      PORT: "8081"
       NETWORK: ${HUB_NETWORK:?set HUB_NETWORK}
       LOG_LEVEL: "4"
       LDK_BITCOIND_RPC_HOST: bitcoind
@@ -103,9 +132,31 @@ services:
       SEND_EVENTS_TO_ALBY: "false"
       AUTO_LINK_ALBY_ACCOUNT: "false"
       RELAY: ws://127.0.0.1:7447
+      # Every other outside default of the hub, disabled or redirected (getAlby/hub v1.24.7, config/models.go):
+      # - BOLTZ_API and MEMPOOL_API: the swap provider and the mempool API are the bundle's own stub, the hubstub
+      #   service. A non-empty BOLTZ_API is also what stops the hub asking getalby.com which swap provider to use at
+      #   every start (swaps/swaps_service.go:96-103). The hub appends its paths to MEMPOOL_API (api/api.go:1444).
+      # - LDK_LSPS2_ADDRESSES: "none" parses to no liquidity provider, and the hub then never contacts one when it makes
+      #   an invoice (lnclient/ldk/ldk.go:174-202, 2949-2966). Empty would leave its built-in Megalith node on.
+      # - LDK_GOSSIP_SOURCE: empty, so no rapid gossip sync server; gossip comes from connected peers only.
+      # - REBALANCE_SERVICE_URL and LDK_VSS_URL: Megalith's rebalance service and Alby's VSS server, redirected to the
+      #   stub as well (api/rebalance.go:60-75; lnclient/ldk/ldk.go:282-288).
+      # - HIDE_UPDATE_BANNER: hides the banner; the hub still asks its update check, which the stub answers.
+      # - SSL_CERT_FILE and SSL_CERT_DIR: the hub trusts one certificate authority, the bundle's, and no system root, so
+      #   a TLS connection to any real host fails. The authority's certificate is config/hub-ca.pem (made by setup),
+      #   mounted below; /etc/satbooth/no-roots exists nowhere, so the system roots are never read.
+      BOLTZ_API: https://hubstub
+      REBALANCE_SERVICE_URL: https://hubstub
+      LDK_VSS_URL: https://hubstub
+      MEMPOOL_API: https://hubstub/api
+      LDK_LSPS2_ADDRESSES: none
+      LDK_GOSSIP_SOURCE: ""
+      HIDE_UPDATE_BANNER: "true"
+      SSL_CERT_FILE: /etc/satbooth/ca.pem
+      SSL_CERT_DIR: /etc/satbooth/no-roots
       # With bitcoind as LDK's chain source, the hub uses an Electrum server only to look up on-chain addresses
-      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.6
-      # chain/address_lookup.go:20-26, lnclient/ldk/ldk.go:217-232). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
+      # (rotating its deposit address, auto swap-out to an xpub), and Alby's is the default (getAlby/hub v1.24.7
+      # chain/address_lookup.go:22-28, lnclient/ldk/ldk.go:216-231). HUB_ELECTRUM_SERVER is the bundle's own Fulcrum
       # (tcp://fulcrum:50001, with the electrum profile) or an address nothing listens on (tcp://127.0.0.1:9), so
       # that the hub's address lookups call no third party and fail locally.
       LDK_ELECTRUM_SERVER: ${HUB_ELECTRUM_SERVER:?set HUB_ELECTRUM_SERVER}
@@ -117,6 +168,13 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      # The one certificate authority the hub trusts (SSL_CERT_FILE below); its key is in setup/, never here.
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/hub-ca.pem
+        target: /etc/satbooth/ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       volume-init:
         condition: service_completed_successfully
@@ -124,10 +182,14 @@ services:
         condition: service_started
       bitcoind:
         condition: service_started
+      hubstub:
+        condition: service_started
 
   relay:
     <<: *hardening
-    image: ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
+    # The one pin line of the relay image (scripts/release-pins.sh): the stub and the other binaries of the image use
+    # the anchor, so a release changes one line.
+    image: &relay_image ghcr.io/satbooth/satbooth-relay:v0.1.0-rc.1@sha256:bd7b71e07a3f62556b30885335486451a98037adab179eafc5918284eca92ad8
     network_mode: service:netns
     command: ["-config", "/etc/satbooth-relay/relay.json"]
     volumes:
@@ -142,6 +204,57 @@ services:
         condition: service_completed_successfully
       netns:
         condition: service_started
+
+  # The proxy in front of the hub's web UI (satbooth-hubproxy, in the relay image): it listens on 8080, the port the
+  # netns container publishes on HUB_ADMIN_ADDR, forwards to the hub on 127.0.0.1:8081 and replaces the response's
+  # content policy with one that allows the page's own origin and nothing else, so the operator's browser never loads
+  # or calls anything outside the bundle. Same pin as the relay (after it: the anchor is defined there), and the same note as the stub: the pinned rc.1 image
+  # does not hold it yet, build from source until the pin moves.
+  hubproxy:
+    <<: *hardening
+    image: *relay_image
+    entrypoint: ["/satbooth-hubproxy"]
+    command: ["-listen", ":8080", "-upstream", "http://127.0.0.1:8081"]
+    network_mode: service:netns
+    depends_on:
+      netns:
+        condition: service_started
+
+  # Answers the hub's calls to Alby, mempool.space, Boltz and Megalith locally (satbooth-hubstub, in the relay image),
+  # over TLS with a certificate from the bundle's own authority, at HUB_STUB_IP. It is on the internal electrum network
+  # alone: it has no route out and nothing outside can reach it. It listens on 443 as 65532 with every capability
+  # dropped: the sysctl lowers the first unprivileged port in this container's own network namespace only (it is
+  # namespaced, so the host and the other containers keep theirs), which needs no capability and no setcap, neither of
+  # which a non-root process in a scratch image has.
+  hubstub:
+    <<: *hardening
+    # The relay image holds the stub from the release after v0.1.0-rc.1: with the pinned rc.1 image the start fails with
+    # "exec: /satbooth-hubstub: not found" and the hub never starts (it waits for the stub). Until the pin moves, build
+    # the bundle from source with compose.build.yml (deploy/README.md).
+    image: *relay_image
+    entrypoint: ["/satbooth-hubstub"]
+    command: ["-cert", "/etc/satbooth/stub-cert.pem", "-key", "/etc/satbooth/stub-key.pem", "-listen", ":443"]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    volumes:
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/stub-cert.pem
+        target: /etc/satbooth/stub-cert.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HUB_CONFIG_DIR:?set HUB_CONFIG_DIR}/stub-key.pem
+        target: /etc/satbooth/stub-key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      electrum:
+        ipv4_address: ${HUB_STUB_IP:?set HUB_STUB_IP}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
 
   bitcoind:
     <<: *hardening
@@ -249,15 +362,18 @@ services:
         condition: service_started
 
 networks:
+  # enable_ipv6 is off on the hub and electrum networks whatever the daemon's default: the egress rules are IPv4 only.
   hub:
+    enable_ipv6: false
     ipam:
       config:
         - subnet: ${HUB_SUBNET:?set HUB_SUBNET}
-  # netns (the hub), bitcoind and Fulcrum, with no route out: Fulcrum's only network. It exists without the electrum
+  # netns (the hub), bitcoind, the stub and Fulcrum, with no route out: Fulcrum's and the stub's only network. It exists without the electrum
   # profile too (the hub and bitcoind are always on it, and Compose cannot attach them conditionally), unused, so
   # ELECTRUM_SUBNET is always set.
   electrum:
     internal: true
+    enable_ipv6: false
     ipam:
       config:
         - subnet: ${ELECTRUM_SUBNET:?set ELECTRUM_SUBNET}

@@ -13,6 +13,8 @@ COPY . .
 ENV GOFLAGS=-mod=vendor GOPROXY=off GOTOOLCHAIN=local CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth ./cmd/satbooth \
  && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth-relay ./cmd/satbooth-relay \
+ && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth-hubstub ./cmd/satbooth-hubstub \
+ && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth-hubproxy ./cmd/satbooth-hubproxy \
  && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth-setup ./cmd/satbooth-setup \
  && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=-buildid= -o /out/satbooth-pair ./cmd/satbooth-pair
 
@@ -27,6 +29,10 @@ ENTRYPOINT ["/satbooth"]
 
 FROM scratch AS satbooth-relay
 COPY --from=build /out/satbooth-relay /satbooth-relay
+# The hub bundle's stub runs from this image too (entrypoint /satbooth-hubstub in deploy/hub/compose.yml).
+COPY --from=build /out/satbooth-hubstub /satbooth-hubstub
+# And the proxy in front of the hub's web UI (entrypoint /satbooth-hubproxy).
+COPY --from=build /out/satbooth-hubproxy /satbooth-hubproxy
 USER 65532:65532
 ENTRYPOINT ["/satbooth-relay"]
 

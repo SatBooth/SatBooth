@@ -793,3 +793,91 @@ func TestSourceBuildFlagNamesTheBuildFile(t *testing.T) {
 		}
 	}
 }
+
+// hub renew-cert: exit 0 with its report on a finished hub init, the CA and the other files unchanged; refused on the
+// public host, with a missing CA key, and with other flags.
+func TestRenewCertThroughTheCommand(t *testing.T) {
+	pubDir, hubDir, aDir := tmp(t), tmp(t), tmp(t)
+	pubFile := writeJSON(t, aDir, "pub.json", everyRailAnswers())
+	hubFile := writeJSON(t, aDir, "hub.json", hubAnswersFor("/srv/satbooth-hub"))
+	if r := do("", "public", "init", "-dir", pubDir, "-host-dir", "/srv/satbooth", "-answers", pubFile); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+	h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
+	hf := filepath.Join(aDir, "public-to-hub.json")
+	os.WriteFile(hf, h1, 0o600)
+	if r := do("", "hub", "init", "-dir", hubDir, "-host-dir", "/srv/satbooth-hub", "-handoff", hf, "-answers", hubFile,
+		"-digest", setup.Digest(h1)); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+	before := tree(t, hubDir)
+	r := do("", "hub", "renew-cert", "-dir", hubDir)
+	if r.code != 0 || !strings.Contains(r.out, "renewed") || !strings.Contains(r.out, "the CA is unchanged") ||
+		!strings.Contains(r.out, "restart the stub") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
+	}
+	after := tree(t, hubDir)
+	for n, v := range before {
+		changed := after[n] != v
+		if want := n == "config/stub-cert.pem" || n == "config/stub-key.pem"; changed != want {
+			t.Errorf("%s: changed %v, want %v", n, changed, want)
+		}
+	}
+	// The public host's directory is not a hub host's.
+	if r := do("", "hub", "renew-cert", "-dir", pubDir); r.code != 1 || r.errOut == "" {
+		t.Errorf("public host: %d %s", r.code, r.errOut)
+	}
+	// Other flags are a usage error.
+	if r := do("", "hub", "renew-cert", "-dir", hubDir, "-discard-incomplete"); r.code != 2 {
+		t.Errorf("-discard-incomplete: %d", r.code)
+	}
+	if r := do("", "hub", "renew-cert"); r.code != 2 {
+		t.Errorf("no -dir: %d", r.code)
+	}
+	// Without the CA key nothing is renewed, and nothing changes.
+	if err := os.Remove(filepath.Join(hubDir, "setup/ca-key.pem")); err != nil {
+		t.Fatal(err)
+	}
+	before = tree(t, hubDir)
+	if r := do("", "hub", "renew-cert", "-dir", hubDir); r.code != 1 || !strings.Contains(r.errOut, "ca-key.pem") {
+		t.Errorf("missing CA key: %d %s", r.code, r.errOut)
+	}
+	sameTree(t, "missing CA key", before, tree(t, hubDir))
+}
+
+// hub egress-rules prints one rule set from the hub host's state and writes nothing.
+func TestEgressRulesThroughTheCommand(t *testing.T) {
+	pubDir, hubDir, aDir := tmp(t), tmp(t), tmp(t)
+	pubFile := writeJSON(t, aDir, "pub.json", everyRailAnswers())
+	hubFile := writeJSON(t, aDir, "hub.json", hubAnswersFor("/srv/satbooth-hub"))
+	do("", "public", "init", "-dir", pubDir, "-host-dir", "/srv/satbooth", "-answers", pubFile)
+	h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
+	hf := filepath.Join(aDir, "public-to-hub.json")
+	os.WriteFile(hf, h1, 0o600)
+	if r := do("", "hub", "init", "-dir", hubDir, "-host-dir", "/srv/satbooth-hub", "-handoff", hf, "-answers", hubFile,
+		"-digest", setup.Digest(h1)); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+	before := tree(t, hubDir)
+	r := do("", "hub", "egress-rules", "-dir", hubDir, "-format", "nft")
+	if r.code != 0 || !strings.Contains(r.out, "table inet satbooth_hub") || !strings.Contains(r.out, "satbooth_hub_peers") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
+	}
+	r = do("", "hub", "egress-rules", "-dir", hubDir, "-format", "iptables")
+	if r.code != 0 || !strings.HasPrefix(r.out, "#!/bin/sh\n") || !strings.Contains(r.out, "DOCKER-USER") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
+	}
+	sameTree(t, "egress-rules", before, tree(t, hubDir))
+	for name, args := range map[string][]string{
+		"no format": {"-dir", hubDir}, "bad format": {"-dir", hubDir, "-format", "pf"},
+		"old flag": {"-dir", hubDir, "-format", "nft", "-peer-ports", "9735"},
+	} {
+		r := do("", append([]string{"hub", "egress-rules"}, args...)...)
+		if r.code == 0 || r.out != "" {
+			t.Errorf("%s: %d %q", name, r.code, r.out)
+		}
+	}
+	if r := do("", "hub", "egress-rules", "-dir", pubDir, "-format", "nft"); r.code != 1 {
+		t.Errorf("public host: %d", r.code)
+	}
+}

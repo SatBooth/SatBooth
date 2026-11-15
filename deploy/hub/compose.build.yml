@@ -9,3 +9,16 @@ services:
       dockerfile: deploy/image/Dockerfile
       target: satbooth-relay
     image: satbooth-relay:local
+  # The stub and the UI proxy are in the same image: built once, used three times.
+  hubproxy:
+    build:
+      context: ../..
+      dockerfile: deploy/image/Dockerfile
+      target: satbooth-relay
+    image: satbooth-relay:local
+  hubstub:
+    build:
+      context: ../..
+      dockerfile: deploy/image/Dockerfile
+      target: satbooth-relay
+    image: satbooth-relay:local

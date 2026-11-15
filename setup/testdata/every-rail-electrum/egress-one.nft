@@ -1,0 +1,33 @@
+# SatBooth hub host: what the hub's network namespace may send out. Load as root: nft -f <this file>
+# The namespace (hub, relay, UI proxy) has the address 172.30.78.10. It may reach the bundle's own two networks, answer
+# connections made to it, and open TCP connections to the Lightning peers in the set satbooth_hub_peers, and nothing else:
+# everything else it sends is logged and dropped. bitcoind is another container and is not bound. DNS is not covered here:
+# Docker's resolver sends its queries from the host, not from the namespace; the bundle's netns service sets dns: for that.
+# What leaves with an address on the electrum network (172.30.78.128/25) for anywhere outside it is dropped too.
+# A new connection from either address to the host itself (input path) is logged and dropped; replies are let through.
+# Add a peer BEFORE connecting to it or opening a channel with it, and remove it when it is gone:
+#   nft add element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
+#   nft delete element inet satbooth_hub satbooth_hub_peers { 203.0.113.7 . 9735 }
+# List them: nft list set inet satbooth_hub satbooth_hub_peers
+add table inet satbooth_hub
+add set inet satbooth_hub satbooth_hub_peers { type ipv4_addr . inet_service; }
+add element inet satbooth_hub satbooth_hub_peers { 203.0.113.5 . 10009 }
+add chain inet satbooth_hub egress { type filter hook forward priority -10; policy accept; }
+flush chain inet satbooth_hub egress
+add rule inet satbooth_hub egress ip saddr 172.30.78.10 ct state established,related accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.10 ip daddr { 172.30.78.0/25, 172.30.78.128/25 } accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.10 ip daddr . tcp dport @satbooth_hub_peers accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.10 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub egress ip saddr 172.30.78.10 counter drop
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ct state established,related accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 ip daddr 172.30.78.128/25 accept
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub egress ip saddr 172.30.78.128/25 counter drop
+add chain inet satbooth_hub host_input { type filter hook input priority -10; policy accept; }
+flush chain inet satbooth_hub host_input
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 ct state established,related accept
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub host_input ip saddr 172.30.78.10 counter drop
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 ct state established,related accept
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+add rule inet satbooth_hub host_input ip saddr 172.30.78.128/25 counter drop

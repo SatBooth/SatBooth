@@ -1,0 +1,35 @@
+# Dev-only, used by scripts/qualify-egress.sh (the egress group of scripts/qualify.sh) on top of deploy/hub/compose.yml
+# and its compose.build.yml. The hub bundle takes the place of the regtest project's hub-satbooth: the namespace holder
+# gets that hub's address on the regtest network (172.30.78.10, so the Lightning phases reach the hub's UI through the
+# bundle's proxy on 8080 and its relay on 7448), the hub keeps that hub's data volume (its node, channel and
+# connections), and its chain source is the regtest project's bitcoind, with the hub's own RPC user. Everything else
+# is the bundle as setup wrote it: the stub, the proxy, the private authority, the pinned names, the environment.
+# AUTO_UNLOCK_PASSWORD is the dev hubs' (a restarted hub unlocks by itself). The published ports move to free ones
+# (TEST_HUB_*), as in deploy-hub-ports.override.yml.
+services:
+  netns:
+    networks:
+      regtest:
+        ipv4_address: 172.30.78.10
+    ports: !override
+      - "127.0.0.1:${TEST_HUB_ADMIN_PORT}:8080"
+      - "127.0.0.1:${TEST_HUB_RELAY_PORT}:7448"
+  bitcoind:
+    ports: !override
+      - "127.0.0.1:${TEST_HUB_RPC_PORT}:8332"
+  hub:
+    environment:
+      LDK_BITCOIND_RPC_HOST: 172.30.78.2
+      LDK_BITCOIND_RPC_PORT: "18443"
+      LDK_BITCOIND_RPC_PASSWORD: regtest-only-hub
+      AUTO_UNLOCK_PASSWORD: regtest-only-unlock
+
+networks:
+  regtest:
+    external: true
+    name: satbooth-regtest_regtest
+
+volumes:
+  hub-data:
+    external: true
+    name: satbooth-regtest_hub-satbooth-data

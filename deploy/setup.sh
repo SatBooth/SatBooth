@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]
+# Usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert|egress-rules> [options]
 #
 # Pulls the pinned release tools image (with SATBOOTH_BUILD=1 in the environment: builds it from this repository
 # instead) and runs `satbooth-setup` in it: no network, a read-only root, no capabilities, the calling user, and only
 # <dir> (and each file named by -answers, -handoff or -wallet-rpc-pass, read-only) visible. <dir> is created with mode
 # 0700 if it is missing; an existing directory is left as it is. A symbolic link as <dir> is refused.
 # -dir and -host-dir are set here, never taken from the caller. With SATBOOTH_BUILD=1 the wrapper also adds
-# -source-build, so the start commands the report prints name the compose.build.yml of the host. Options are passed
+# -source-build (but not to renew-cert and egress-rules, which print no start command and refuse it), so the start
+# commands the report prints name the compose.build.yml of the host. Options are passed
 # through unchanged, in order.
 # The command's report goes to standard output, its prompts and the image pull or build to standard error; the exit
 # code is the command's (0 done, 1 refused or failed, 2 usage).
@@ -18,7 +19,7 @@ case "${SATBOOTH_BUILD:-}" in
 esac
 
 usage() {
-  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish> [options]" >&2
+  echo "usage: deploy/setup.sh <dir> <public|hub> <init|pair|finish|renew-cert|egress-rules> [options]" >&2
   echo "       (options are those of satbooth-setup, except -dir and -host-dir, which are set here)" >&2
   exit 2
 }
@@ -148,7 +149,11 @@ esac
 if [ "${SATBOOTH_BUILD:-}" = 1 ]; then
   # From source: the tools image is built from this repository.
   run_image=satbooth-tools:local
-  opts+=(-source-build)
+  # The two commands that print no start command (renew-cert, egress-rules) refuse the flag.
+  case "$host $stage" in
+    "hub renew-cert" | "hub egress-rules") ;;
+    *) opts+=(-source-build) ;;
+  esac
   docker build -q --target satbooth-tools -t "$run_image" -f "$root/deploy/image/Dockerfile" "$root" >&2
 else
   run_image=$tools_image

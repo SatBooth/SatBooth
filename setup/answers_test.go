@@ -9,6 +9,7 @@ import (
 	"github.com/satbooth/satbooth/relay"
 	"math/rand"
 	"net/netip"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -252,7 +253,7 @@ func baseHub() HubAnswers {
 
 func TestHubAnswersDefaults(t *testing.T) {
 	a, err := ParseHubAnswers([]byte(`{"network":"mainnet","hub_private_addr":"192.0.2.20","public_private_addr":"192.0.2.10","host_dir":"/srv/satbooth-hub"}`))
-	if err != nil || *a != baseHub() {
+	if err != nil || !reflect.DeepEqual(*a, baseHub()) {
 		t.Fatalf("%+v, %v", a, err)
 	}
 }
@@ -296,7 +297,7 @@ func TestHubAnswersPrune(t *testing.T) {
 		}
 		// The answers survive a round trip through the state file's form.
 		b, err := ParseHubAnswers(mustJSON(a))
-		if err != nil || *b != *a {
+		if err != nil || !reflect.DeepEqual(*b, *a) {
 			t.Errorf("%s: round trip %+v, %v", c.extra, b, err)
 		}
 	}
@@ -862,7 +863,7 @@ func TestParseHubAnswersProperty(t *testing.T) {
 			t.Fatalf("relay refuses the rendered file: %v: %s", err, in)
 		}
 		env := string(HubComposeEnv(a))
-		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 9 || strings.ContainsAny(env, " \"'$\r\t") {
+		if lines := strings.Split(strings.TrimSuffix(env, "\n"), "\n"); len(lines) != 10 || strings.ContainsAny(env, " \"'$\r\t") {
 			t.Fatalf("hub env file: %q", env)
 		}
 	}

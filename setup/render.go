@@ -173,6 +173,18 @@ log-level=0
 // WalletRPCLogin is wallet-rpc/rpc-login.
 func WalletRPCLogin(user, password string) []byte { return []byte(user + ":" + password + "\n") }
 
+// StubIP is the stub's fixed address on the bundle's internal network: the last host address of ElectrumSubnet (its
+// broadcast address is the last address, so one before it). Docker hands the other containers the lowest free
+// addresses after the gateway (the first host address), so the two never meet in a network of this size. The subnet
+// must already have passed ParseHubAnswers (an IPv4 network of /16 to /29).
+func StubIP(electrumSubnet string) string {
+	p, err := ipv4Prefix(electrumSubnet)
+	if err != nil {
+		return ""
+	}
+	return lastAddr(p).Prev().String()
+}
+
 // HubComposeEnv is the hub bundle's env file, the keys in the order of deploy/hub/example.env.
 func HubComposeEnv(a *HubAnswers) []byte {
 	electrum := electrumOff
@@ -184,6 +196,7 @@ func HubComposeEnv(a *HubAnswers) []byte {
 		"HUB_SUBNET=" + a.HubSubnet + "\n" +
 		"HUB_IP=" + a.HubIP + "\n" +
 		"ELECTRUM_SUBNET=" + a.ElectrumSubnet + "\n" +
+		"HUB_STUB_IP=" + StubIP(a.ElectrumSubnet) + "\n" +
 		"HUB_NETWORK=" + hubNetwork(a.Network) + "\n" +
 		"HUB_CONFIG_DIR=" + a.HostDir + "/config\n" +
 		"MONERO_WALLET_DIR=" + a.HostDir + "/wallet\n" +

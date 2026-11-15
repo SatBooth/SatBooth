@@ -286,7 +286,7 @@ func (b *bitcoindRPC) importWithNow(wallet string) error {
 // pruneEarlyBlocks mines enough blocks that the early block files are older than the 288 blocks bitcoind always keeps,
 // prunes them (manual pruning, dev/regtest/bitcoind/bitcoin.conf), and checks that they are gone: the node reports a
 // prune height above 0 and refuses the data of block 1. It returns the prune height.
-func (b *bitcoindRPC) pruneEarlyBlocks() (int, error) {
+func (b *bitcoindRPC) pruneEarlyBlocks(followed func(tip int) error) (int, error) {
 	// A fastprune block file holds 64 KiB; a regtest block is a few hundred bytes. 600 blocks leave the first file
 	// far below the newest 288.
 	for i := 0; i < 6; i++ {
@@ -296,6 +296,10 @@ func (b *bitcoindRPC) pruneEarlyBlocks() (int, error) {
 	}
 	tip, err := b.getBlockCount()
 	if err != nil {
+		return 0, err
+	}
+	// A hub that has not reached the tip would, after a restart, ask for the blocks pruned below.
+	if err := followed(tip); err != nil {
 		return 0, err
 	}
 	var pruned int

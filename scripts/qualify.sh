@@ -8,13 +8,15 @@
 #                   TestImage phases and TestImageBudget); refund (the TestRefund phases, about 15 minutes);
 #                   hub (TestQualify and the check on the hub's unknown-app lines, about 1.5 minutes); onchain (every
 #                   on-chain phase of the full run, TestOnchainSetup to TestOnchainStuckAfter, with the bitcoind kills
-#                   between them, about 15 minutes).
+#                   between them, about 15 minutes); egress (the hub bundle with the printed egress rules applied for
+#                   real, recorded from the host, the Lightning phases and the hub's pages in Chrome: Linux with root,
+#                   scripts/qualify-egress.sh).
 # On failure the logs are saved to dev/regtest/logs/ (git-ignored) first.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-usage() { echo "usage: scripts/qualify.sh [--keep] [--only deploy|image|refund|hub|onchain]" >&2; exit 2; }
+usage() { echo "usage: scripts/qualify.sh [--keep] [--only deploy|image|refund|hub|onchain|egress]" >&2; exit 2; }
 keep=0
 only=""
 while [ "$#" -gt 0 ]; do
@@ -23,7 +25,7 @@ while [ "$#" -gt 0 ]; do
     --only)
       [ "$#" -ge 2 ] || usage
       case "$2" in
-        deploy | image | refund | hub | onchain) only=$2 ;;
+        deploy | image | refund | hub | onchain | egress) only=$2 ;;
         *) usage ;;
       esac
       shift
@@ -133,6 +135,7 @@ cleanup() {
     fi
     echo "qualify.sh: FAIL (exit $status); logs in $logdir/compose.log, $logdir/deploy-public.log and $logdir/deploy-hub.log" >&2
   fi
+  if [ "$(type -t egress_cleanup)" = function ]; then egress_cleanup || true; fi
   if [ "$keep" -eq 1 ]; then
     echo "qualify.sh: --keep: projects $project, $deploy_project and $hub_project left up" >&2
   else
@@ -468,8 +471,8 @@ for _ in range(3):
   TEST_HUB_ADMIN_PORT=1 TEST_HUB_RELAY_PORT=2 TEST_HUB_RPC_PORT=3 HUB_ADMIN_ADDR=127.0.0.1 docker compose -p "$hub_project" \
     -f deploy/hub/compose.yml -f deploy/hub/compose.build.yml -f dev/regtest/deploy-hub-ports.override.yml \
     --env-file "$hub_root/compose.env" config -q
-  log "up: deploy/hub (volume-init, netns, bitcoind, hub)"
-  hdc up -d --build hub
+  log "up: deploy/hub (volume-init, netns, bitcoind, the stub, hub, the UI proxy), as deploy/README.md's first start"
+  hdc up -d --build hub hubproxy
   local vi
   vi=$(hdc ps -a -q volume-init)
   want_code "volume-init exit code" "$(docker inspect -f '{{.State.ExitCode}}' "$vi")" 0
@@ -538,14 +541,14 @@ for _ in range(3):
   [ "$owner" = 65532:65532 ] || { echo "deploy/hub: relay.json is owned by '$owner', want 65532:65532" >&2; return 1; }
   log "deploy/hub: relay.json is owned by 65532"
   hub_runs "after the relay's start"
-  # Exactly these containers exist: bitcoind, the hub, the namespace holder and the relay run; volume-init exited 0; no
-  # Fulcrum and nothing of the Monero profile was created.
+  # Exactly these containers exist: bitcoind, the hub, its UI proxy, the stub, the namespace holder and the relay run;
+  # volume-init exited 0; no Fulcrum and nothing of the Monero profile was created.
   local running exited
   running=$(hdc ps --status running --format '{{.Service}}' | LC_ALL=C sort | tr '\n' ' ')
   exited=$(hdc ps -a --status exited --format '{{.Service}} {{.ExitCode}}' | LC_ALL=C sort | tr '\n' ',')
-  [ "$running" = 'bitcoind hub netns relay ' ] && [ "$exited" = 'volume-init 0,' ] \
+  [ "$running" = 'bitcoind hub hubproxy hubstub netns relay ' ] && [ "$exited" = 'volume-init 0,' ] \
     || { echo "deploy/hub: running: '$running', exited: '$exited'" >&2; return 1; }
-  [ "$(hdc ps -a -q | wc -l | tr -d ' ')" -eq 5 ] || { echo "deploy/hub: other containers were created" >&2; return 1; }
+  [ "$(hdc ps -a -q | wc -l | tr -d ' ')" -eq 7 ] || { echo "deploy/hub: other containers were created" >&2; return 1; }
   log "deploy/hub: running: ${running}; exited: volume-init 0; nothing else created (Fulcrum and the Monero profile are not started)"
   hub_down
 }
@@ -580,8 +583,8 @@ deploy_hub_electrum_group() {
     || { echo "deploy/hub: compose.env does not point the hub at fulcrum" >&2; return 1; }
   out=$(deploy/setup.sh "$hub_root" hub pair -invoice-wallet 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798 <<< "")
   grep -qF -- '--profile electrum' <<< "$out" || { echo "deploy/hub: setup's hub start command does not name the profile" >&2; return 1; }
-  log "up: deploy/hub with --profile electrum (bitcoind, Fulcrum, the hub)"
-  hdc --profile electrum up -d --build bitcoind fulcrum hub
+  log "up: deploy/hub with --profile electrum (bitcoind, Fulcrum, the hub, the UI proxy)"
+  hdc --profile electrum up -d --build bitcoind fulcrum hub hubproxy
   local cli=(exec -T bitcoind bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/data)
   local deadline=$((SECONDS + 300)) synced=""
   until synced=$(hdc "${cli[@]}" getindexinfo 2> /dev/null | jq -r '.txindex.synced // empty' 2> /dev/null) && [ "$synced" = true ]; do
@@ -970,6 +973,10 @@ end_checks() {
   no_third_party_electrum
 }
 
+# The egress group (the printed egress rules for real, recorded from the host): its own file, sourced here.
+# shellcheck source=scripts/qualify-egress.sh
+. scripts/qualify-egress.sh
+
 log "start from a clean project"
 ddc down -v --remove-orphans > /dev/null 2>&1 || true
 docker compose -p "$hub_project" down -v --remove-orphans > /dev/null 2>&1 || true
@@ -1151,9 +1158,14 @@ if [ -n "$only" ]; then
     refund) refund_group ;;
     hub) hub_group ;;
     onchain) onchain_group ;;
+    egress) egress_group ;;
   esac
   end_checks
   finished=1
+  if [ "$only" = egress ] && [ "${egress_ran:-0}" -ne 1 ]; then
+    log "setup ran; group egress was NOT RUN (see above): nothing is claimed about the egress rules"
+    exit 0
+  fi
   log "setup and group $only passed (a targeted run, not the qualification)"
   exit 0
 fi
@@ -1341,6 +1353,9 @@ image_group
 deploy_group
 
 phase TestImageBudget
+
+# Last: the hub bundle takes hub-satbooth's place for the egress group.
+egress_group
 
 end_checks
 finished=1
