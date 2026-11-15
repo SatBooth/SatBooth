@@ -1,0 +1,16 @@
+# SatBooth hub host: what the hub's network namespace may send out. Load as root: nft -f <this file>
+# The namespace (hub, relay, UI proxy) has the address 172.30.78.10. It may reach the bundle's own two networks, answer
+# connections made to it, and open TCP connections to Lightning peers on port(s) 9735. Everything else, outside DNS
+# included, is logged and dropped. bitcoind is another container and is not bound.
+add table inet satbooth_hub
+delete table inet satbooth_hub
+table inet satbooth_hub {
+	chain egress {
+		type filter hook forward priority -10; policy accept;
+		ip saddr 172.30.78.10 ct state established,related accept
+		ip saddr 172.30.78.10 ip daddr { 172.30.78.0/25, 172.30.78.128/25 } accept
+		ip saddr 172.30.78.10 tcp dport { 9735 } accept
+		ip saddr 172.30.78.10 limit rate 5/minute burst 5 packets log prefix "satbooth-hub-egress: "
+		ip saddr 172.30.78.10 counter drop
+	}
+}

@@ -844,3 +844,40 @@ func TestRenewCertThroughTheCommand(t *testing.T) {
 	}
 	sameTree(t, "missing CA key", before, tree(t, hubDir))
 }
+
+// hub egress-rules prints one rule set from the hub host's state and writes nothing.
+func TestEgressRulesThroughTheCommand(t *testing.T) {
+	pubDir, hubDir, aDir := tmp(t), tmp(t), tmp(t)
+	pubFile := writeJSON(t, aDir, "pub.json", everyRailAnswers())
+	hubFile := writeJSON(t, aDir, "hub.json", hubAnswersFor("/srv/satbooth-hub"))
+	do("", "public", "init", "-dir", pubDir, "-host-dir", "/srv/satbooth", "-answers", pubFile)
+	h1, _ := os.ReadFile(filepath.Join(pubDir, "setup/public-to-hub.json"))
+	hf := filepath.Join(aDir, "public-to-hub.json")
+	os.WriteFile(hf, h1, 0o600)
+	if r := do("", "hub", "init", "-dir", hubDir, "-host-dir", "/srv/satbooth-hub", "-handoff", hf, "-answers", hubFile,
+		"-digest", setup.Digest(h1)); r.code != 0 {
+		t.Fatalf("%d %s", r.code, r.errOut)
+	}
+	before := tree(t, hubDir)
+	r := do("", "hub", "egress-rules", "-dir", hubDir, "-format", "nft", "-peer-ports", "10009,9736")
+	if r.code != 0 || !strings.Contains(r.out, "table inet satbooth_hub") || !strings.Contains(r.out, "9735, 9736, 10009") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
+	}
+	r = do("", "hub", "egress-rules", "-dir", hubDir, "-format", "iptables")
+	if r.code != 0 || !strings.HasPrefix(r.out, "#!/bin/sh\n") || !strings.Contains(r.out, "DOCKER-USER") {
+		t.Fatalf("%d %s %s", r.code, r.errOut, r.out)
+	}
+	sameTree(t, "egress-rules", before, tree(t, hubDir))
+	for name, args := range map[string][]string{
+		"no format": {"-dir", hubDir}, "bad format": {"-dir", hubDir, "-format", "pf"},
+		"bad port": {"-dir", hubDir, "-format", "nft", "-peer-ports", "x"}, "dns port": {"-dir", hubDir, "-format", "nft", "-peer-ports", "53"},
+	} {
+		r := do("", append([]string{"hub", "egress-rules"}, args...)...)
+		if r.code == 0 || r.out != "" {
+			t.Errorf("%s: %d %q", name, r.code, r.out)
+		}
+	}
+	if r := do("", "hub", "egress-rules", "-dir", pubDir, "-format", "nft"); r.code != 1 {
+		t.Errorf("public host: %d", r.code)
+	}
+}

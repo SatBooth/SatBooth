@@ -370,11 +370,51 @@ responses through, and replaces the response's `Content-Security-Policy` with
 `default-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none';
 form-action 'self'`, so the operator's browser, which holds the hub's admin session, loads and contacts nothing but the
 hub's own origin (the hub's own policy lets its pages show images from, and talk to, Alby's hosts and relays). It
-changes no other header and no body. With the pinned rc.1 image it is missing like the stub: build from source.
+changes no other header and no body. A request the hub does not begin to answer within 60 seconds gets a 502; an idle
+connection is closed after 120 seconds. With the pinned rc.1 image it is missing like the stub: build from source.
+
+**The hub host's egress rules.** Naming the stub's hosts in `/etc/hosts` is not a firewall: a name the hub resolves that is
+not in the list still goes out and fails only at the TLS handshake. The rules close that. They bound one thing, the
+network namespace of the hub, the relay and the UI proxy (the address `HUB_IP` on the hub network), and nothing else
+on the host: that namespace may reach the bundle's own two networks (`HUB_SUBNET`, `ELECTRUM_SUBNET`: bitcoind, the
+stub, Fulcrum), may answer connections made to it (the tunnel to 8080, the relay's 7448 and everything the public
+host calls), and may open TCP connections to port 9735 and to the peer ports you name. Everything else, outside DNS
+included, is logged (`satbooth-hub-egress: `, at most 5 a minute) and dropped. bitcoind is another container with
+other addresses and is not bound: it needs the internet for its peers. The `electrum` and `monero` options change
+nothing here (Fulcrum is inside `ELECTRUM_SUBNET`; wallet-rpc is reached from the public host, not from this
+namespace). Docker's networks here have no IPv6; if you enabled it, the same rules are needed for it.
+
+Setup prints the rules and never applies them. Print the nftables set on a host with `nft` (it is
+independent of how Docker programs its own rules, including through `iptables-nft`), and the iptables set only where
+Docker uses iptables-legacy (`iptables --version` says which):
+
+```sh
+deploy/setup.sh <dir> hub egress-rules -format nft -peer-ports 10009 > hub-egress.nft         # nftables
+deploy/setup.sh <dir> hub egress-rules -format iptables -peer-ports 10009 > hub-egress.sh     # iptables-legacy
+```
+
+`-peer-ports` is a comma-separated list of the ports your channel peers listen on besides 9735; port 53 is refused.
+Apply as root: `nft -f hub-egress.nft` (it replaces its own table, `inet satbooth_hub`, so it can be loaded again), or
+`sh hub-egress.sh` (it rebuilds its own chain `SATBOOTH_HUB_EGRESS` and adds one jump from `DOCKER-USER`; `IPT=iptables`
+names another binary). They survive a Docker restart: the nftables table is not Docker's, and Docker keeps the
+contents of `DOCKER-USER`. They do not survive a reboot: load the nftables file from `/etc/nftables.conf` (`include`)
+with the `nftables` service enabled, or run the shell script from a systemd unit with `After=docker.service`.
+Check, from the hub's namespace (`docker compose … exec netns` has no tools; use a throwaway container that joins it):
+
+```sh
+docker run --rm --network container:<project>-netns-1 debian:13-slim bash -c \
+  'exec 3<>/dev/tcp/<a Lightning peer>/9735 && echo 9735 connects; exec 4<>/dev/tcp/1.1.1.1/443 || echo 443 blocked'
+```
+
+and the drops appear in `journalctl -k | grep satbooth-hub-egress` and in `nft list chain inet satbooth_hub egress`
+(counter) or `iptables-legacy -L SATBOOTH_HUB_EGRESS -n -v`. `scripts/egress-rules-test.sh` applies the printed rules
+to a router with four network namespaces behind it in a privileged Linux container and checks each of these cases.
 
 **A hub host set up before the stub.** Such a host has no authority. Update the checkout, run
-`deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), then the
-`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. The hub's
+`deploy/setup.sh <dir> hub renew-cert` (it makes the authority and the stub's certificate, and says so), add the
+`HUB_STUB_IP=` line it prints to `compose.env` (the file stage 2 wrote before the stub existed has none), run the
+`volume-init` command it prints, and start the bundle from source until the release pin holds the stub. If the command stops after writing only one of `config/hub-ca.pem` and `setup/ca-key.pem`, it refuses to go on: delete the
+one that exists and run it again. The hub's
 environment also changes (`BOLTZ_API`, `MEMPOOL_API` and the others above): `up -d` recreates it.
 
 **What `volume-init` changes at the first start.** On the public host it gives `etc/` and `backups/` to the user
